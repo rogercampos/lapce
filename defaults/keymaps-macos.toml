@@ -161,43 +161,6 @@ key = "meta+shift+enter"
 command = "new_line_above"
 mode = "i"
 
-# ------------------------------------ Multi cursor -------------------------------------
-
-[[keymaps]]
-key = "alt+meta+up"
-command = "insert_cursor_above"
-mode = "i"
-
-[[keymaps]]
-key = "alt+meta+down"
-command = "insert_cursor_below"
-mode = "i"
-
-[[keymaps]]
-key = "meta+l"
-command = "select_current_line"
-mode = "i"
-
-[[keymaps]]
-key = "meta+shift+l"
-command = "select_all_current"
-mode = "i"
-
-[[keymaps]]
-key = "meta+u"
-command = "select_undo"
-mode = "i"
-
-[[keymaps]]
-key = "meta+d"
-command = "select_next_current"
-mode = "i"
-
-[[keymaps]]
-key = "meta+k meta+d"
-command = "select_skip_current"
-mode = "i"
-
 # ------------------------------------ File Management --------------------------------
 
 [[keymaps]]

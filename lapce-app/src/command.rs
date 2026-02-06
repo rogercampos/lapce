@@ -52,7 +52,7 @@ impl CommandKind {
             CommandKind::Scroll(cmd) => cmd.get_message(),
             CommandKind::Focus(cmd) => cmd.get_message(),
             CommandKind::MotionMode(cmd) => cmd.get_message(),
-            CommandKind::MultiSelection(cmd) => cmd.get_message(),
+            CommandKind::MultiSelection(_) => None,
         }
     }
 
@@ -64,7 +64,7 @@ impl CommandKind {
             CommandKind::Scroll(cmd) => cmd.into(),
             CommandKind::Focus(cmd) => cmd.into(),
             CommandKind::MotionMode(cmd) => cmd.into(),
-            CommandKind::MultiSelection(cmd) => cmd.into(),
+            CommandKind::MultiSelection(_) => "",
         }
     }
 }
@@ -129,14 +129,6 @@ pub fn lapce_internal_commands() -> IndexMap<String, LapceCommand> {
     for c in MotionModeCommand::iter() {
         let command = LapceCommand {
             kind: CommandKind::MotionMode(c.clone()),
-            data: None,
-        };
-        commands.insert(c.to_string(), command);
-    }
-
-    for c in MultiSelectionCommand::iter() {
-        let command = LapceCommand {
-            kind: CommandKind::MultiSelection(c.clone()),
             data: None,
         };
         commands.insert(c.to_string(), command);

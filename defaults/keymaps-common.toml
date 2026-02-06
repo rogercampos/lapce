@@ -61,13 +61,6 @@ command = "scroll_up"
 key = "Ctrl+PageDown"
 command = "scroll_down"
 
-# ------------------------------------ Multi cursor -------------------------------------
-
-[[keymaps]]
-key = "alt+shift+i"
-command = "insert_cursor_end_of_line"
-mode = "i"
-
 # ----------------------------------- Editor Management -------------------------------
 
 [[keymaps]]

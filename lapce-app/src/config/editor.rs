@@ -201,14 +201,6 @@ pub struct EditorConfig {
     )]
     blink_interval: u64,
     #[field_names(
-        desc = "Whether the multiple cursor selection is case sensitive."
-    )]
-    pub multicursor_case_sensitive: bool,
-    #[field_names(
-        desc = "Whether the multiple cursor selection only selects whole words."
-    )]
-    pub multicursor_whole_words: bool,
-    #[field_names(
         desc = "How the editor should render whitespace characters.\nOptions: none, all, boundary, trailing."
     )]
     pub render_whitespace: RenderWhitespace,
