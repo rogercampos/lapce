@@ -49,7 +49,6 @@ use crate::{
     keypress::{KeyPressData, KeyPressFocus, condition::Condition},
     lsp::path_from_url,
     main_split::MainSplitData,
-    source_control::SourceControlData,
     window_tab::{CommonData, Focus},
     workspace::{LapceWorkspace, LapceWorkspaceType, SshHost},
 };
@@ -99,9 +98,7 @@ pub struct PaletteData {
     pub executed_commands: Rc<RefCell<HashMap<String, Instant>>>,
     pub main_split: MainSplitData,
     pub references: RwSignal<Vec<EditorLocation>>,
-    pub source_control: SourceControlData,
     pub common: Rc<CommonData>,
-    left_diff_path: RwSignal<Option<PathBuf>>,
 }
 
 impl std::fmt::Debug for PaletteData {
@@ -116,7 +113,6 @@ impl PaletteData {
         workspace: Arc<LapceWorkspace>,
         main_split: MainSplitData,
         keypress: ReadSignal<KeyPressData>,
-        source_control: SourceControlData,
         common: Rc<CommonData>,
     ) -> Self {
         let status = cx.create_rw_signal(PaletteStatus::Inactive);
@@ -208,7 +204,6 @@ impl PaletteData {
         }
 
         let clicked_index = cx.create_rw_signal(Option::<usize>::None);
-        let left_diff_path = cx.create_rw_signal(None);
 
         let palette = Self {
             run_id_counter,
@@ -229,9 +224,7 @@ impl PaletteData {
             clicked_index,
             executed_commands: Rc::new(RefCell::new(HashMap::new())),
             references,
-            source_control,
             common,
-            left_diff_path,
         };
 
         {
@@ -341,13 +334,6 @@ impl PaletteData {
             PaletteKind::SshHost => {
                 "Type [user@]host or select a previously connected workspace below"
             }
-            PaletteKind::DiffFiles => {
-                if self.left_diff_path.with(Option::is_some) {
-                    "Select right file"
-                } else {
-                    "Seleft left file"
-                }
-            }
             _ => "",
         }
     }
@@ -362,7 +348,7 @@ impl PaletteData {
 
         match kind {
             PaletteKind::PaletteHelp => self.get_palette_help(),
-            PaletteKind::File | PaletteKind::DiffFiles => {
+            PaletteKind::File => {
                 self.get_files();
             }
             PaletteKind::HelpAndFile => self.get_palette_help_and_file(),
@@ -402,9 +388,6 @@ impl PaletteData {
             }
             PaletteKind::LineEnding => {
                 self.get_line_endings();
-            }
-            PaletteKind::SCMReferences => {
-                self.get_scm_references();
             }
         }
     }
@@ -947,33 +930,6 @@ impl PaletteData {
         self.items.set(items);
     }
 
-    fn get_scm_references(&self) {
-        let branches = self.source_control.branches.get_untracked();
-        let tags = self.source_control.tags.get_untracked();
-        let mut items: im::Vector<PaletteItem> = im::Vector::new();
-        for refs in branches.into_iter() {
-            items.push_back(PaletteItem {
-                content: PaletteItemContent::SCMReference {
-                    name: refs.to_owned(),
-                },
-                filter_text: refs.to_owned(),
-                score: 0,
-                indices: Vec::new(),
-            });
-        }
-        for refs in tags.into_iter() {
-            items.push_back(PaletteItem {
-                content: PaletteItemContent::SCMReference {
-                    name: refs.to_owned(),
-                },
-                filter_text: refs.to_owned(),
-                score: 0,
-                indices: Vec::new(),
-            });
-        }
-        self.items.set(items);
-    }
-
     fn preselect_matching(&self, items: &im::Vector<PaletteItem>, matching: &str) {
         let Some((idx, _)) = items
             .iter()
@@ -1000,27 +956,11 @@ impl PaletteData {
                     self.common.lapce_command.send(cmd);
                 }
                 PaletteItemContent::File { full_path, .. } => {
-                    if self.kind.get_untracked() == PaletteKind::DiffFiles {
-                        if let Some(left_path) =
-                            self.left_diff_path.try_update(Option::take).flatten()
-                        {
-                            self.common.internal_command.send(
-                                InternalCommand::OpenDiffFiles {
-                                    left_path,
-                                    right_path: full_path.clone(),
-                                },
-                            );
-                        } else {
-                            self.left_diff_path.set(Some(full_path.clone()));
-                            self.run(PaletteKind::DiffFiles);
-                        }
-                    } else {
-                        self.common.internal_command.send(
-                            InternalCommand::OpenFile {
-                                path: full_path.clone(),
-                            },
-                        );
-                    }
+                    self.common.internal_command.send(
+                        InternalCommand::OpenFile {
+                            path: full_path.clone(),
+                        },
+                    );
                 }
                 PaletteItemContent::Line { line, .. } => {
                     let editor = self.main_split.active_editor.get_untracked();
@@ -1169,16 +1109,6 @@ impl PaletteData {
                         buffer.set_line_ending(*kind);
                     });
                 }
-                PaletteItemContent::SCMReference { name } => {
-                    self.common
-                        .lapce_command
-                        .send(crate::command::LapceCommand {
-                        kind: CommandKind::Workbench(
-                            crate::command::LapceWorkbenchCommand::CheckoutReference,
-                        ),
-                        data: Some(serde_json::json!(name.to_owned())),
-                    });
-                }
             }
         } else if self.kind.get_untracked() == PaletteKind::SshHost {
             let input = self.input.with_untracked(|input| input.input.clone());
@@ -1308,7 +1238,6 @@ impl PaletteData {
                         name: name.clone(),
                         save: false,
                     }),
-                PaletteItemContent::SCMReference { .. } => {}
             }
         }
     }
@@ -1324,7 +1253,6 @@ impl PaletteData {
                 .send(InternalCommand::ReloadConfig);
         }
 
-        self.left_diff_path.set(None);
         self.close();
     }
 

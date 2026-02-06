@@ -33,14 +33,6 @@ impl LapceIcons {
     pub const IMAGE_LOADING: &'static str = "image_loading";
     pub const IMAGE_ERROR: &'static str = "image_error";
 
-    pub const SCM: &'static str = "scm.icon";
-    pub const SCM_DIFF_MODIFIED: &'static str = "scm.diff.modified";
-    pub const SCM_DIFF_ADDED: &'static str = "scm.diff.added";
-    pub const SCM_DIFF_REMOVED: &'static str = "scm.diff.removed";
-    pub const SCM_DIFF_RENAMED: &'static str = "scm.diff.renamed";
-    pub const SCM_CHANGE_ADD: &'static str = "scm.change.add";
-    pub const SCM_CHANGE_REMOVE: &'static str = "scm.change.remove";
-
     pub const FOLD: &'static str = "fold";
     pub const FOLD_UP: &'static str = "fold.up";
     pub const FOLD_DOWN: &'static str = "fold.down";

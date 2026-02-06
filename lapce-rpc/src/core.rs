@@ -20,7 +20,6 @@ use crate::{
     file::PathObject,
     plugin::{PluginId, VoltInfo, VoltMetadata},
     proxy::ProxyStatus,
-    source_control::DiffInfo,
 };
 
 pub enum CoreRpc {
@@ -100,9 +99,6 @@ pub enum CoreNotification {
     VoltRemoved {
         volt: VoltInfo,
         only_installing: bool,
-    },
-    DiffInfo {
-        diff: DiffInfo,
     },
     Log {
         level: LogLevel,
@@ -215,10 +211,6 @@ impl CoreRpcHandler {
 
     pub fn workspace_file_change(&self) {
         self.notification(CoreNotification::WorkspaceFileChange);
-    }
-
-    pub fn diff_info(&self, diff: DiffInfo) {
-        self.notification(CoreNotification::DiffInfo { diff });
     }
 
     pub fn open_file_changed(&self, path: PathBuf, content: FileChanged) {

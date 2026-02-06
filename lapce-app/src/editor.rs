@@ -25,17 +25,14 @@ use floem::{
         id::EditorId,
         movement,
         text::Document,
-        view::{
-            DiffSection, DiffSectionKind, LineInfo, ScreenLines, ScreenLinesBase,
-        },
-        visual_line::{ConfigId, Lines, TextLayoutProvider, VLine, VLineInfo},
+        view::{LineInfo, ScreenLines, ScreenLinesBase},
+        visual_line::{ConfigId, Lines, TextLayoutProvider, VLine},
     },
 };
 use itertools::Itertools;
 use lapce_core::{
     buffer::{
         InvalLines,
-        diff::DiffLines,
         rope_text::{RopeText, RopeTextVal},
     },
     command::{
@@ -59,10 +56,7 @@ use nucleo::Utf32Str;
 use serde::{Deserialize, Serialize};
 use view::StickyHeaderInfo;
 
-use self::{
-    diff::DiffInfo,
-    location::{EditorLocation, EditorPosition},
-};
+use self::location::{EditorLocation, EditorPosition};
 use crate::{
     command::{CommandKind, InternalCommand, LapceCommand, LapceWorkbenchCommand},
     completion::CompletionStatus,
@@ -70,7 +64,7 @@ use crate::{
     db::LapceDb,
     doc::{Doc, DocContent},
     editor_tab::EditorTabChild,
-    id::{DiffEditorId, EditorTabId},
+    id::EditorTabId,
     inline_completion::{InlineCompletionItem, InlineCompletionStatus},
     keypress::{KeyPressFocus, condition::Condition},
     lsp::path_from_url,
@@ -88,7 +82,6 @@ use crate::{
     window_tab::{CommonData, Focus, WindowTabData},
 };
 
-pub mod diff;
 pub mod gutter;
 pub mod location;
 pub mod view;
@@ -123,7 +116,6 @@ impl EditorInfo {
                     data.scope,
                     doc,
                     Some(editor_tab_id),
-                    None,
                     None,
                     common,
                 );
@@ -177,7 +169,6 @@ impl EditorInfo {
                     doc,
                     Some(editor_tab_id),
                     None,
-                    None,
                     common,
                 )
             }
@@ -188,7 +179,6 @@ impl EditorInfo {
 #[derive(Clone)]
 pub enum EditorViewKind {
     Normal,
-    Diff(DiffInfo),
 }
 
 impl EditorViewKind {
@@ -211,7 +201,6 @@ pub type SnippetIndex = Vec<(usize, (usize, usize))>;
 pub struct EditorData {
     pub scope: Scope,
     pub editor_tab_id: RwSignal<Option<EditorTabId>>,
-    pub diff_editor_id: RwSignal<Option<(EditorTabId, DiffEditorId)>>,
     pub confirmed: RwSignal<bool>,
     pub snippet: RwSignal<Option<SnippetIndex>>,
     pub inline_find: RwSignal<Option<InlineFindDirection>>,
@@ -236,7 +225,6 @@ impl EditorData {
         cx: Scope,
         editor: Editor,
         editor_tab_id: Option<EditorTabId>,
-        diff_editor_id: Option<(EditorTabId, DiffEditorId)>,
         confirmed: Option<RwSignal<bool>>,
         common: Rc<CommonData>,
     ) -> Self {
@@ -246,7 +234,6 @@ impl EditorData {
         EditorData {
             scope: cx,
             editor_tab_id: cx.create_rw_signal(editor_tab_id),
-            diff_editor_id: cx.create_rw_signal(diff_editor_id),
             confirmed,
             snippet: cx.create_rw_signal(None),
             inline_find: cx.create_rw_signal(None),
@@ -284,7 +271,7 @@ impl EditorData {
         let cx = cx.create_child();
         let doc = Rc::new(Doc::new_local(cx, editors, common.clone()));
         let editor = doc.create_editor(cx, editor_id, true);
-        Self::new(cx, editor, None, None, None, common)
+        Self::new(cx, editor, None, None, common)
     }
 
     /// Create a new editor with a specific doc.  
@@ -293,12 +280,11 @@ impl EditorData {
         cx: Scope,
         doc: Rc<Doc>,
         editor_tab_id: Option<EditorTabId>,
-        diff_editor_id: Option<(EditorTabId, DiffEditorId)>,
         confirmed: Option<RwSignal<bool>>,
         common: Rc<CommonData>,
     ) -> Self {
         let editor = doc.create_editor(cx, EditorId::next(), false);
-        Self::new(cx, editor, editor_tab_id, diff_editor_id, confirmed, common)
+        Self::new(cx, editor, editor_tab_id, confirmed, common)
     }
 
     /// Swap out the document this editor is for
@@ -312,7 +298,6 @@ impl EditorData {
         &self,
         cx: Scope,
         editor_tab_id: Option<EditorTabId>,
-        diff_editor_id: Option<(EditorTabId, DiffEditorId)>,
         confirmed: Option<RwSignal<bool>>,
     ) -> Self {
         let cx = cx.create_child();
@@ -323,7 +308,6 @@ impl EditorData {
             cx,
             self.doc(),
             editor_tab_id,
-            diff_editor_id,
             Some(confirmed),
             self.common.clone(),
         );
@@ -784,13 +768,6 @@ impl EditorData {
                         direction: SplitDirection::Vertical,
                         editor_tab_id,
                     });
-                } else if let Some((editor_tab_id, _)) =
-                    self.diff_editor_id.get_untracked()
-                {
-                    self.common.internal_command.send(InternalCommand::Split {
-                        direction: SplitDirection::Vertical,
-                        editor_tab_id,
-                    });
                 } else {
                     return CommandExecuted::No;
                 }
@@ -801,28 +778,12 @@ impl EditorData {
                         direction: SplitDirection::Horizontal,
                         editor_tab_id,
                     });
-                } else if let Some((editor_tab_id, _)) =
-                    self.diff_editor_id.get_untracked()
-                {
-                    self.common.internal_command.send(InternalCommand::Split {
-                        direction: SplitDirection::Horizontal,
-                        editor_tab_id,
-                    });
                 } else {
                     return CommandExecuted::No;
                 }
             }
             FocusCommand::SplitRight => {
                 if let Some(editor_tab_id) = self.editor_tab_id.get_untracked() {
-                    self.common
-                        .internal_command
-                        .send(InternalCommand::SplitMove {
-                            direction: SplitMoveDirection::Right,
-                            editor_tab_id,
-                        });
-                } else if let Some((editor_tab_id, _)) =
-                    self.diff_editor_id.get_untracked()
-                {
                     self.common
                         .internal_command
                         .send(InternalCommand::SplitMove {
@@ -841,30 +802,12 @@ impl EditorData {
                             direction: SplitMoveDirection::Left,
                             editor_tab_id,
                         });
-                } else if let Some((editor_tab_id, _)) =
-                    self.diff_editor_id.get_untracked()
-                {
-                    self.common
-                        .internal_command
-                        .send(InternalCommand::SplitMove {
-                            direction: SplitMoveDirection::Left,
-                            editor_tab_id,
-                        });
                 } else {
                     return CommandExecuted::No;
                 }
             }
             FocusCommand::SplitUp => {
                 if let Some(editor_tab_id) = self.editor_tab_id.get_untracked() {
-                    self.common
-                        .internal_command
-                        .send(InternalCommand::SplitMove {
-                            direction: SplitMoveDirection::Up,
-                            editor_tab_id,
-                        });
-                } else if let Some((editor_tab_id, _)) =
-                    self.diff_editor_id.get_untracked()
-                {
                     self.common
                         .internal_command
                         .send(InternalCommand::SplitMove {
@@ -883,27 +826,12 @@ impl EditorData {
                             direction: SplitMoveDirection::Down,
                             editor_tab_id,
                         });
-                } else if let Some((editor_tab_id, _)) =
-                    self.diff_editor_id.get_untracked()
-                {
-                    self.common
-                        .internal_command
-                        .send(InternalCommand::SplitMove {
-                            direction: SplitMoveDirection::Down,
-                            editor_tab_id,
-                        });
                 } else {
                     return CommandExecuted::No;
                 }
             }
             FocusCommand::SplitExchange => {
                 if let Some(editor_tab_id) = self.editor_tab_id.get_untracked() {
-                    self.common
-                        .internal_command
-                        .send(InternalCommand::SplitExchange { editor_tab_id });
-                } else if let Some((editor_tab_id, _)) =
-                    self.diff_editor_id.get_untracked()
-                {
                     self.common
                         .internal_command
                         .send(InternalCommand::SplitExchange { editor_tab_id });
@@ -917,15 +845,6 @@ impl EditorData {
                         InternalCommand::EditorTabChildClose {
                             editor_tab_id,
                             child: EditorTabChild::Editor(self.id()),
-                        },
-                    );
-                } else if let Some((editor_tab_id, diff_editor_id)) =
-                    self.diff_editor_id.get_untracked()
-                {
-                    self.common.internal_command.send(
-                        InternalCommand::EditorTabChildClose {
-                            editor_tab_id,
-                            child: EditorTabChild::DiffEditor(diff_editor_id),
                         },
                     );
                 } else {
@@ -2898,7 +2817,7 @@ impl EditorData {
             | DocContent::Scratch { .. } => (None, false),
         });
         let mut menu = Menu::new("");
-        let mut cmds = if is_file {
+        let cmds = if is_file {
             if path
                 .as_ref()
                 .and_then(|x| x.file_name().and_then(|x| x.to_str()))
@@ -2911,9 +2830,6 @@ impl EditorData {
                     )),
                     Some(CommandKind::Workbench(
                         LapceWorkbenchCommand::RevealInFileExplorer,
-                    )),
-                    Some(CommandKind::Workbench(
-                        LapceWorkbenchCommand::SourceControlOpenActiveFileRemoteUrl,
                     )),
                     None,
                     Some(CommandKind::Edit(EditCommand::ClipboardCut)),
@@ -2945,9 +2861,6 @@ impl EditorData {
                     Some(CommandKind::Workbench(
                         LapceWorkbenchCommand::RevealInFileExplorer,
                     )),
-                    Some(CommandKind::Workbench(
-                        LapceWorkbenchCommand::SourceControlOpenActiveFileRemoteUrl,
-                    )),
                     None,
                     Some(CommandKind::Edit(EditCommand::ClipboardCut)),
                     Some(CommandKind::Edit(EditCommand::ClipboardCopy)),
@@ -2969,11 +2882,6 @@ impl EditorData {
                 )),
             ]
         };
-        if self.diff_editor_id.get_untracked().is_some() && is_file {
-            cmds.push(Some(CommandKind::Workbench(
-                LapceWorkbenchCommand::GoToLocation,
-            )));
-        }
         let lapce_command = self.common.lapce_command;
         for cmd in cmds {
             if let Some(cmd) = cmd {
@@ -3033,198 +2941,11 @@ impl EditorData {
     }
 
     pub fn visual_line(&self, line: usize) -> usize {
-        self.kind.with_untracked(|kind| match kind {
-            EditorViewKind::Normal => line,
-            EditorViewKind::Diff(diff) => {
-                let is_right = diff.is_right;
-                let mut last_change: Option<&DiffLines> = None;
-                let mut visual_line = 0;
-                let mut changes = diff.changes.iter().peekable();
-                while let Some(change) = changes.next() {
-                    match (is_right, change) {
-                        (true, DiffLines::Left(range)) => {
-                            if let Some(DiffLines::Right(_)) = changes.peek() {
-                            } else {
-                                visual_line += range.len();
-                            }
-                        }
-                        (false, DiffLines::Right(range)) => {
-                            let len = if let Some(DiffLines::Left(r)) = last_change {
-                                range.len() - r.len().min(range.len())
-                            } else {
-                                range.len()
-                            };
-                            if len > 0 {
-                                visual_line += len;
-                            }
-                        }
-                        (true, DiffLines::Right(range))
-                        | (false, DiffLines::Left(range)) => {
-                            if line < range.end {
-                                return visual_line + line - range.start;
-                            }
-                            visual_line += range.len();
-                            if is_right {
-                                if let Some(DiffLines::Left(r)) = last_change {
-                                    let len = r.len() - r.len().min(range.len());
-                                    if len > 0 {
-                                        visual_line += len;
-                                    }
-                                }
-                            }
-                        }
-                        (_, DiffLines::Both(info)) => {
-                            let end = if is_right {
-                                info.right.end
-                            } else {
-                                info.left.end
-                            };
-                            if line >= end {
-                                visual_line += info.right.len()
-                                    - info
-                                        .skip
-                                        .as_ref()
-                                        .map(|skip| skip.len().saturating_sub(1))
-                                        .unwrap_or(0);
-                                last_change = Some(change);
-                                continue;
-                            }
-
-                            let start = if is_right {
-                                info.right.start
-                            } else {
-                                info.left.start
-                            };
-                            if let Some(skip) = info.skip.as_ref() {
-                                if start + skip.start > line {
-                                    return visual_line + line - start;
-                                } else if start + skip.end > line {
-                                    return visual_line + skip.start;
-                                } else {
-                                    return visual_line
-                                        + (line - start - skip.len() + 1);
-                                }
-                            } else {
-                                return visual_line + line - start;
-                            }
-                        }
-                    }
-                    last_change = Some(change);
-                }
-                visual_line
-            }
-        })
+        line
     }
 
-    pub fn actual_line(&self, visual_line: usize, bottom_affinity: bool) -> usize {
-        self.kind.with_untracked(|kind| match kind {
-            EditorViewKind::Normal => visual_line,
-            EditorViewKind::Diff(diff) => {
-                let is_right = diff.is_right;
-                let mut actual_line: usize = 0;
-                let mut current_visual_line = 0;
-                let mut last_change: Option<&DiffLines> = None;
-                let mut changes = diff.changes.iter().peekable();
-                while let Some(change) = changes.next() {
-                    match (is_right, change) {
-                        (true, DiffLines::Left(range)) => {
-                            if let Some(DiffLines::Right(_)) = changes.peek() {
-                            } else {
-                                current_visual_line += range.len();
-                                if current_visual_line >= visual_line {
-                                    return if bottom_affinity {
-                                        actual_line
-                                    } else {
-                                        actual_line.saturating_sub(1)
-                                    };
-                                }
-                            }
-                        }
-                        (false, DiffLines::Right(range)) => {
-                            let len = if let Some(DiffLines::Left(r)) = last_change {
-                                range.len() - r.len().min(range.len())
-                            } else {
-                                range.len()
-                            };
-                            if len > 0 {
-                                current_visual_line += len;
-                                if current_visual_line >= visual_line {
-                                    return actual_line;
-                                }
-                            }
-                        }
-                        (true, DiffLines::Right(range))
-                        | (false, DiffLines::Left(range)) => {
-                            let len = range.len();
-                            if current_visual_line + len > visual_line {
-                                return range.start
-                                    + (visual_line - current_visual_line);
-                            }
-                            current_visual_line += len;
-                            actual_line += len;
-                            if is_right {
-                                if let Some(DiffLines::Left(r)) = last_change {
-                                    let len = r.len() - r.len().min(range.len());
-                                    if len > 0 {
-                                        current_visual_line += len;
-                                        if current_visual_line > visual_line {
-                                            return if bottom_affinity {
-                                                actual_line
-                                            } else {
-                                                actual_line - range.len()
-                                            };
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        (_, DiffLines::Both(info)) => {
-                            let len = info.right.len();
-                            let start = if is_right {
-                                info.right.start
-                            } else {
-                                info.left.start
-                            };
-
-                            if let Some(skip) = info.skip.as_ref() {
-                                if current_visual_line + skip.start == visual_line {
-                                    return if bottom_affinity {
-                                        actual_line + skip.end
-                                    } else {
-                                        (actual_line + skip.start).saturating_sub(1)
-                                    };
-                                } else if current_visual_line + skip.start + 1
-                                    > visual_line
-                                {
-                                    return actual_line + visual_line
-                                        - current_visual_line;
-                                } else if current_visual_line + len - skip.len() + 1
-                                    >= visual_line
-                                {
-                                    return actual_line
-                                        + skip.end
-                                        + (visual_line
-                                            - current_visual_line
-                                            - skip.start
-                                            - 1);
-                                }
-                                actual_line += len;
-                                current_visual_line += len - skip.len() + 1;
-                            } else {
-                                if current_visual_line + len > visual_line {
-                                    return start
-                                        + (visual_line - current_visual_line);
-                                }
-                                current_visual_line += len;
-                                actual_line += len;
-                            }
-                        }
-                    }
-                    last_change = Some(change);
-                }
-                actual_line
-            }
-        })
+    pub fn actual_line(&self, visual_line: usize, _bottom_affinity: bool) -> usize {
+        visual_line
     }
 }
 
@@ -3605,236 +3326,6 @@ pub(crate) fn compute_screen_lines(
                 lines: Rc::new(rvlines),
                 info: Rc::new(info),
                 diff_sections: None,
-                base,
-            }
-        }
-        EditorViewKind::Diff(diff_info) => {
-            // TODO: let lines in diff view be wrapped, possibly screen_lines should be impl'd
-            // on DiffEditorData
-
-            let mut y_idx = 0;
-            let mut rvlines = Vec::new();
-            let mut info = HashMap::new();
-            let mut diff_sections = Vec::new();
-            let mut last_change: Option<&DiffLines> = None;
-            let mut changes = diff_info.changes.iter().peekable();
-            let is_right = diff_info.is_right;
-
-            let line_y = |info: VLineInfo<()>, vline_y: usize| -> usize {
-                vline_y.saturating_sub(info.rvline.line_index * line_height)
-            };
-
-            while let Some(change) = changes.next() {
-                match (is_right, change) {
-                    (true, DiffLines::Left(range)) => {
-                        if let Some(DiffLines::Right(_)) = changes.peek() {
-                        } else {
-                            let len = range.len();
-                            diff_sections.push(DiffSection {
-                                y_idx,
-                                height: len,
-                                kind: DiffSectionKind::NoCode,
-                            });
-                            y_idx += len;
-                        }
-                    }
-                    (false, DiffLines::Right(range)) => {
-                        let len = if let Some(DiffLines::Left(r)) = last_change {
-                            range.len() - r.len().min(range.len())
-                        } else {
-                            range.len()
-                        };
-                        if len > 0 {
-                            diff_sections.push(DiffSection {
-                                y_idx,
-                                height: len,
-                                kind: DiffSectionKind::NoCode,
-                            });
-                            y_idx += len;
-                        }
-                    }
-                    (true, DiffLines::Right(range))
-                    | (false, DiffLines::Left(range)) => {
-                        // TODO: count vline count in the range instead
-                        let height = range.len();
-
-                        diff_sections.push(DiffSection {
-                            y_idx,
-                            height,
-                            kind: if is_right {
-                                DiffSectionKind::Added
-                            } else {
-                                DiffSectionKind::Removed
-                            },
-                        });
-
-                        let initial_y_idx = y_idx;
-                        // Mopve forward by the count given.
-                        y_idx += height;
-
-                        if y_idx < min_vline.get() {
-                            if is_right {
-                                if let Some(DiffLines::Left(r)) = last_change {
-                                    // TODO: count vline count in the other editor since this is skipping an amount dependent on those vlines
-                                    let len = r.len() - r.len().min(range.len());
-                                    if len > 0 {
-                                        diff_sections.push(DiffSection {
-                                            y_idx,
-                                            height: len,
-                                            kind: DiffSectionKind::NoCode,
-                                        });
-                                        y_idx += len;
-                                    }
-                                };
-                            }
-                            last_change = Some(change);
-                            continue;
-                        }
-
-                        let start_rvline =
-                            lines.rvline_of_line(&text_prov, range.start);
-
-                        // TODO: this wouldn't need to produce vlines if screen lines didn't
-                        // require them.
-                        let iter = lines
-                            .iter_rvlines_init(
-                                &text_prov,
-                                cache_rev,
-                                config_id,
-                                start_rvline,
-                                false,
-                            )
-                            .take_while(|vline_info| {
-                                vline_info.rvline.line < range.end
-                            })
-                            .enumerate();
-                        for (i, rvline_info) in iter {
-                            let rvline = rvline_info.rvline;
-                            if initial_y_idx + i < min_vline.0 {
-                                continue;
-                            }
-
-                            rvlines.push(rvline);
-                            let vline_y = (initial_y_idx + i) * line_height;
-                            info.insert(
-                                rvline,
-                                LineInfo {
-                                    y: line_y(rvline_info, vline_y) as f64 - y0,
-                                    vline_y: vline_y as f64 - y0,
-                                    vline_info: rvline_info,
-                                },
-                            );
-
-                            if initial_y_idx + i > max_vline.0 {
-                                break;
-                            }
-                        }
-
-                        if is_right {
-                            if let Some(DiffLines::Left(r)) = last_change {
-                                // TODO: count vline count in the other editor since this is skipping an amount dependent on those vlines
-                                let len = r.len() - r.len().min(range.len());
-                                if len > 0 {
-                                    diff_sections.push(DiffSection {
-                                        y_idx,
-                                        height: len,
-                                        kind: DiffSectionKind::NoCode,
-                                    });
-                                    y_idx += len;
-                                }
-                            };
-                        }
-                    }
-                    (_, DiffLines::Both(bothinfo)) => {
-                        let start = if is_right {
-                            bothinfo.right.start
-                        } else {
-                            bothinfo.left.start
-                        };
-                        let len = bothinfo.right.len();
-                        let diff_height = len
-                            - bothinfo
-                                .skip
-                                .as_ref()
-                                .map(|skip| skip.len().saturating_sub(1))
-                                .unwrap_or(0);
-                        if y_idx + diff_height < min_vline.get() {
-                            y_idx += diff_height;
-                            last_change = Some(change);
-                            continue;
-                        }
-
-                        let start_rvline = lines.rvline_of_line(&text_prov, start);
-
-                        let mut iter = lines
-                            .iter_rvlines_init(
-                                &text_prov,
-                                cache_rev,
-                                config_id,
-                                start_rvline,
-                                false,
-                            )
-                            .peekable();
-                        while let Some(rvline_info) = iter.next() {
-                            let line = rvline_info.rvline.line;
-
-                            if line >= start + len {
-                                break;
-                            }
-
-                            // Skip over the lines
-                            if let Some(skip) = bothinfo.skip.as_ref() {
-                                if Some(skip.start) == line.checked_sub(start) {
-                                    y_idx += 1;
-
-                                    // restart iterator after the skip
-                                    let start_rvline = lines.rvline_of_line(
-                                        &text_prov,
-                                        start + skip.end,
-                                    );
-
-                                    iter = lines
-                                        .iter_rvlines_init(
-                                            &text_prov,
-                                            cache_rev,
-                                            config_id,
-                                            start_rvline,
-                                            false,
-                                        )
-                                        .peekable();
-
-                                    continue;
-                                }
-                            }
-
-                            // Add the vline if it is within view
-                            if y_idx >= min_vline.get() {
-                                rvlines.push(rvline_info.rvline);
-                                let vline_y = y_idx * line_height;
-                                info.insert(
-                                    rvline_info.rvline,
-                                    LineInfo {
-                                        y: line_y(rvline_info, vline_y) as f64 - y0,
-                                        vline_y: vline_y as f64 - y0,
-                                        vline_info: rvline_info,
-                                    },
-                                );
-                            }
-
-                            y_idx += 1;
-
-                            if y_idx - 1 > max_vline.get() {
-                                break;
-                            }
-                        }
-                    }
-                }
-                last_change = Some(change);
-            }
-            ScreenLines {
-                lines: Rc::new(rvlines),
-                info: Rc::new(info),
-                diff_sections: Some(Rc::new(diff_sections)),
                 base,
             }
         }

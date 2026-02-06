@@ -30,19 +30,18 @@ use floem::{
             ShowIndentGuide, SmartTab, VisibleWhitespaceColor, WrapProp,
             text::WrapMethod,
             view::{
-                DiffSectionKind, EditorView as FloemEditorView, EditorViewClass,
+                EditorView as FloemEditorView, EditorViewClass,
                 LineRegion, ScreenLines, cursor_caret,
             },
-            visual_line::{RVLine, VLine},
+            visual_line::RVLine,
         },
         empty, label,
         scroll::{PropagatePointerWheel, scroll},
         stack, svg,
     },
 };
-use itertools::Itertools;
 use lapce_core::{
-    buffer::{Buffer, diff::DiffLines, rope_text::RopeText},
+    buffer::{Buffer, rope_text::RopeText},
     cursor::{CursorAffinity, CursorMode},
     selection::SelRegion,
 };
@@ -286,114 +285,6 @@ pub fn editor_view(
 }
 
 impl EditorView {
-    fn paint_diff_sections(
-        &self,
-        cx: &mut PaintCx,
-        viewport: Rect,
-        screen_lines: &ScreenLines,
-        config: &LapceConfig,
-    ) {
-        let Some(diff_sections) = &screen_lines.diff_sections else {
-            return;
-        };
-        for section in diff_sections.iter() {
-            match section.kind {
-                DiffSectionKind::NoCode => self.paint_diff_no_code(
-                    cx,
-                    viewport,
-                    section.y_idx,
-                    section.height,
-                    config,
-                ),
-                DiffSectionKind::Added => {
-                    cx.fill(
-                        &Rect::ZERO
-                            .with_size(Size::new(
-                                viewport.width(),
-                                (config.editor.line_height() * section.height)
-                                    as f64,
-                            ))
-                            .with_origin(Point::new(
-                                viewport.x0,
-                                (section.y_idx * config.editor.line_height()) as f64,
-                            )),
-                        config
-                            .color(LapceColor::SOURCE_CONTROL_ADDED)
-                            .multiply_alpha(0.2),
-                        0.0,
-                    );
-                }
-                DiffSectionKind::Removed => {
-                    cx.fill(
-                        &Rect::ZERO
-                            .with_size(Size::new(
-                                viewport.width(),
-                                (config.editor.line_height() * section.height)
-                                    as f64,
-                            ))
-                            .with_origin(Point::new(
-                                viewport.x0,
-                                (section.y_idx * config.editor.line_height()) as f64,
-                            )),
-                        config
-                            .color(LapceColor::SOURCE_CONTROL_REMOVED)
-                            .multiply_alpha(0.2),
-                        0.0,
-                    );
-                }
-            }
-        }
-    }
-
-    fn paint_diff_no_code(
-        &self,
-        cx: &mut PaintCx,
-        viewport: Rect,
-        start_line: usize,
-        height: usize,
-        config: &LapceConfig,
-    ) {
-        let line_height = config.editor.line_height();
-        let height = (height * line_height) as f64;
-        let y = (start_line * line_height) as f64;
-        let y_end = y + height;
-
-        if y_end < viewport.y0 || y > viewport.y1 {
-            return;
-        }
-
-        let y = y.max(viewport.y0 - 10.0);
-        let y_end = y_end.min(viewport.y1 + 10.0);
-        let height = y_end - y;
-
-        let start_x = viewport.x0.floor() as usize;
-        let start_x = start_x - start_x % 8;
-
-        for x in (start_x..viewport.x1.ceil() as usize + 1 + height.ceil() as usize)
-            .step_by(8)
-        {
-            let p0 = if x as f64 > viewport.x1.ceil() {
-                Point::new(viewport.x1.ceil(), y + (x as f64 - viewport.x1.ceil()))
-            } else {
-                Point::new(x as f64, y)
-            };
-
-            let height = if x as f64 - height < viewport.x0.floor() {
-                x as f64 - viewport.x0.floor()
-            } else {
-                height
-            };
-            if height > 0.0 {
-                let p1 = Point::new(x as f64 - height, y + height);
-                cx.stroke(
-                    &Line::new(p0, p1),
-                    config.color(LapceColor::EDITOR_DIM),
-                    &Stroke::new(1.0),
-                );
-            }
-        }
-    }
-
     fn paint_current_line(
         &self,
         cx: &mut PaintCx,
@@ -697,37 +588,6 @@ impl EditorView {
             config.color(LapceColor::LAPCE_SCROLL_BAR),
             0.0,
         );
-
-        if !self.editor.kind.get_untracked().is_normal() {
-            return;
-        }
-
-        let doc = self.editor.doc();
-        let total_len = doc.buffer.with_untracked(|buffer| buffer.last_line());
-        let changes = doc.head_changes().get_untracked();
-        let total_height = viewport.height();
-        let total_width = viewport.width();
-        let line_height = config.editor.line_height();
-        let content_height = if config.editor.scroll_beyond_last_line {
-            (total_len * line_height) as f64 + total_height - line_height as f64
-        } else {
-            (total_len * line_height) as f64
-        };
-
-        let colors = changes_colors_all(&config, &self.editor.editor, changes);
-        for (y, height, _, color) in colors {
-            let y = y / content_height * total_height;
-            let height = ((height * line_height) as f64 / content_height
-                * total_height)
-                .max(3.0);
-            let rect = Rect::ZERO.with_size(Size::new(3.0, height)).with_origin(
-                Point::new(
-                    viewport.x0 + total_width - BAR_WIDTH + 1.0,
-                    y + viewport.y0,
-                ),
-            );
-            cx.fill(&rect, color, 0.0);
-        }
     }
 
     /// Paint a highlight around the characters at the given positions.
@@ -1100,8 +960,6 @@ impl View for EditorView {
         let screen_lines = ed.screen_lines.get_untracked();
         self.paint_current_line(cx, is_local, &screen_lines);
         FloemEditorView::paint_selection(cx, ed, &screen_lines);
-        let screen_lines = ed.screen_lines.get_untracked();
-        self.paint_diff_sections(cx, viewport, &screen_lines, &config);
         let screen_lines = ed.screen_lines.get_untracked();
         self.paint_find(cx, &screen_lines);
         let screen_lines = ed.screen_lines.get_untracked();
@@ -2264,148 +2122,3 @@ fn find_view(
     })
 }
 
-/// Iterator over (len, color, modified) for each change in the diff
-fn changes_color_iter<'a>(
-    changes: &'a im::Vector<DiffLines>,
-    config: &'a LapceConfig,
-) -> impl Iterator<Item = (usize, Option<Color>, bool)> + 'a {
-    let mut last_change = None;
-    changes.iter().map(move |change| {
-        let len = match change {
-            DiffLines::Left(_range) => 0,
-            DiffLines::Both(info) => info.right.len(),
-            DiffLines::Right(range) => range.len(),
-        };
-        let mut modified = false;
-        let color = match change {
-            DiffLines::Left(_range) => {
-                Some(config.color(LapceColor::SOURCE_CONTROL_REMOVED))
-            }
-            DiffLines::Right(_range) => {
-                if let Some(DiffLines::Left(_)) = last_change.as_ref() {
-                    modified = true;
-                }
-                if modified {
-                    Some(config.color(LapceColor::SOURCE_CONTROL_MODIFIED))
-                } else {
-                    Some(config.color(LapceColor::SOURCE_CONTROL_ADDED))
-                }
-            }
-            _ => None,
-        };
-
-        last_change = Some(change.clone());
-
-        (len, color, modified)
-    })
-}
-
-// TODO: both of the changes color functions could easily return iterators
-
-/// Get the position and coloring information for over the entire current [`ScreenLines`]
-/// Returns `(y, height_idx, removed, color)`
-pub fn changes_colors_screen(
-    config: &LapceConfig,
-    editor: &Editor,
-    changes: im::Vector<DiffLines>,
-) -> Vec<(f64, usize, bool, Color)> {
-    let screen_lines = editor.screen_lines.get_untracked();
-
-    let Some((min, max)) = screen_lines.rvline_range() else {
-        return Vec::new();
-    };
-
-    let line_height = config.editor.line_height();
-    let mut line = 0;
-    let mut colors = Vec::new();
-
-    for (len, color, modified) in changes_color_iter(&changes, config) {
-        let pre_line = line;
-
-        line += len;
-        if line < min.line {
-            continue;
-        }
-
-        if let Some(color) = color {
-            if modified {
-                colors.pop();
-            }
-
-            let rvline = editor.rvline_of_line(pre_line);
-            let vline = editor.vline_of_line(pre_line);
-            let y = (vline.0 * line_height) as f64;
-            let height = {
-                // Accumulate the number of line indices each potentially wrapped line spans
-                let end_line = rvline.line + len;
-
-                editor.iter_rvlines_over(false, rvline, end_line).count()
-            };
-            let removed = len == 0;
-
-            colors.push((y, height, removed, color));
-        }
-
-        if line > max.line {
-            break;
-        }
-    }
-
-    colors
-}
-
-// TODO: limit the visual line that changes are considered past to some reasonable number
-// TODO(minor): This could be a `changes_colors_range` with some minor changes, but it isn't needed
-/// Get the position and coloring information for over the entire current [`ScreenLines`]
-/// Returns `(y, height_idx, removed, color)`
-pub fn changes_colors_all(
-    config: &LapceConfig,
-    ed: &Editor,
-    changes: im::Vector<DiffLines>,
-) -> Vec<(f64, usize, bool, Color)> {
-    let line_height = config.editor.line_height();
-
-    let mut line = 0;
-    let mut colors = Vec::new();
-
-    let mut vline_iter = ed.iter_vlines(false, VLine(0)).peekable();
-
-    for (len, color, modified) in changes_color_iter(&changes, config) {
-        let pre_line = line;
-
-        line += len;
-
-        // Skip over all vlines that are before the current line
-        vline_iter
-            .by_ref()
-            .peeking_take_while(|info| info.rvline.line < pre_line)
-            .count();
-
-        if let Some(color) = color {
-            if modified {
-                colors.pop();
-            }
-
-            // Find the info with a line == pre_line
-            let Some(info) = vline_iter.peek() else {
-                continue;
-            };
-
-            let y = info.vline.get() * line_height;
-            let end_line = info.rvline.line + len;
-            let height = vline_iter
-                .by_ref()
-                .peeking_take_while(|info| info.rvline.line < end_line)
-                .count();
-            let removed = len == 0;
-
-            colors.push((y as f64, height, removed, color));
-        }
-
-        if vline_iter.peek().is_none() {
-            break;
-        }
-    }
-
-    colors
-}

@@ -28,7 +28,6 @@ use crate::{
     file::{FileNodeItem, PathObject},
     file_line::FileLine,
     plugin::{PluginId, VoltInfo, VoltMetadata},
-    source_control::FileDiff,
     style::SemanticStyles,
 };
 
@@ -91,9 +90,6 @@ pub enum ProxyRequest {
     GetSelectionRange {
         path: PathBuf,
         positions: Vec<Position>,
-    },
-    GitGetRemoteFileUrl {
-        file: PathBuf,
     },
     GetReferences {
         path: PathBuf,
@@ -266,18 +262,6 @@ pub enum ProxyNotification {
     EnableVolt {
         volt: VoltInfo,
     },
-    GitCommit {
-        message: String,
-        diffs: Vec<FileDiff>,
-    },
-    GitCheckout {
-        reference: String,
-    },
-    GitDiscardFilesChanges {
-        files: Vec<PathBuf>,
-    },
-    GitDiscardWorkspaceChanges {},
-    GitInit {},
     LspCancel {
         id: i32,
     },
@@ -287,9 +271,6 @@ pub enum ProxyNotification {
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "method", content = "params")]
 pub enum ProxyResponse {
-    GitGetRemoteFileUrl {
-        file_url: String,
-    },
     NewBufferResponse {
         content: String,
         read_only: bool,
@@ -519,18 +500,6 @@ impl ProxyRpcHandler {
 
     pub fn lsp_cancel(&self, id: i32) {
         self.notification(ProxyNotification::LspCancel { id });
-    }
-
-    pub fn git_init(&self) {
-        self.notification(ProxyNotification::GitInit {});
-    }
-
-    pub fn git_commit(&self, message: String, diffs: Vec<FileDiff>) {
-        self.notification(ProxyNotification::GitCommit { message, diffs });
-    }
-
-    pub fn git_checkout(&self, reference: String) {
-        self.notification(ProxyNotification::GitCheckout { reference });
     }
 
     pub fn install_volt(&self, volt: VoltInfo) {
@@ -948,14 +917,6 @@ impl ProxyRpcHandler {
         self.request_async(ProxyRequest::PrepareRename { path, position }, f);
     }
 
-    pub fn git_get_remote_file_url(
-        &self,
-        file: PathBuf,
-        f: impl ProxyCallback + 'static,
-    ) {
-        self.request_async(ProxyRequest::GitGetRemoteFileUrl { file }, f);
-    }
-
     pub fn rename(
         &self,
         path: PathBuf,
@@ -1003,14 +964,6 @@ impl ProxyRpcHandler {
         configs: HashMap<String, HashMap<String, serde_json::Value>>,
     ) {
         self.notification(ProxyNotification::UpdatePluginConfigs { configs });
-    }
-
-    pub fn git_discard_files_changes(&self, files: Vec<PathBuf>) {
-        self.notification(ProxyNotification::GitDiscardFilesChanges { files });
-    }
-
-    pub fn git_discard_workspace_changes(&self) {
-        self.notification(ProxyNotification::GitDiscardWorkspaceChanges {});
     }
 
     pub fn get_selection_range(

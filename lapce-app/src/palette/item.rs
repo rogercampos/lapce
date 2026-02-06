@@ -71,7 +71,4 @@ pub enum PaletteItemContent {
     LineEnding {
         kind: LineEnding,
     },
-    SCMReference {
-        name: String,
-    },
 }

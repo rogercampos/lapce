@@ -22,7 +22,6 @@ use super::{
     plugin_view::plugin_panel,
     position::{PanelContainerPosition, PanelPosition},
     problem_view::problem_panel,
-    source_control_view::source_control_panel,
 };
 use crate::{
     app::{clickable_icon, clickable_icon_base},
@@ -472,10 +471,6 @@ fn panel_view(
                 PanelKind::FileExplorer => {
                     file_explorer_panel(window_tab_data.clone(), position).into_any()
                 }
-                PanelKind::SourceControl => {
-                    source_control_panel(window_tab_data.clone(), position)
-                        .into_any()
-                }
                 PanelKind::Plugin => {
                     plugin_panel(window_tab_data.clone(), position).into_any()
                 }
@@ -545,7 +540,6 @@ fn panel_picker(
             let window_tab_data = window_tab_data.clone();
             let tooltip = match p {
                 PanelKind::FileExplorer => "File Explorer",
-                PanelKind::SourceControl => "Source Control",
                 PanelKind::Plugin => "Plugins",
                 PanelKind::Search => "Search",
                 PanelKind::Problem => "Problems",

@@ -55,7 +55,6 @@ pub struct FileExplorerData {
     pub naming_editor_data: EditorData,
     pub common: Rc<CommonData>,
     pub scroll_to_line: RwSignal<Option<f64>>,
-    left_diff_path: RwSignal<Option<PathBuf>>,
     pub select: RwSignal<Option<FileNodeViewKind>>,
 }
 
@@ -136,7 +135,6 @@ impl FileExplorerData {
             naming_editor_data,
             common,
             scroll_to_line: cx.create_rw_signal(None),
-            left_diff_path: cx.create_rw_signal(None),
             select: cx.create_rw_signal(None),
         };
         if data.common.workspace.path.is_some() {
@@ -482,7 +480,6 @@ impl FileExplorerData {
     pub fn secondary_click(&self, path: &Path) {
         let common = self.common.clone();
         let path_a = path.to_owned();
-        let left_diff_path = self.left_diff_path;
         // TODO: should we just pass is_dir into secondary click?
         let is_dir = self.is_dir(path);
 
@@ -631,30 +628,6 @@ impl FileExplorerData {
             let mut clipboard = SystemClipboard::new();
             clipboard.put_string(relative_path.to_string_lossy());
         }));
-
-        menu = menu.separator();
-
-        let path = path_a.clone();
-        menu = menu.entry(
-            MenuItem::new("Select for Compare")
-                .action(move || left_diff_path.set(Some(path.clone()))),
-        );
-
-        if let Some(left_path) = self.left_diff_path.get_untracked() {
-            let common = self.common.clone();
-            let right_path = path_a.to_owned();
-
-            menu = menu.entry(MenuItem::new("Compare with Selected").action(
-                move || {
-                    common
-                        .internal_command
-                        .send(InternalCommand::OpenDiffFiles {
-                            left_path: left_path.clone(),
-                            right_path: right_path.clone(),
-                        })
-                },
-            ))
-        }
 
         menu = menu.separator();
 

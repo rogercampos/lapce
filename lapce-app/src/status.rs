@@ -5,7 +5,6 @@ use std::{
 
 use floem::{
     View,
-    event::EventPropagation,
     reactive::{
         Memo, ReadSignal, RwSignal, SignalGet, SignalUpdate, SignalWith, create_memo,
     },
@@ -18,20 +17,15 @@ use lsp_types::{DiagnosticSeverity, ProgressToken};
 
 use crate::{
     app::clickable_icon,
-    command::LapceWorkbenchCommand,
     config::{LapceConfig, color::LapceColor, icon::LapceIcons},
     editor::EditorData,
-    listener::Listener,
     palette::kind::PaletteKind,
     panel::{kind::PanelKind, position::PanelContainerPosition},
-    source_control::SourceControlData,
     window_tab::{WindowTabData, WorkProgress},
 };
 
 pub fn status(
     window_tab_data: Rc<WindowTabData>,
-    source_control: SourceControlData,
-    workbench_command: Listener<LapceWorkbenchCommand>,
     status_height: RwSignal<f64>,
     _config: ReadSignal<Arc<LapceConfig>>,
 ) -> impl View {
@@ -56,23 +50,8 @@ pub fn status(
         }
         (errors, warnings)
     });
-    let branch = source_control.branch;
-    let file_diffs = source_control.file_diffs;
-    let branch = move || {
-        format!(
-            "{}{}",
-            branch.get(),
-            if file_diffs.with(|diffs| diffs.is_empty()) {
-                ""
-            } else {
-                "*"
-            }
-        )
-    };
-
     let progresses = window_tab_data.progresses;
     let mode = create_memo(move |_| window_tab_data.mode());
-    let pointer_down = floem::reactive::create_rw_signal(false);
 
     stack((
         stack((
@@ -119,48 +98,6 @@ pub fn status(
                     .align_items(Some(AlignItems::Center))
                     .selectable(false)
             }),
-            stack((
-                svg(move || config.get().ui_svg(LapceIcons::SCM)).style(move |s| {
-                    let config = config.get();
-                    let icon_size = config.ui.icon_size() as f32;
-                    s.size(icon_size, icon_size)
-                        .color(config.color(LapceColor::LAPCE_ICON_ACTIVE))
-                }),
-                label(branch).style(move |s| {
-                    s.margin_left(10.0)
-                        .color(config.get().color(LapceColor::STATUS_FOREGROUND))
-                        .selectable(false)
-                }),
-            ))
-            .style(move |s| {
-                s.display(if branch().is_empty() {
-                    Display::None
-                } else {
-                    Display::Flex
-                })
-                .height_pct(100.0)
-                .padding_horiz(10.0)
-                .align_items(Some(AlignItems::Center))
-                .hover(|s| {
-                    s.cursor(CursorStyle::Pointer).background(
-                        config.get().color(LapceColor::PANEL_HOVERED_BACKGROUND),
-                    )
-                })
-            })
-            .on_event_cont(floem::event::EventListener::PointerDown, move |_| {
-                pointer_down.set(true);
-            })
-            .on_event(
-                floem::event::EventListener::PointerUp,
-                move |_| {
-                    if pointer_down.get() {
-                        workbench_command
-                            .send(LapceWorkbenchCommand::PaletteSCMReferences);
-                    }
-                    pointer_down.set(false);
-                    EventPropagation::Continue
-                },
-            ),
             {
                 let panel = panel.clone();
                 stack((

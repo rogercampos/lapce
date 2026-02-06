@@ -19,8 +19,6 @@ pub enum PaletteKind {
     IconTheme,
     Language,
     LineEnding,
-    SCMReferences,
-    DiffFiles,
     HelpAndFile,
 }
 
@@ -42,9 +40,7 @@ impl PaletteKind {
             | PaletteKind::IconTheme
             | PaletteKind::Language
             | PaletteKind::LineEnding
-            | PaletteKind::SCMReferences
-            | PaletteKind::HelpAndFile
-            | PaletteKind::DiffFiles => "",
+            | PaletteKind::HelpAndFile => "",
             #[cfg(windows)]
             PaletteKind::WslHost => "",
         }
@@ -90,10 +86,6 @@ impl PaletteKind {
             PaletteKind::LineEnding => {
                 Some(LapceWorkbenchCommand::ChangeFileLineEnding)
             }
-            PaletteKind::SCMReferences => {
-                Some(LapceWorkbenchCommand::PaletteSCMReferences)
-            }
-            PaletteKind::DiffFiles => Some(LapceWorkbenchCommand::DiffFiles),
         }
     }
 
@@ -119,8 +111,7 @@ impl PaletteKind {
             | PaletteKind::IconTheme
             | PaletteKind::Language
             | PaletteKind::LineEnding
-            | PaletteKind::SCMReferences | PaletteKind::HelpAndFile
-            | PaletteKind::DiffFiles => input,
+            | PaletteKind::HelpAndFile => input,
             PaletteKind::PaletteHelp
             | PaletteKind::Command
             | PaletteKind::Workspace

@@ -1,7 +1,7 @@
 use floem::{
     Renderer, View, ViewId,
     context::PaintCx,
-    peniko::kurbo::{Point, Rect, Size},
+    peniko::kurbo::{Point, Size},
     reactive::{Memo, SignalGet, SignalWith},
     text::{Attrs, AttrsList, FamilyOwned, TextLayout},
 };
@@ -9,7 +9,7 @@ use im::HashMap;
 use lapce_core::{buffer::rope_text::RopeText, mode::Mode};
 use serde::{Deserialize, Serialize};
 
-use super::{EditorData, view::changes_colors_screen};
+use super::EditorData;
 use crate::config::{LapceConfig, color::LapceColor};
 
 pub struct EditorGutterView {
@@ -34,44 +34,6 @@ pub fn editor_gutter_view(
 }
 
 impl EditorGutterView {
-    fn paint_head_changes(
-        &self,
-        cx: &mut PaintCx,
-        e_data: &EditorData,
-        viewport: Rect,
-        is_normal: bool,
-        config: &LapceConfig,
-    ) {
-        if !is_normal {
-            return;
-        }
-
-        let changes = e_data.doc().head_changes().get_untracked();
-        let line_height = config.editor.line_height() as f64;
-        let gutter_padding_right = self.gutter_padding_right.get_untracked() as f64;
-
-        let changes = changes_colors_screen(config, &e_data.editor, changes);
-        for (y, height, removed, color) in changes {
-            let height = if removed {
-                10.0
-            } else {
-                height as f64 * line_height
-            };
-            let mut y = y - viewport.y0;
-            if removed {
-                y -= 5.0;
-            }
-            cx.fill(
-                &Size::new(3.0, height).to_rect().with_origin(Point::new(
-                    self.width + 5.0 - gutter_padding_right,
-                    y,
-                )),
-                color,
-                0.0,
-            )
-        }
-    }
-
     fn paint_sticky_headers(
         &self,
         cx: &mut PaintCx,
@@ -202,7 +164,6 @@ impl View for EditorGutterView {
             }
         });
 
-        self.paint_head_changes(cx, &self.editor, viewport, kind_is_normal, &config);
         self.paint_sticky_headers(cx, kind_is_normal, &config);
     }
 

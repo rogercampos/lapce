@@ -27,7 +27,6 @@ pub fn default_panel_order() -> PanelOrder {
         im::vector![
             PanelKind::FileExplorer,
             PanelKind::Plugin,
-            PanelKind::SourceControl,
         ],
     );
     order.insert(

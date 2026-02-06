@@ -79,7 +79,6 @@ use crate::{
     },
     db::LapceDb,
     editor::{
-        diff::diff_show_more_section_view,
         location::{EditorLocation, EditorPosition},
         view::editor_container_view,
     },
@@ -687,7 +686,6 @@ fn editor_tab_header(
     let main_split = window_tab_data.main_split.clone();
     let plugin = window_tab_data.plugin.clone();
     let editors = window_tab_data.main_split.editors;
-    let diff_editors = window_tab_data.main_split.diff_editors;
     let focus = window_tab_data.common.focus;
     let config = window_tab_data.common.config;
     let internal_command = window_tab_data.common.internal_command;
@@ -730,7 +728,7 @@ fn editor_tab_header(
         let main_split = main_split.clone();
         let plugin = plugin.clone();
         let child_view = {
-            let info = child.view_info(editors, diff_editors, plugin, config);
+            let info = child.view_info(editors, plugin, config);
             let hovered = create_rw_signal(false);
 
             use crate::config::ui::TabCloseButton;
@@ -863,12 +861,6 @@ fn editor_tab_header(
             EditorTabChild::Editor(editor_id) => {
                 editors.editor_untracked(editor_id).map(|e| e.confirmed)
             }
-            EditorTabChild::DiffEditor(diff_editor_id) => diff_editors
-                .with_untracked(|diff_editors| {
-                    diff_editors
-                        .get(&diff_editor_id)
-                        .map(|diff_editor_data| diff_editor_data.confirmed)
-                }),
             _ => None,
         };
 
@@ -1227,8 +1219,6 @@ fn editor_tab_content(
     let common = main_split.common.clone();
     let workspace = common.workspace.clone();
     let editors = main_split.editors;
-    let diff_editors = main_split.diff_editors;
-    let config = common.config;
     let focus = common.focus;
     let items = move || {
         editor_tab
@@ -1278,121 +1268,6 @@ fn editor_tab_content(
                     .into_any()
                 } else {
                     text("empty editor").into_any()
-                }
-            }
-            EditorTabChild::DiffEditor(diff_editor_id) => {
-                let diff_editor_data = diff_editors.with_untracked(|diff_editors| {
-                    diff_editors.get(&diff_editor_id).cloned()
-                });
-                if let Some(diff_editor_data) = diff_editor_data {
-                    let focus_right = diff_editor_data.focus_right;
-                    let diff_editor_tab_id = diff_editor_data.editor_tab_id;
-                    let diff_editor_scope = diff_editor_data.scope;
-                    let is_active = move |tracked: bool| {
-                        let focus = if tracked {
-                            focus.get()
-                        } else {
-                            focus.get_untracked()
-                        };
-                        if let Focus::Workbench = focus {
-                            let active_editor_tab = if tracked {
-                                active_editor_tab.get()
-                            } else {
-                                active_editor_tab.get_untracked()
-                            };
-                            let diff_editor_tab_id = if tracked {
-                                diff_editor_tab_id.get()
-                            } else {
-                                diff_editor_tab_id.get_untracked()
-                            };
-                            Some(diff_editor_tab_id) == active_editor_tab
-                        } else {
-                            false
-                        }
-                    };
-                    let left_viewport = diff_editor_data.left.viewport();
-                    let left_scroll_to = diff_editor_data.left.scroll_to();
-                    let right_viewport = diff_editor_data.right.viewport();
-                    let right_scroll_to = diff_editor_data.right.scroll_to();
-                    create_effect(move |_| {
-                        let left_viewport = left_viewport.get();
-                        if right_viewport.get_untracked() != left_viewport {
-                            right_scroll_to
-                                .set(Some(left_viewport.origin().to_vec2()));
-                        }
-                    });
-                    create_effect(move |_| {
-                        let right_viewport = right_viewport.get();
-                        if left_viewport.get_untracked() != right_viewport {
-                            left_scroll_to
-                                .set(Some(right_viewport.origin().to_vec2()));
-                        }
-                    });
-                    let left_editor =
-                        create_rw_signal(diff_editor_data.left.clone());
-                    let right_editor =
-                        create_rw_signal(diff_editor_data.right.clone());
-                    stack((
-                        container(
-                            editor_container_view(
-                                window_tab_data.clone(),
-                                workspace.clone(),
-                                move |track| {
-                                    is_active(track)
-                                        && if track {
-                                            !focus_right.get()
-                                        } else {
-                                            !focus_right.get_untracked()
-                                        }
-                                },
-                                left_editor,
-                            )
-                            .debug_name("Left Editor"),
-                        )
-                        .on_event_cont(EventListener::PointerDown, move |_| {
-                            focus_right.set(false);
-                        })
-                        .style(move |s| {
-                            s.height_full()
-                                .flex_grow(1.0)
-                                .flex_basis(0.0)
-                                .border_right(1.0)
-                                .border_color(
-                                    config.get().color(LapceColor::LAPCE_BORDER),
-                                )
-                        }),
-                        container(
-                            editor_container_view(
-                                window_tab_data.clone(),
-                                workspace.clone(),
-                                move |track| {
-                                    is_active(track)
-                                        && if track {
-                                            focus_right.get()
-                                        } else {
-                                            focus_right.get_untracked()
-                                        }
-                                },
-                                right_editor,
-                            )
-                            .debug_name("Right Editor"),
-                        )
-                        .on_event_cont(EventListener::PointerDown, move |_| {
-                            focus_right.set(true);
-                        })
-                        .style(|s| s.height_full().flex_grow(1.0).flex_basis(0.0)),
-                        diff_show_more_section_view(
-                            &diff_editor_data.left,
-                            &diff_editor_data.right,
-                        ),
-                    ))
-                    .style(|s: Style| s.size_full())
-                    .on_cleanup(move || {
-                        diff_editor_scope.dispose();
-                    })
-                    .into_any()
-                } else {
-                    text("empty diff editor").into_any()
                 }
             }
             EditorTabChild::Settings(_) => {
@@ -2491,7 +2366,6 @@ fn palette_item(
         | PaletteItemContent::Language { .. }
         | PaletteItemContent::LineEnding { .. }
         | PaletteItemContent::ColorTheme { .. }
-        | PaletteItemContent::SCMReference { .. }
         | PaletteItemContent::IconTheme { .. } => {
             let text = item.filter_text;
             let indices = item.indices;
@@ -3223,11 +3097,9 @@ fn rename(window_tab_data: Rc<WindowTabData>) -> impl View {
 }
 
 fn window_tab(window_tab_data: Rc<WindowTabData>) -> impl View {
-    let source_control = window_tab_data.source_control.clone();
     let window_origin = window_tab_data.common.window_origin;
     let layout_rect = window_tab_data.layout_rect;
     let config = window_tab_data.common.config;
-    let workbench_command = window_tab_data.common.workbench_command;
     let window_tab_scope = window_tab_data.scope;
     let hover_active = window_tab_data.common.hover.active;
     let status_height = window_tab_data.status_height;
@@ -3238,8 +3110,6 @@ fn window_tab(window_tab_data: Rc<WindowTabData>) -> impl View {
             workbench(window_tab_data.clone()),
             status(
                 window_tab_data.clone(),
-                source_control,
-                workbench_command,
                 status_height,
                 config,
             ),

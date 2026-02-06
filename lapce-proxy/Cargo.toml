@@ -12,7 +12,6 @@ clap               = { workspace = true }
 crossbeam-channel  = { workspace = true }
 directories        = { workspace = true }
 flate2             = { workspace = true }
-git2               = { workspace = true }
 globset            = { workspace = true }
 indexmap           = { workspace = true }
 interprocess       = { workspace = true }

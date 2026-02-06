@@ -23,11 +23,10 @@ use crate::{
     doc::{Doc, DocContent},
     editor::{
         EditorData, EditorInfo,
-        diff::{DiffEditorData, DiffEditorInfo},
         location::EditorLocation,
     },
     id::{
-        DiffEditorId, EditorTabId, KeymapId, SettingsId, SplitId,
+        EditorTabId, KeymapId, SettingsId, SplitId,
         ThemeColorSettingsId, VoltViewId,
     },
     main_split::{Editors, MainSplitData},
@@ -38,7 +37,6 @@ use crate::{
 #[derive(Clone, Serialize, Deserialize)]
 pub enum EditorTabChildInfo {
     Editor(EditorInfo),
-    DiffEditor(DiffEditorInfo),
     Settings,
     ThemeColorSettings,
     Keymap,
@@ -55,10 +53,6 @@ impl EditorTabChildInfo {
             EditorTabChildInfo::Editor(editor_info) => {
                 let editor_id = editor_info.to_data(data, editor_tab_id);
                 EditorTabChild::Editor(editor_id)
-            }
-            EditorTabChildInfo::DiffEditor(diff_editor_info) => {
-                let diff_editor_data = diff_editor_info.to_data(data, editor_tab_id);
-                EditorTabChild::DiffEditor(diff_editor_data.id)
             }
             EditorTabChildInfo::Settings => {
                 EditorTabChild::Settings(SettingsId::next())
@@ -125,7 +119,6 @@ impl EditorTabInfo {
 
 pub enum EditorTabChildSource {
     Editor { path: PathBuf, doc: Rc<Doc> },
-    DiffEditor { left: Rc<Doc>, right: Rc<Doc> },
     NewFileEditor,
     Settings,
     ThemeColorSettings,
@@ -136,7 +129,6 @@ pub enum EditorTabChildSource {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum EditorTabChild {
     Editor(EditorId),
-    DiffEditor(DiffEditorId),
     Settings(SettingsId),
     ThemeColorSettings(ThemeColorSettingsId),
     Keymap(KeymapId),
@@ -157,7 +149,6 @@ impl EditorTabChild {
     pub fn id(&self) -> u64 {
         match self {
             EditorTabChild::Editor(id) => id.to_raw(),
-            EditorTabChild::DiffEditor(id) => id.to_raw(),
             EditorTabChild::Settings(id) => id.to_raw(),
             EditorTabChild::ThemeColorSettings(id) => id.to_raw(),
             EditorTabChild::Keymap(id) => id.to_raw(),
@@ -179,16 +170,6 @@ impl EditorTabChild {
                     .unwrap();
                 EditorTabChildInfo::Editor(editor_data.editor_info(data))
             }
-            EditorTabChild::DiffEditor(diff_editor_id) => {
-                let diff_editor_data = data
-                    .main_split
-                    .diff_editors
-                    .get_untracked()
-                    .get(diff_editor_id)
-                    .cloned()
-                    .unwrap();
-                EditorTabChildInfo::DiffEditor(diff_editor_data.diff_editor_info())
-            }
             EditorTabChild::Settings(_) => EditorTabChildInfo::Settings,
             EditorTabChild::ThemeColorSettings(_) => {
                 EditorTabChildInfo::ThemeColorSettings
@@ -201,7 +182,6 @@ impl EditorTabChild {
     pub fn view_info(
         &self,
         editors: Editors,
-        diff_editors: RwSignal<im::HashMap<DiffEditorId, DiffEditorData>>,
         plugin: PluginData,
         config: ReadSignal<Arc<LapceConfig>>,
     ) -> Memo<EditorTabChildViewInfo> {
@@ -257,87 +237,6 @@ impl EditorTabChild {
                     name,
                     path: path.map(|opt| opt.0),
                     confirmed: Some(confirmed),
-                    is_pristine,
-                }
-            }),
-            EditorTabChild::DiffEditor(diff_editor_id) => create_memo(move |_| {
-                let config = config.get();
-                let diff_editor_data = diff_editors
-                    .with(|diff_editors| diff_editors.get(&diff_editor_id).cloned());
-                let confirmed = diff_editor_data.as_ref().map(|d| d.confirmed);
-
-                let info = diff_editor_data
-                    .map(|diff_editor_data| {
-                        [diff_editor_data.left, diff_editor_data.right].map(|data| {
-                            let (content, is_pristine) =
-                                data.doc_signal().with(|doc| {
-                                    (
-                                        doc.content.get(),
-                                        doc.buffer.with(|b| b.is_pristine()),
-                                    )
-                                });
-                            match content {
-                                DocContent::File { path, .. } => {
-                                    Some((path, is_pristine))
-                                }
-                                DocContent::Local => None,
-                                DocContent::History(_) => None,
-                                DocContent::Scratch { name, .. } => {
-                                    Some((PathBuf::from(name), is_pristine))
-                                }
-                            }
-                        })
-                    })
-                    .unwrap_or([None, None]);
-
-                let (icon, color, path, is_pristine) = match info {
-                    [Some((path, is_pristine)), None]
-                    | [None, Some((path, is_pristine))] => {
-                        let (svg, color) = config.file_svg(&path);
-                        (
-                            svg,
-                            color,
-                            format!(
-                                "{} (Diff)",
-                                path.file_name()
-                                    .unwrap_or_default()
-                                    .to_string_lossy()
-                            ),
-                            is_pristine,
-                        )
-                    }
-                    [
-                        Some((left_path, left_is_pristine)),
-                        Some((right_path, right_is_pristine)),
-                    ] => {
-                        let (svg, color) =
-                            config.files_svg(&[&left_path, &right_path]);
-                        let [left_file_name, right_file_name] =
-                            [&left_path, &right_path].map(|path| {
-                                path.file_name()
-                                    .unwrap_or_default()
-                                    .to_string_lossy()
-                            });
-                        (
-                            svg,
-                            color,
-                            format!("{left_file_name} - {right_file_name} (Diff)"),
-                            left_is_pristine && right_is_pristine,
-                        )
-                    }
-                    [None, None] => (
-                        config.ui_svg(LapceIcons::FILE),
-                        Some(config.color(LapceColor::LAPCE_ICON_ACTIVE)),
-                        "local".to_string(),
-                        true,
-                    ),
-                };
-                EditorTabChildViewInfo {
-                    icon,
-                    color,
-                    name: path,
-                    path: None,
-                    confirmed,
                     is_pristine,
                 }
             }),
@@ -443,21 +342,12 @@ impl EditorTabData {
     pub fn get_unconfirmed_editor_tab_child(
         &self,
         editors: Editors,
-        diff_editors: &im::HashMap<EditorId, DiffEditorData>,
     ) -> Option<(usize, EditorTabChild)> {
         for (i, (_, _, child)) in self.children.iter().enumerate() {
             match child {
                 EditorTabChild::Editor(editor_id) => {
                     if let Some(editor) = editors.editor_untracked(*editor_id) {
                         let confirmed = editor.confirmed.get_untracked();
-                        if !confirmed {
-                            return Some((i, child.clone()));
-                        }
-                    }
-                }
-                EditorTabChild::DiffEditor(diff_editor_id) => {
-                    if let Some(diff_editor) = diff_editors.get(diff_editor_id) {
-                        let confirmed = diff_editor.confirmed.get_untracked();
                         if !confirmed {
                             return Some((i, child.clone()));
                         }

@@ -16,10 +16,7 @@ use floem::{
     },
 };
 use lapce_core::selection::Selection;
-use lapce_rpc::{
-    file::{FileNodeViewData, FileNodeViewKind, Naming},
-    source_control::FileDiffKind,
-};
+use lapce_rpc::file::{FileNodeViewData, FileNodeViewKind, Naming};
 use lapce_xi_rope::Rope;
 
 use super::{data::FileExplorerData, node::FileNodeVirtualList};
@@ -33,7 +30,6 @@ use crate::{
         view::PanelBuilder,
     },
     plugin::PluginData,
-    source_control::SourceControlData,
     text_input::TextInputBuilder,
     window_tab::{Focus, WindowTabData},
 };
@@ -66,7 +62,6 @@ pub fn file_explorer_panel(
 ) -> impl View {
     let config = window_tab_data.common.config;
     let data = window_tab_data.file_explorer.clone();
-    let source_control = window_tab_data.source_control.clone();
     PanelBuilder::new(config, position)
         .add_height_style(
             "Open Editors",
@@ -78,7 +73,7 @@ pub fn file_explorer_panel(
         )
         .add(
             "File Explorer",
-            container(file_explorer_view(data, source_control))
+            container(file_explorer_view(data))
                 .style(|s| s.size_full()),
             window_tab_data
                 .panel
@@ -123,42 +118,13 @@ fn initialize_naming_editor(
         .update(|naming| naming.set_editor_needs_reset(false));
 }
 
-fn file_node_text_color(
-    config: ReadSignal<Arc<LapceConfig>>,
-    node: FileNodeViewData,
-    source_control: SourceControlData,
-) -> Color {
-    let diff = source_control.file_diffs.with(|file_diffs| {
-        let FileNodeViewKind::Path(path) = &node.kind else {
-            return None;
-        };
-
-        if node.is_dir {
-            file_diffs
-                .keys()
-                .find(|p| p.as_path().starts_with(path))
-                .map(|_| FileDiffKind::Modified)
-        } else {
-            file_diffs.get(path).map(|(diff, _)| diff.kind())
-        }
-    });
-
-    let color = match diff {
-        Some(FileDiffKind::Modified | FileDiffKind::Renamed) => {
-            LapceColor::SOURCE_CONTROL_MODIFIED
-        }
-        Some(FileDiffKind::Added) => LapceColor::SOURCE_CONTROL_ADDED,
-        Some(FileDiffKind::Deleted) => LapceColor::SOURCE_CONTROL_REMOVED,
-        None => LapceColor::PANEL_FOREGROUND,
-    };
-
-    config.get().color(color)
+fn file_node_text_color(config: ReadSignal<Arc<LapceConfig>>) -> Color {
+    config.get().color(LapceColor::PANEL_FOREGROUND)
 }
 
 fn file_node_text_view(
     data: FileExplorerData,
     node: FileNodeViewData,
-    source_control: SourceControlData,
 ) -> impl View {
     let config = data.common.config;
     let ui_line_height = data.common.ui_line_height;
@@ -175,11 +141,7 @@ fn file_node_text_view(
                     })
                     .style(move |s| {
                         s.height(ui_line_height.get())
-                            .color(file_node_text_color(
-                                config,
-                                node.clone(),
-                                source_control.clone(),
-                            ))
+                            .color(file_node_text_color(config))
                             .padding_right(5.0)
                             .selectable(false)
                     }),
@@ -204,11 +166,7 @@ fn file_node_text_view(
                     })
                     .style(move |s| {
                         s.height(ui_line_height.get())
-                            .color(file_node_text_color(
-                                config,
-                                node.clone(),
-                                source_control.clone(),
-                            ))
+                            .color(file_node_text_color(config))
                             .selectable(false)
                     }),
                 )
@@ -304,10 +262,7 @@ fn file_node_input_view(data: FileExplorerData, err: Option<String>) -> Containe
     .style(move |s| s.width_full())
 }
 
-fn file_explorer_view(
-    data: FileExplorerData,
-    source_control: SourceControlData,
-) -> impl View {
+fn file_explorer_view(data: FileExplorerData) -> impl View {
     let root = data.root;
     let ui_line_height = data.common.ui_line_height;
     let config = data.common.config;
@@ -395,7 +350,7 @@ fn file_explorer_view(
                                 })
                         })
                     },
-                    file_node_text_view(data, node, source_control.clone()),
+                    file_node_text_view(data, node),
                 ))
                 .style({
                     let kind = kind.clone();
@@ -494,7 +449,6 @@ fn file_explorer_view(
 }
 
 fn open_editors_view(window_tab_data: Rc<WindowTabData>) -> impl View {
-    let diff_editors = window_tab_data.main_split.diff_editors;
     let editors = window_tab_data.main_split.editors;
     let editor_tabs = window_tab_data.main_split.editor_tabs;
     let config = window_tab_data.common.config;
@@ -509,7 +463,7 @@ fn open_editors_view(window_tab_data: Rc<WindowTabData>) -> impl View {
         let editor_tab_id =
             editor_tab.with_untracked(|editor_tab| editor_tab.editor_tab_id);
         let child_for_close = child.clone();
-        let info = child.view_info(editors, diff_editors, plugin, config);
+        let info = child.view_info(editors, plugin, config);
         let hovered = create_rw_signal(false);
 
         stack((

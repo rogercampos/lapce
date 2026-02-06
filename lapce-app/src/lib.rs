@@ -31,7 +31,6 @@ pub mod proxy;
 pub mod rename;
 pub mod settings;
 pub mod snippet;
-pub mod source_control;
 pub mod status;
 pub mod text_area;
 pub mod text_input;

@@ -1,7 +1,7 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     fs, io,
-    path::{Path, PathBuf},
+    path::PathBuf,
     sync::{
         Arc,
         atomic::{AtomicU64, Ordering},
@@ -10,11 +10,8 @@ use std::{
     time::Duration,
 };
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::Result;
 use crossbeam_channel::Sender;
-use git2::{
-    DiffOptions, ErrorCode::NotFound, Oid, Repository, build::CheckoutBuilder,
-};
 use grep_matcher::Matcher;
 use grep_regex::RegexMatcherBuilder;
 use grep_searcher::{SearcherBuilder, sinks::UTF8};
@@ -29,12 +26,11 @@ use lapce_rpc::{
         ProxyHandler, ProxyNotification, ProxyRequest, ProxyResponse,
         ProxyRpcHandler, SearchMatch,
     },
-    source_control::{DiffInfo, FileDiff},
     style::{LineStyle, SemanticStyles},
 };
 use lapce_xi_rope::Rope;
 use lsp_types::{
-    CancelParams, MessageType, NumberOrString, Position, Range, ShowMessageParams,
+    CancelParams, NumberOrString, Position, Range,
     TextDocumentItem, Url,
     notification::{Cancel, Notification},
 };
@@ -76,7 +72,6 @@ impl ProxyHandler for Dispatcher {
                 self.tab_id = tab_id;
                 self.workspace = workspace;
                 self.file_watcher.notify(FileWatchNotifier::new(
-                    self.workspace.clone(),
                     self.core_rpc.clone(),
                     self.proxy_rpc.clone(),
                 ));
@@ -197,57 +192,6 @@ impl ProxyHandler for Dispatcher {
                     tracing::error!("{:?}", err);
                 }
             }
-            GitCommit { message, diffs } => {
-                if let Some(workspace) = self.workspace.as_ref() {
-                    match git_commit(workspace, &message, diffs) {
-                        Ok(()) => (),
-                        Err(e) => {
-                            self.core_rpc.show_message(
-                                "Git Commit failure".to_owned(),
-                                ShowMessageParams {
-                                    typ: MessageType::ERROR,
-                                    message: e.to_string(),
-                                },
-                            );
-                        }
-                    }
-                }
-            }
-            GitCheckout { reference } => {
-                if let Some(workspace) = self.workspace.as_ref() {
-                    match git_checkout(workspace, &reference) {
-                        Ok(()) => (),
-                        Err(e) => eprintln!("{e:?}"),
-                    }
-                }
-            }
-            GitDiscardFilesChanges { files } => {
-                if let Some(workspace) = self.workspace.as_ref() {
-                    match git_discard_files_changes(
-                        workspace,
-                        files.iter().map(AsRef::as_ref),
-                    ) {
-                        Ok(()) => (),
-                        Err(e) => eprintln!("{e:?}"),
-                    }
-                }
-            }
-            GitDiscardWorkspaceChanges {} => {
-                if let Some(workspace) = self.workspace.as_ref() {
-                    match git_discard_workspace_changes(workspace) {
-                        Ok(()) => (),
-                        Err(e) => eprintln!("{e:?}"),
-                    }
-                }
-            }
-            GitInit {} => {
-                if let Some(workspace) = self.workspace.as_ref() {
-                    match git_init(workspace) {
-                        Ok(()) => (),
-                        Err(e) => eprintln!("{e:?}"),
-                    }
-                }
-            }
             LspCancel { id } => {
                 self.catalog_rpc.send_notification(
                     None,
@@ -283,27 +227,11 @@ impl ProxyHandler for Dispatcher {
                     Ok(ProxyResponse::NewBufferResponse { content, read_only }),
                 );
             }
-            BufferHead { path } => {
-                let result = if let Some(workspace) = self.workspace.as_ref() {
-                    let result = file_get_head(workspace, &path);
-                    if let Ok((_blob_id, content)) = result {
-                        Ok(ProxyResponse::BufferHeadResponse {
-                            version: "head".to_string(),
-                            content,
-                        })
-                    } else {
-                        Err(RpcError {
-                            code: 0,
-                            message: "can't get file head".to_string(),
-                        })
-                    }
-                } else {
-                    Err(RpcError {
-                        code: 0,
-                        message: "no workspace set".to_string(),
-                    })
-                };
-                self.respond_rpc(id, result);
+            BufferHead { .. } => {
+                self.respond_rpc(id, Err(RpcError {
+                    code: 0,
+                    message: "git support removed".to_string(),
+                }));
             }
             GlobalSearch {
                 pattern,
@@ -392,17 +320,6 @@ impl ProxyHandler for Dispatcher {
                         proxy_rpc.handle_response(id, result);
                     },
                 );
-            }
-            GitGetRemoteFileUrl { file } => {
-                if let Some(workspace) = self.workspace.as_ref() {
-                    match git_get_remote_file_url(workspace, &file) {
-                        Ok(s) => self.proxy_rpc.handle_response(
-                            id,
-                            Ok(ProxyResponse::GitGetRemoteFileUrl { file_url: s }),
-                        ),
-                        Err(e) => eprintln!("{e:?}"),
-                    }
-                }
             }
             GetDefinition {
                 request_id,
@@ -1079,9 +996,7 @@ impl Dispatcher {
 struct FileWatchNotifier {
     core_rpc: CoreRpcHandler,
     proxy_rpc: ProxyRpcHandler,
-    workspace: Option<PathBuf>,
     workspace_fs_change_handler: Arc<Mutex<Option<Sender<bool>>>>,
-    last_diff: Arc<Mutex<DiffInfo>>,
 }
 
 impl Notify for FileWatchNotifier {
@@ -1092,30 +1007,14 @@ impl Notify for FileWatchNotifier {
 
 impl FileWatchNotifier {
     fn new(
-        workspace: Option<PathBuf>,
         core_rpc: CoreRpcHandler,
         proxy_rpc: ProxyRpcHandler,
     ) -> Self {
-        let notifier = Self {
-            workspace,
+        Self {
             core_rpc,
             proxy_rpc,
             workspace_fs_change_handler: Arc::new(Mutex::new(None)),
-            last_diff: Arc::new(Mutex::new(DiffInfo::default())),
-        };
-
-        if let Some(workspace) = notifier.workspace.clone() {
-            let core_rpc = notifier.core_rpc.clone();
-            let last_diff = notifier.last_diff.clone();
-            thread::spawn(move || {
-                if let Some(diff) = git_diff_new(&workspace) {
-                    core_rpc.diff_info(diff.clone());
-                    *last_diff.lock() = diff;
-                }
-            });
         }
-
-        notifier
     }
 
     fn handle_fs_events(&self, events: Vec<(WatchToken, notify::Event)>) {
@@ -1177,8 +1076,6 @@ impl FileWatchNotifier {
 
         let local_handler = self.workspace_fs_change_handler.clone();
         let core_rpc = self.core_rpc.clone();
-        let workspace = self.workspace.clone().unwrap();
-        let last_diff = self.last_diff.clone();
         thread::spawn(move || {
             thread::sleep(Duration::from_millis(500));
 
@@ -1196,319 +1093,9 @@ impl FileWatchNotifier {
             if explorer_change {
                 core_rpc.workspace_file_change();
             }
-            if let Some(diff) = git_diff_new(&workspace) {
-                let mut last_diff = last_diff.lock();
-                if diff != *last_diff {
-                    core_rpc.diff_info(diff.clone());
-                    *last_diff = diff;
-                }
-            }
         });
         *handler = Some(sender);
     }
-}
-
-#[derive(Clone, Debug)]
-pub struct DiffHunk {
-    pub old_start: u32,
-    pub old_lines: u32,
-    pub new_start: u32,
-    pub new_lines: u32,
-    pub header: String,
-}
-
-fn git_init(workspace_path: &Path) -> Result<()> {
-    if Repository::discover(workspace_path).is_err() {
-        Repository::init(workspace_path)?;
-    };
-    Ok(())
-}
-
-fn git_commit(
-    workspace_path: &Path,
-    message: &str,
-    diffs: Vec<FileDiff>,
-) -> Result<()> {
-    let repo = Repository::discover(workspace_path)?;
-    let mut index = repo.index()?;
-    for diff in diffs {
-        match diff {
-            FileDiff::Modified(p) | FileDiff::Added(p) => {
-                index.add_path(p.strip_prefix(workspace_path)?)?;
-            }
-            FileDiff::Renamed(a, d) => {
-                index.add_path(a.strip_prefix(workspace_path)?)?;
-                index.remove_path(d.strip_prefix(workspace_path)?)?;
-            }
-            FileDiff::Deleted(p) => {
-                index.remove_path(p.strip_prefix(workspace_path)?)?;
-            }
-        }
-    }
-    index.write()?;
-    let tree = index.write_tree()?;
-    let tree = repo.find_tree(tree)?;
-
-    match repo.signature() {
-        Ok(signature) => {
-            let parents = repo
-                .head()
-                .and_then(|head| Ok(vec![head.peel_to_commit()?]))
-                .unwrap_or(vec![]);
-            let parents_refs = parents.iter().collect::<Vec<_>>();
-
-            repo.commit(
-                Some("HEAD"),
-                &signature,
-                &signature,
-                message,
-                &tree,
-                &parents_refs,
-            )?;
-            Ok(())
-        }
-        Err(e) => match e.code() {
-            NotFound => Err(anyhow!(
-                "No user.name and/or user.email configured for this git repository."
-            )),
-            _ => Err(anyhow!(
-                "Error while creating commit's signature: {}",
-                e.message()
-            )),
-        },
-    }
-}
-
-fn git_checkout(workspace_path: &Path, reference: &str) -> Result<()> {
-    let repo = Repository::discover(workspace_path)?;
-    let (object, reference) = repo.revparse_ext(reference)?;
-    repo.checkout_tree(&object, None)?;
-    repo.set_head(reference.unwrap().name().unwrap())?;
-    Ok(())
-}
-
-fn git_discard_files_changes<'a>(
-    workspace_path: &Path,
-    files: impl Iterator<Item = &'a Path>,
-) -> Result<()> {
-    let repo = Repository::discover(workspace_path)?;
-
-    let mut checkout_b = CheckoutBuilder::new();
-    checkout_b.update_only(false).force();
-
-    let mut had_path = false;
-    for path in files {
-        // Remove the workspace path so it is relative to the folder
-        if let Ok(path) = path.strip_prefix(workspace_path) {
-            had_path = true;
-            checkout_b.path(path);
-        }
-    }
-
-    if !had_path {
-        // If there we no paths then we do nothing
-        // because the default behavior of checkout builder is to select all files
-        // if it is not given a path
-        return Ok(());
-    }
-
-    repo.checkout_index(None, Some(&mut checkout_b))?;
-
-    Ok(())
-}
-
-fn git_discard_workspace_changes(workspace_path: &Path) -> Result<()> {
-    let repo = Repository::discover(workspace_path)?;
-    let mut checkout_b = CheckoutBuilder::new();
-    checkout_b.force();
-
-    repo.checkout_index(None, Some(&mut checkout_b))?;
-
-    Ok(())
-}
-
-fn git_delta_format(
-    workspace_path: &Path,
-    delta: &git2::DiffDelta,
-) -> Option<(git2::Delta, git2::Oid, PathBuf)> {
-    match delta.status() {
-        git2::Delta::Added | git2::Delta::Untracked => Some((
-            git2::Delta::Added,
-            delta.new_file().id(),
-            delta.new_file().path().map(|p| workspace_path.join(p))?,
-        )),
-        git2::Delta::Deleted => Some((
-            git2::Delta::Deleted,
-            delta.old_file().id(),
-            delta.old_file().path().map(|p| workspace_path.join(p))?,
-        )),
-        git2::Delta::Modified => Some((
-            git2::Delta::Modified,
-            delta.new_file().id(),
-            delta.new_file().path().map(|p| workspace_path.join(p))?,
-        )),
-        _ => None,
-    }
-}
-
-fn git_diff_new(workspace_path: &Path) -> Option<DiffInfo> {
-    let repo = Repository::discover(workspace_path).ok()?;
-    let name = match repo.head() {
-        Ok(head) => head.shorthand()?.to_string(),
-        _ => "(No branch)".to_owned(),
-    };
-
-    let mut branches = Vec::new();
-    for branch in repo.branches(None).ok()? {
-        branches.push(branch.ok()?.0.name().ok()??.to_string());
-    }
-
-    let mut tags = Vec::new();
-    if let Ok(git_tags) = repo.tag_names(None) {
-        for tag in git_tags.into_iter().flatten() {
-            tags.push(tag.to_owned());
-        }
-    }
-
-    let mut deltas = Vec::new();
-    let mut diff_options = DiffOptions::new();
-    let diff = repo
-        .diff_index_to_workdir(
-            None,
-            Some(
-                diff_options
-                    .include_untracked(true)
-                    .recurse_untracked_dirs(true),
-            ),
-        )
-        .ok()?;
-    for delta in diff.deltas() {
-        if let Some(delta) = git_delta_format(workspace_path, &delta) {
-            deltas.push(delta);
-        }
-    }
-
-    let oid = match repo.revparse_single("HEAD^{tree}") {
-        Ok(obj) => obj.id(),
-        _ => Oid::zero(),
-    };
-
-    let cached_diff = repo
-        .diff_tree_to_index(repo.find_tree(oid).ok().as_ref(), None, None)
-        .ok();
-
-    if let Some(cached_diff) = cached_diff {
-        for delta in cached_diff.deltas() {
-            if let Some(delta) = git_delta_format(workspace_path, &delta) {
-                deltas.push(delta);
-            }
-        }
-    }
-    let mut renames = Vec::new();
-    let mut renamed_deltas = HashSet::new();
-
-    for (added_index, delta) in deltas.iter().enumerate() {
-        if delta.0 == git2::Delta::Added {
-            for (deleted_index, d) in deltas.iter().enumerate() {
-                if d.0 == git2::Delta::Deleted && d.1 == delta.1 {
-                    renames.push((added_index, deleted_index));
-                    renamed_deltas.insert(added_index);
-                    renamed_deltas.insert(deleted_index);
-                    break;
-                }
-            }
-        }
-    }
-
-    let mut file_diffs = Vec::new();
-    for (added_index, deleted_index) in renames.iter() {
-        file_diffs.push(FileDiff::Renamed(
-            deltas[*added_index].2.clone(),
-            deltas[*deleted_index].2.clone(),
-        ));
-    }
-    for (i, delta) in deltas.iter().enumerate() {
-        if renamed_deltas.contains(&i) {
-            continue;
-        }
-        let diff = match delta.0 {
-            git2::Delta::Added => FileDiff::Added(delta.2.clone()),
-            git2::Delta::Deleted => FileDiff::Deleted(delta.2.clone()),
-            git2::Delta::Modified => FileDiff::Modified(delta.2.clone()),
-            _ => continue,
-        };
-        file_diffs.push(diff);
-    }
-    file_diffs.sort_by_key(|d| match d {
-        FileDiff::Modified(p)
-        | FileDiff::Added(p)
-        | FileDiff::Renamed(p, _)
-        | FileDiff::Deleted(p) => p.clone(),
-    });
-    Some(DiffInfo {
-        head: name,
-        branches,
-        tags,
-        diffs: file_diffs,
-    })
-}
-
-fn file_get_head(workspace_path: &Path, path: &Path) -> Result<(String, String)> {
-    let repo = Repository::discover(workspace_path)?;
-    let head = repo.head()?;
-    let tree = head.peel_to_tree()?;
-    let tree_entry = tree.get_path(path.strip_prefix(workspace_path)?)?;
-    let blob = repo.find_blob(tree_entry.id())?;
-    let id = blob.id().to_string();
-    let content = std::str::from_utf8(blob.content())
-        .with_context(|| "content bytes to string")?
-        .to_string();
-    Ok((id, content))
-}
-
-fn git_get_remote_file_url(workspace_path: &Path, file: &Path) -> Result<String> {
-    let repo = Repository::discover(workspace_path)?;
-    let head = repo.head()?;
-    let target_remote = repo.find_remote(
-        repo.branch_upstream_remote(head.name().unwrap())?
-            .as_str()
-            .unwrap(),
-    )?;
-
-    // Grab URL part of remote
-    let remote = target_remote
-        .url()
-        .ok_or(anyhow!("Failed to convert remote to str"))?;
-
-    let remote_url = match Url::parse(remote) {
-        Ok(url) => url,
-        Err(_) => {
-            // Parse URL as ssh
-            Url::parse(&format!("ssh://{}", remote.replacen(':', "/", 1)))?
-        }
-    };
-
-    // Get host part
-    let host = remote_url
-        .host_str()
-        .ok_or(anyhow!("Couldn't find remote host"))?;
-    // Get namespace (e.g. organisation/project in case of GitHub, org/team/team/team/../project on GitLab)
-    let namespace = if let Some(stripped) = remote_url.path().strip_suffix(".git") {
-        stripped
-    } else {
-        remote_url.path()
-    };
-
-    let commit = head.peel_to_commit()?.id();
-
-    let file_path = file
-        .strip_prefix(workspace_path)?
-        .to_str()
-        .ok_or(anyhow!("Couldn't convert file path to str"))?;
-
-    let url = format!("https://{host}{namespace}/blob/{commit}/{file_path}",);
-
-    Ok(url)
 }
 
 fn search_in_path(

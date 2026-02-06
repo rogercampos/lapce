@@ -8,7 +8,6 @@ pub mod file_line;
 mod parse;
 pub mod plugin;
 pub mod proxy;
-pub mod source_control;
 pub mod stdio;
 pub mod style;
 

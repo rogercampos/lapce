@@ -20,7 +20,6 @@ use floem::{
         WriteSignal, use_context,
     },
     text::{Attrs, AttrsList, FamilyOwned, LineHeightValue, TextLayout},
-    views::editor::core::buffer::rope_text::RopeText,
 };
 use im::HashMap;
 use indexmap::IndexMap;
@@ -35,7 +34,6 @@ use lapce_rpc::{
     file::{Naming, PathObject},
     plugin::PluginId,
     proxy::{ProxyResponse, ProxyRpcHandler, ProxyStatus},
-    source_control::FileDiff,
 };
 use lsp_types::{
     CodeActionOrCommand, CodeLens, Diagnostic, ProgressParams, ProgressToken,
@@ -78,7 +76,6 @@ use crate::{
     plugin::PluginData,
     proxy::{ProxyData, new_proxy},
     rename::RenameData,
-    source_control::SourceControlData,
     tracing::*,
     window::WindowCommonData,
     workspace::{LapceWorkspace, LapceWorkspaceType, WorkspaceInfo},
@@ -162,7 +159,6 @@ pub struct WindowTabData {
     pub plugin: PluginData,
     pub code_action: RwSignal<CodeActionData>,
     pub code_lens: RwSignal<Option<ViewId>>,
-    pub source_control: SourceControlData,
     pub rename: RenameData,
     pub global_search: GlobalSearchData,
     pub call_hierarchy_data: CallHierarchyData,
@@ -196,10 +192,6 @@ impl KeyPressFocus for WindowTabData {
         match condition {
             Condition::PanelFocus => {
                 matches!(self.common.focus.get_untracked(), Focus::Panel(_))
-            }
-            Condition::SourceControlFocus => {
-                self.common.focus.get_untracked()
-                    == Focus::Panel(PanelKind::SourceControl)
             }
             _ => false,
         }
@@ -362,8 +354,6 @@ impl WindowTabData {
         let main_split = MainSplitData::new(cx, common.clone());
         let code_action =
             cx.create_rw_signal(CodeActionData::new(cx, common.clone()));
-        let source_control =
-            SourceControlData::new(cx, main_split.editors, common.clone());
         let file_explorer =
             FileExplorerData::new(cx, main_split.editors, common.clone());
 
@@ -395,7 +385,6 @@ impl WindowTabData {
             workspace.clone(),
             main_split.clone(),
             keypress.read_only(),
-            source_control.clone(),
             common.clone(),
         );
 
@@ -477,7 +466,6 @@ impl WindowTabData {
             file_explorer,
             code_action,
             code_lens: cx.create_rw_signal(None),
-            source_control,
             plugin,
             rename,
             global_search,
@@ -997,9 +985,6 @@ impl WindowTabData {
             PaletteWorkspace => {
                 self.palette.run(PaletteKind::Workspace);
             }
-            PaletteSCMReferences => {
-                self.palette.run(PaletteKind::SCMReferences);
-            }
             ChangeColorTheme => {
                 self.palette.run(PaletteKind::ColorTheme);
             }
@@ -1012,8 +997,6 @@ impl WindowTabData {
             ChangeFileLineEnding => {
                 self.palette.run(PaletteKind::LineEnding);
             }
-            DiffFiles => self.palette.run(PaletteKind::DiffFiles),
-
             // ==== UI ====
             ZoomIn => {
                 let mut scale =
@@ -1101,9 +1084,6 @@ impl WindowTabData {
             TogglePanelBottomVisual => {
                 self.toggle_container_visual(&PanelContainerPosition::Bottom);
             }
-            ToggleSourceControlFocus => {
-                self.toggle_panel_focus(PanelKind::SourceControl);
-            }
             TogglePluginFocus => {
                 self.toggle_panel_focus(PanelKind::Plugin);
             }
@@ -1115,9 +1095,6 @@ impl WindowTabData {
             }
             ToggleSearchFocus => {
                 self.toggle_panel_focus(PanelKind::Search);
-            }
-            ToggleSourceControlVisual => {
-                self.toggle_panel_visual(PanelKind::SourceControl);
             }
             TogglePluginVisual => {
                 self.toggle_panel_visual(PanelKind::Plugin);
@@ -1139,51 +1116,6 @@ impl WindowTabData {
             }
             ShowEnvironment => {
                 self.main_split.show_env();
-            }
-
-            // ==== Source Control ====
-            SourceControlInit => {
-                self.proxy.proxy_rpc.git_init();
-            }
-            CheckoutReference => match data {
-                Some(reference) => {
-                    if let Some(reference) = reference.as_str() {
-                        self.proxy.proxy_rpc.git_checkout(reference.to_string());
-                    }
-                }
-                None => error!("No ref provided"),
-            },
-            SourceControlCommit => {
-                self.source_control.commit();
-            }
-            SourceControlCopyActiveFileRemoteUrl => {
-                // TODO:
-            }
-            SourceControlDiscardActiveFileChanges => {
-                // TODO:
-            }
-            SourceControlDiscardTargetFileChanges => {
-                if let Some(diff) = data
-                    .and_then(|data| serde_json::from_value::<FileDiff>(data).ok())
-                {
-                    match diff {
-                        FileDiff::Added(path) => {
-                            self.common.proxy.trash_path(path, Box::new(|_| {}));
-                        }
-                        FileDiff::Modified(path) | FileDiff::Deleted(path) => {
-                            self.common.proxy.git_discard_files_changes(vec![path]);
-                        }
-                        FileDiff::Renamed(old_path, new_path) => {
-                            self.common
-                                .proxy
-                                .git_discard_files_changes(vec![old_path]);
-                            self.common.proxy.trash_path(new_path, Box::new(|_| {}));
-                        }
-                    }
-                }
-            }
-            SourceControlDiscardWorkspaceChanges => {
-                // TODO:
             }
 
             // ==== UI ====
@@ -1284,32 +1216,6 @@ impl WindowTabData {
                     });
                     if let DocContent::File {path, ..} = editor_data.doc().content.get_untracked() {
                         self.file_explorer.reveal_in_file_tree(path);
-                    }
-                }
-            }
-            SourceControlOpenActiveFileRemoteUrl => {
-                if let Some(editor_data) =
-                    self.main_split.active_editor.get_untracked()
-                {
-                    if let DocContent::File {path, ..} = editor_data.doc().content.get_untracked() {
-                        let offset = editor_data.cursor().with_untracked(|c| c.offset());
-                        let line = editor_data.doc()
-                            .buffer
-                            .with_untracked(|buffer| buffer.line_of_offset(offset));
-                        self.common.proxy.git_get_remote_file_url(
-                            path,
-                            create_ext_action(self.scope, move |result| {
-                                if let Ok(ProxyResponse::GitGetRemoteFileUrl {
-                                              file_url
-                                          }) = result
-                                {
-                                    if let Err(err) = open::that(format!("{}#L{}", file_url, line)) {
-                                        error!("Failed to open file in github: {}",  err);
-                                    }
-                                }
-                            }),
-                        );
-
                     }
                 }
             }
@@ -1433,9 +1339,6 @@ impl WindowTabData {
                     },
                     None,
                 );
-            }
-            InternalCommand::OpenFileChanges { path } => {
-                self.main_split.open_file_changes(path);
             }
             InternalCommand::ReloadFileExplorer => {
                 self.file_explorer.reload();
@@ -1782,10 +1685,6 @@ impl WindowTabData {
                     e_data.editor.cursor_info.reset();
                 }
             }
-            InternalCommand::OpenDiffFiles {
-                left_path,
-                right_path,
-            } => self.main_split.open_diff_files(left_path, right_path),
             InternalCommand::ExecuteProcess { program, arguments } => {
                 let mut cmd = match std::process::Command::new(program)
                     .args(arguments)
@@ -1814,32 +1713,6 @@ impl WindowTabData {
         match rpc {
             CoreNotification::ProxyStatus { status } => {
                 self.common.proxy_status.set(Some(status.to_owned()));
-            }
-            CoreNotification::DiffInfo { diff } => {
-                self.source_control.branch.set(diff.head.clone());
-                self.source_control
-                    .branches
-                    .set(diff.branches.iter().cloned().collect());
-                self.source_control
-                    .tags
-                    .set(diff.tags.iter().cloned().collect());
-                self.source_control.file_diffs.update(|file_diffs| {
-                    *file_diffs = diff
-                        .diffs
-                        .iter()
-                        .cloned()
-                        .map(|diff| {
-                            let checked =
-                                file_diffs.get(diff.path()).is_none_or(|(_, c)| *c);
-                            (diff.path().clone(), (diff, checked))
-                        })
-                        .collect();
-                });
-
-                let docs = self.main_split.docs.get_untracked();
-                for (_, doc) in docs {
-                    doc.retrieve_head();
-                }
             }
             CoreNotification::CompletionResponse {
                 request_id,
@@ -1994,9 +1867,6 @@ impl WindowTabData {
             }
             Focus::Panel(PanelKind::Plugin) => {
                 Some(keypress.key_down(event, &self.plugin))
-            }
-            Focus::Panel(PanelKind::SourceControl) => {
-                Some(keypress.key_down(event, &self.source_control))
             }
             _ => None,
         };
@@ -2273,7 +2143,7 @@ impl WindowTabData {
                 // in those cases.
                 self.panel.is_panel_visible(&kind)
             }
-            PanelKind::SourceControl | PanelKind::Search => {
+            PanelKind::Search => {
                 self.is_panel_focused(kind)
             }
         };

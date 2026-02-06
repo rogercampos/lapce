@@ -99,10 +99,6 @@ impl LapceColor {
     pub const COMPLETION_LENS_FOREGROUND: &'static str =
         "completion_lens.foreground";
 
-    pub const SOURCE_CONTROL_ADDED: &'static str = "source_control.added";
-    pub const SOURCE_CONTROL_REMOVED: &'static str = "source_control.removed";
-    pub const SOURCE_CONTROL_MODIFIED: &'static str = "source_control.modified";
-
     pub const PALETTE_BACKGROUND: &'static str = "palette.background";
     pub const PALETTE_FOREGROUND: &'static str = "palette.foreground";
     pub const PALETTE_CURRENT_BACKGROUND: &'static str =

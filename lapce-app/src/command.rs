@@ -196,10 +196,6 @@ pub enum LapceWorkbenchCommand {
     #[strum(message = "Reveal in Panel")]
     RevealInPanel,
 
-    #[strum(serialize = "source_control_open_active_file_remote_url")]
-    #[strum(message = "Source Control: Open Remote File Url")]
-    SourceControlOpenActiveFileRemoteUrl,
-
     #[cfg(not(target_os = "macos"))]
     #[strum(serialize = "reveal_in_file_explorer")]
     #[strum(message = "Reveal in System File Explorer")]
@@ -363,10 +359,6 @@ pub enum LapceWorkbenchCommand {
     #[strum(serialize = "palette.workspace")]
     PaletteWorkspace,
 
-    #[strum(message = "Source Control: Checkout")]
-    #[strum(serialize = "palette.scm_references")]
-    PaletteSCMReferences,
-
     #[strum(message = "List Palette Types")]
     #[strum(serialize = "palette.palette_help")]
     PaletteHelp,
@@ -374,9 +366,6 @@ pub enum LapceWorkbenchCommand {
     #[strum(message = "List Palette Types and Files")]
     #[strum(serialize = "palette.palette_help_and_file")]
     PaletteHelpAndFile,
-
-    #[strum(serialize = "source_control.checkout_reference")]
-    CheckoutReference,
 
     #[strum(serialize = "toggle_maximized_panel")]
     ToggleMaximizedPanel,
@@ -407,10 +396,6 @@ pub enum LapceWorkbenchCommand {
     #[strum(serialize = "toggle_panel_bottom_visual")]
     TogglePanelBottomVisual,
 
-    // Focus toggle commands
-    #[strum(serialize = "toggle_source_control_focus")]
-    ToggleSourceControlFocus,
-
     #[strum(message = "Toggle Plugin Focus")]
     #[strum(serialize = "toggle_plugin_focus")]
     TogglePluginFocus,
@@ -427,10 +412,6 @@ pub enum LapceWorkbenchCommand {
     #[strum(serialize = "toggle_search_focus")]
     ToggleSearchFocus,
 
-    // Visual toggle commands
-    #[strum(serialize = "toggle_source_control_visual")]
-    ToggleSourceControlVisual,
-
     #[strum(serialize = "toggle_plugin_visual")]
     TogglePluginVisual,
 
@@ -445,28 +426,6 @@ pub enum LapceWorkbenchCommand {
 
     #[strum(serialize = "focus_editor")]
     FocusEditor,
-
-    #[strum(message = "Source Control: Init")]
-    #[strum(serialize = "source_control_init")]
-    SourceControlInit,
-
-    #[strum(serialize = "source_control_commit")]
-    SourceControlCommit,
-
-    #[strum(message = "Source Control: Copy Remote File Url")]
-    #[strum(serialize = "source_control_copy_active_file_remote_url")]
-    SourceControlCopyActiveFileRemoteUrl,
-
-    #[strum(message = "Source Control: Discard File Changes")]
-    #[strum(serialize = "source_control_discard_active_file_changes")]
-    SourceControlDiscardActiveFileChanges,
-
-    #[strum(serialize = "source_control_discard_target_file_changes")]
-    SourceControlDiscardTargetFileChanges,
-
-    #[strum(message = "Source Control: Discard Workspace Changes")]
-    #[strum(serialize = "source_control_discard_workspace_changes")]
-    SourceControlDiscardWorkspaceChanges,
 
     #[strum(serialize = "export_current_theme_settings")]
     #[strum(message = "Export current settings to a theme file")]
@@ -537,10 +496,6 @@ pub enum LapceWorkbenchCommand {
     #[strum(serialize = "previous_error")]
     PreviousError,
 
-    #[strum(message = "Diff Files")]
-    #[strum(serialize = "diff_files")]
-    DiffFiles,
-
     #[strum(serialize = "quit")]
     #[strum(message = "Quit Editor")]
     Quit,
@@ -564,9 +519,6 @@ pub enum InternalCommand {
         path: PathBuf,
     },
     MakeConfirmed,
-    OpenFileChanges {
-        path: PathBuf,
-    },
     ReloadFileExplorer,
     /// Test whether a file/directory can be created at that path
     TestPathCreation {
@@ -701,10 +653,6 @@ pub enum InternalCommand {
         volt_id: VoltID,
     },
     ResetBlinkCursor,
-    OpenDiffFiles {
-        left_path: PathBuf,
-        right_path: PathBuf,
-    },
     ExecuteProcess {
         program: String,
         arguments: Vec<String>,
