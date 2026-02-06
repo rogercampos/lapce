@@ -27,6 +27,7 @@ pub fn default_panel_order() -> PanelOrder {
         im::vector![
             PanelKind::FileExplorer,
             PanelKind::Plugin,
+            PanelKind::DocumentSymbol,
         ],
     );
     order.insert(
@@ -38,10 +39,6 @@ pub fn default_panel_order() -> PanelOrder {
             PanelKind::References,
             PanelKind::Implementation
         ],
-    );
-    order.insert(
-        PanelPosition::RightTop,
-        im::vector![PanelKind::DocumentSymbol,],
     );
 
     order

@@ -2044,14 +2044,17 @@ fn workbench(window_tab_data: Rc<WindowTabData>) -> impl View {
     let workbench_size = window_tab_data.common.workbench_size;
     let main_split_width = window_tab_data.main_split.width;
     stack((
-        panel_container_view(window_tab_data.clone(), PanelContainerPosition::Left),
         {
             let window_tab_data = window_tab_data.clone();
             stack((
+                panel_container_view(
+                    window_tab_data.clone(),
+                    PanelContainerPosition::Left,
+                ),
                 main_split(window_tab_data.clone()),
                 panel_container_view(
                     window_tab_data,
-                    PanelContainerPosition::Bottom,
+                    PanelContainerPosition::Right,
                 ),
             ))
             .on_resize(move |rect| {
@@ -2060,9 +2063,9 @@ fn workbench(window_tab_data: Rc<WindowTabData>) -> impl View {
                     main_split_width.set(width);
                 }
             })
-            .style(|s| s.flex_col().flex_grow(1.0))
+            .style(|s| s.flex_grow(1.0))
         },
-        panel_container_view(window_tab_data.clone(), PanelContainerPosition::Right),
+        panel_container_view(window_tab_data.clone(), PanelContainerPosition::Bottom),
         window_message_view(window_tab_data.messages, window_tab_data.common.config),
     ))
     .on_resize(move |rect| {
@@ -2071,7 +2074,7 @@ fn workbench(window_tab_data: Rc<WindowTabData>) -> impl View {
             workbench_size.set(size);
         }
     })
-    .style(move |s| s.size_full())
+    .style(move |s| s.flex_col().size_full())
     .debug_name("Workbench")
 }
 
