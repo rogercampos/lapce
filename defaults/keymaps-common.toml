@@ -113,12 +113,6 @@ key = "ctrl+shift+-"
 command = "jump_location_forward"
 mode = "i"
 
-# --------------------------------- Integrated Terminal ------------------------------
-
-[[keymaps]]
-key = "Ctrl+`"
-command = "toggle_terminal_focus"
-
 # ------------------------------------ ------------ -------------------------------------
 
 [[keymaps]]

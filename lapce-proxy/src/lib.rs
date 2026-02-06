@@ -4,7 +4,6 @@ pub mod buffer;
 pub mod cli;
 pub mod dispatch;
 pub mod plugin;
-pub mod terminal;
 pub mod watcher;
 
 use std::{

@@ -11,10 +11,8 @@ use lapce_core::command::{
     MultiSelectionCommand, ScrollCommand,
 };
 use lapce_rpc::{
-    dap_types::{DapId, RunDebugConfig},
     plugin::{PluginId, VoltID},
     proxy::ProxyStatus,
-    terminal::{TermId, TerminalProfile},
 };
 use lsp_types::{CodeActionOrCommand, Position, WorkspaceEdit};
 use serde_json::Value;
@@ -23,7 +21,6 @@ use strum_macros::{Display, EnumIter, EnumString, IntoStaticStr};
 
 use crate::{
     alert::AlertButton,
-    debug::RunDebugMode,
     doc::Doc,
     editor::location::EditorLocation,
     editor_tab::EditorTabChild,
@@ -213,10 +210,6 @@ pub enum LapceWorkbenchCommand {
     #[strum(message = "Reveal in Finder")]
     RevealInFileExplorer,
 
-    #[strum(serialize = "run_in_terminal")]
-    #[strum(message = "Run in Terminal")]
-    RunInTerminal,
-
     #[strum(serialize = "reveal_active_file_in_file_explorer")]
     #[strum(message = "Reveal Active File in File Explorer")]
     RevealActiveFileInFileExplorer,
@@ -309,22 +302,6 @@ pub enum LapceWorkbenchCommand {
     #[strum(message = "Create New Window Tab")]
     NewWindowTab,
 
-    #[strum(serialize = "new_terminal_tab")]
-    #[strum(message = "Create New Terminal Tab")]
-    NewTerminalTab,
-
-    #[strum(serialize = "close_terminal_tab")]
-    #[strum(message = "Close Terminal Tab")]
-    CloseTerminalTab,
-
-    #[strum(serialize = "next_terminal_tab")]
-    #[strum(message = "Next Terminal Tab")]
-    NextTerminalTab,
-
-    #[strum(serialize = "previous_terminal_tab")]
-    #[strum(message = "Previous Terminal Tab")]
-    PreviousTerminalTab,
-
     #[strum(serialize = "next_window_tab")]
     #[strum(message = "Go To Next Window Tab")]
     NextWindowTab,
@@ -386,10 +363,6 @@ pub enum LapceWorkbenchCommand {
     #[strum(serialize = "palette.workspace")]
     PaletteWorkspace,
 
-    #[strum(message = "Run and Debug")]
-    #[strum(serialize = "palette.run_and_debug")]
-    PaletteRunAndDebug,
-
     #[strum(message = "Source Control: Checkout")]
     #[strum(serialize = "palette.scm_references")]
     PaletteSCMReferences,
@@ -401,14 +374,6 @@ pub enum LapceWorkbenchCommand {
     #[strum(message = "List Palette Types and Files")]
     #[strum(serialize = "palette.palette_help_and_file")]
     PaletteHelpAndFile,
-
-    #[strum(message = "Run and Debug Restart Current Running")]
-    #[strum(serialize = "palette.run_and_debug_restart")]
-    RunAndDebugRestart,
-
-    #[strum(message = "Run and Debug Stop Current Running")]
-    #[strum(serialize = "palette.run_and_debug_stop")]
-    RunAndDebugStop,
 
     #[strum(serialize = "source_control.checkout_reference")]
     CheckoutReference,
@@ -443,10 +408,6 @@ pub enum LapceWorkbenchCommand {
     TogglePanelBottomVisual,
 
     // Focus toggle commands
-    #[strum(message = "Toggle Terminal Focus")]
-    #[strum(serialize = "toggle_terminal_focus")]
-    ToggleTerminalFocus,
-
     #[strum(serialize = "toggle_source_control_focus")]
     ToggleSourceControlFocus,
 
@@ -467,9 +428,6 @@ pub enum LapceWorkbenchCommand {
     ToggleSearchFocus,
 
     // Visual toggle commands
-    #[strum(serialize = "toggle_terminal_visual")]
-    ToggleTerminalVisual,
-
     #[strum(serialize = "toggle_source_control_visual")]
     ToggleSourceControlVisual,
 
@@ -482,17 +440,11 @@ pub enum LapceWorkbenchCommand {
     #[strum(serialize = "toggle_problem_visual")]
     ToggleProblemVisual,
 
-    #[strum(serialize = "toggle_debug_visual")]
-    ToggleDebugVisual,
-
     #[strum(serialize = "toggle_search_visual")]
     ToggleSearchVisual,
 
     #[strum(serialize = "focus_editor")]
     FocusEditor,
-
-    #[strum(serialize = "focus_terminal")]
-    FocusTerminal,
 
     #[strum(message = "Source Control: Init")]
     #[strum(serialize = "source_control_init")]
@@ -597,9 +549,6 @@ pub enum LapceWorkbenchCommand {
     #[strum(message = "Go to Location")]
     GoToLocation,
 
-    #[strum(serialize = "add_run_debug_config")]
-    #[strum(message = "Add Run Debug Config")]
-    AddRunDebugConfig,
 }
 
 #[derive(Clone, Debug)]
@@ -660,21 +609,6 @@ pub enum InternalCommand {
     SplitExchange {
         editor_tab_id: EditorTabId,
     },
-    NewTerminal {
-        profile: Option<TerminalProfile>,
-    },
-    SplitTerminal {
-        term_id: TermId,
-    },
-    SplitTerminalPrevious {
-        term_id: TermId,
-    },
-    SplitTerminalNext {
-        term_id: TermId,
-    },
-    SplitTerminalExchange {
-        term_id: TermId,
-    },
     EditorTabClose {
         editor_tab_id: EditorTabId,
     },
@@ -699,10 +633,6 @@ pub enum InternalCommand {
     },
     ApplyWorkspaceEdit {
         edit: WorkspaceEdit,
-    },
-    RunAndDebug {
-        mode: RunDebugMode,
-        config: RunDebugConfig,
     },
     StartRename {
         path: PathBuf,
@@ -767,10 +697,6 @@ pub enum InternalCommand {
     UpdateProxyStatus {
         status: ProxyStatus,
     },
-    DapFrameScopes {
-        dap_id: DapId,
-        frame_id: usize,
-    },
     OpenVoltView {
         volt_id: VoltID,
     },
@@ -783,19 +709,8 @@ pub enum InternalCommand {
         program: String,
         arguments: Vec<String>,
     },
-    ClearTerminalBuffer {
-        view_id: ViewId,
-        tab_index: usize,
-        terminal_index: usize,
-    },
     CallHierarchyIncoming {
         item_id: ViewId,
-    },
-    StopTerminal {
-        term_id: TermId,
-    },
-    RestartTerminal {
-        term_id: TermId,
     },
 }
 

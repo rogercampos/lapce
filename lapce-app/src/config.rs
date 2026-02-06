@@ -21,11 +21,10 @@ use self::{
     color::LapceColor,
     color_theme::{ColorThemeConfig, ThemeColor, ThemeColorPreference},
     core::CoreConfig,
-    editor::{EditorConfig, SCALE_OR_SIZE_LIMIT, WrapStyle},
+    editor::{EditorConfig, WrapStyle},
     icon::LapceIcons,
     icon_theme::IconThemeConfig,
     svg::SvgStore,
-    terminal::TerminalConfig,
     ui::UIConfig,
 };
 use crate::workspace::{LapceWorkspace, LapceWorkspaceType};
@@ -37,7 +36,6 @@ pub mod editor;
 pub mod icon;
 pub mod icon_theme;
 pub mod svg;
-pub mod terminal;
 pub mod ui;
 pub mod watcher;
 
@@ -99,7 +97,6 @@ pub struct LapceConfig {
     pub core: CoreConfig,
     pub ui: UIConfig,
     pub editor: EditorConfig,
-    pub terminal: TerminalConfig,
     #[serde(default)]
     pub color_theme: ColorThemeConfig,
     #[serde(default)]
@@ -171,8 +168,6 @@ impl LapceConfig {
             // TODO: WrapStyle::WrapColumn.to_string(),
             WrapStyle::WrapWidth.to_string()
         ];
-
-        lapce_config.terminal.get_indexed_colors();
 
         lapce_config
     }
@@ -288,9 +283,6 @@ impl LapceConfig {
             self.core = new.core;
             self.ui = new.ui;
             self.editor = new.editor;
-            self.terminal = new.terminal;
-            self.terminal.get_indexed_colors();
-
             self.color_theme = new.color_theme;
             self.icon_theme = new.icon_theme;
             if let Some(icon_theme_path) = icon_theme_path {
@@ -705,178 +697,6 @@ impl LapceConfig {
         self.icon_theme_list.clone()
     }
 
-    pub fn terminal_font_family(&self) -> &str {
-        if self.terminal.font_family.is_empty() {
-            self.editor.font_family.as_str()
-        } else {
-            self.terminal.font_family.as_str()
-        }
-    }
-
-    pub fn terminal_font_size(&self) -> usize {
-        if self.terminal.font_size > 0 {
-            self.terminal.font_size
-        } else {
-            self.editor.font_size()
-        }
-    }
-
-    pub fn terminal_line_height(&self) -> usize {
-        let font_size = self.terminal_font_size();
-
-        if self.terminal.line_height > 0.0 {
-            let line_height = if self.terminal.line_height < SCALE_OR_SIZE_LIMIT {
-                self.terminal.line_height * font_size as f64
-            } else {
-                self.terminal.line_height
-            };
-
-            // Prevent overlapping lines
-            (line_height.round() as usize).max(font_size)
-        } else {
-            self.editor.line_height()
-        }
-    }
-
-    pub fn terminal_get_color(
-        &self,
-        color: &alacritty_terminal::vte::ansi::Color,
-        colors: &alacritty_terminal::term::color::Colors,
-    ) -> Color {
-        match color {
-            alacritty_terminal::vte::ansi::Color::Named(color) => {
-                self.terminal_get_named_color(color)
-            }
-            alacritty_terminal::vte::ansi::Color::Spec(rgb) => {
-                Color::from_rgb8(rgb.r, rgb.g, rgb.b)
-            }
-            alacritty_terminal::vte::ansi::Color::Indexed(index) => {
-                if let Some(rgb) = colors[*index as usize] {
-                    return Color::from_rgb8(rgb.r, rgb.g, rgb.b);
-                }
-                const NAMED_COLORS: [alacritty_terminal::vte::ansi::NamedColor; 16] = [
-                    alacritty_terminal::vte::ansi::NamedColor::Black,
-                    alacritty_terminal::vte::ansi::NamedColor::Red,
-                    alacritty_terminal::vte::ansi::NamedColor::Green,
-                    alacritty_terminal::vte::ansi::NamedColor::Yellow,
-                    alacritty_terminal::vte::ansi::NamedColor::Blue,
-                    alacritty_terminal::vte::ansi::NamedColor::Magenta,
-                    alacritty_terminal::vte::ansi::NamedColor::Cyan,
-                    alacritty_terminal::vte::ansi::NamedColor::White,
-                    alacritty_terminal::vte::ansi::NamedColor::BrightBlack,
-                    alacritty_terminal::vte::ansi::NamedColor::BrightRed,
-                    alacritty_terminal::vte::ansi::NamedColor::BrightGreen,
-                    alacritty_terminal::vte::ansi::NamedColor::BrightYellow,
-                    alacritty_terminal::vte::ansi::NamedColor::BrightBlue,
-                    alacritty_terminal::vte::ansi::NamedColor::BrightMagenta,
-                    alacritty_terminal::vte::ansi::NamedColor::BrightCyan,
-                    alacritty_terminal::vte::ansi::NamedColor::BrightWhite,
-                ];
-                if (*index as usize) < NAMED_COLORS.len() {
-                    self.terminal_get_named_color(&NAMED_COLORS[*index as usize])
-                } else {
-                    self.terminal.indexed_colors.get(index).cloned().unwrap()
-                }
-            }
-        }
-    }
-
-    fn terminal_get_named_color(
-        &self,
-        color: &alacritty_terminal::vte::ansi::NamedColor,
-    ) -> Color {
-        let (color, alpha) = match color {
-            alacritty_terminal::vte::ansi::NamedColor::Cursor => {
-                (LapceColor::TERMINAL_CURSOR, 1.0)
-            }
-            alacritty_terminal::vte::ansi::NamedColor::Foreground => {
-                (LapceColor::TERMINAL_FOREGROUND, 1.0)
-            }
-            alacritty_terminal::vte::ansi::NamedColor::Background => {
-                (LapceColor::TERMINAL_BACKGROUND, 1.0)
-            }
-            alacritty_terminal::vte::ansi::NamedColor::Blue => {
-                (LapceColor::TERMINAL_BLUE, 1.0)
-            }
-            alacritty_terminal::vte::ansi::NamedColor::Green => {
-                (LapceColor::TERMINAL_GREEN, 1.0)
-            }
-            alacritty_terminal::vte::ansi::NamedColor::Yellow => {
-                (LapceColor::TERMINAL_YELLOW, 1.0)
-            }
-            alacritty_terminal::vte::ansi::NamedColor::Red => {
-                (LapceColor::TERMINAL_RED, 1.0)
-            }
-            alacritty_terminal::vte::ansi::NamedColor::White => {
-                (LapceColor::TERMINAL_WHITE, 1.0)
-            }
-            alacritty_terminal::vte::ansi::NamedColor::Black => {
-                (LapceColor::TERMINAL_BLACK, 1.0)
-            }
-            alacritty_terminal::vte::ansi::NamedColor::Cyan => {
-                (LapceColor::TERMINAL_CYAN, 1.0)
-            }
-            alacritty_terminal::vte::ansi::NamedColor::Magenta => {
-                (LapceColor::TERMINAL_MAGENTA, 1.0)
-            }
-            alacritty_terminal::vte::ansi::NamedColor::BrightBlue => {
-                (LapceColor::TERMINAL_BRIGHT_BLUE, 1.0)
-            }
-            alacritty_terminal::vte::ansi::NamedColor::BrightGreen => {
-                (LapceColor::TERMINAL_BRIGHT_GREEN, 1.0)
-            }
-            alacritty_terminal::vte::ansi::NamedColor::BrightYellow => {
-                (LapceColor::TERMINAL_BRIGHT_YELLOW, 1.0)
-            }
-            alacritty_terminal::vte::ansi::NamedColor::BrightRed => {
-                (LapceColor::TERMINAL_BRIGHT_RED, 1.0)
-            }
-            alacritty_terminal::vte::ansi::NamedColor::BrightWhite => {
-                (LapceColor::TERMINAL_BRIGHT_WHITE, 1.0)
-            }
-            alacritty_terminal::vte::ansi::NamedColor::BrightBlack => {
-                (LapceColor::TERMINAL_BRIGHT_BLACK, 1.0)
-            }
-            alacritty_terminal::vte::ansi::NamedColor::BrightCyan => {
-                (LapceColor::TERMINAL_BRIGHT_CYAN, 1.0)
-            }
-            alacritty_terminal::vte::ansi::NamedColor::BrightMagenta => {
-                (LapceColor::TERMINAL_BRIGHT_MAGENTA, 1.0)
-            }
-            alacritty_terminal::vte::ansi::NamedColor::BrightForeground => {
-                (LapceColor::TERMINAL_FOREGROUND, 1.0)
-            }
-            alacritty_terminal::vte::ansi::NamedColor::DimBlack => {
-                (LapceColor::TERMINAL_BLACK, 0.66)
-            }
-            alacritty_terminal::vte::ansi::NamedColor::DimRed => {
-                (LapceColor::TERMINAL_RED, 0.66)
-            }
-            alacritty_terminal::vte::ansi::NamedColor::DimGreen => {
-                (LapceColor::TERMINAL_GREEN, 0.66)
-            }
-            alacritty_terminal::vte::ansi::NamedColor::DimYellow => {
-                (LapceColor::TERMINAL_YELLOW, 0.66)
-            }
-            alacritty_terminal::vte::ansi::NamedColor::DimBlue => {
-                (LapceColor::TERMINAL_BLUE, 0.66)
-            }
-            alacritty_terminal::vte::ansi::NamedColor::DimMagenta => {
-                (LapceColor::TERMINAL_MAGENTA, 0.66)
-            }
-            alacritty_terminal::vte::ansi::NamedColor::DimCyan => {
-                (LapceColor::TERMINAL_CYAN, 0.66)
-            }
-            alacritty_terminal::vte::ansi::NamedColor::DimWhite => {
-                (LapceColor::TERMINAL_WHITE, 0.66)
-            }
-            alacritty_terminal::vte::ansi::NamedColor::DimForeground => {
-                (LapceColor::TERMINAL_FOREGROUND, 0.66)
-            }
-        };
-        self.color(color).multiply_alpha(alpha)
-    }
-
     /// Get the dropdown information for the specific setting, used for the settings UI.
     /// This should aim to efficiently return the data, because it is used to determine whether to
     /// update the dropdown items.
@@ -926,22 +746,6 @@ impl LapceConfig {
                     .sorted()
                     .collect(),
             }),
-            ("terminal", "default-profile") => Some(DropdownInfo {
-                active_index: self
-                    .terminal
-                    .profiles
-                    .iter()
-                    .position(|(profile_name, _)| {
-                        profile_name
-                            == self
-                                .terminal
-                                .default_profile
-                                .get(std::env::consts::OS)
-                                .unwrap_or(&String::from("default"))
-                    })
-                    .unwrap_or(0),
-                items: self.terminal.profiles.clone().into_keys().collect(),
-            }),
             _ => None,
         }
     }
@@ -984,16 +788,6 @@ impl LapceConfig {
         key: &str,
         value: toml_edit::Value,
     ) -> Option<()> {
-        // TODO: This is a hack to fix the fact that terminal default profile is saved in a
-        // different manner than other fields. As it is per-operating-system.
-        // Thus we have to instead set the terminal.default-profile.{OS}
-        // It would be better to not need a special hack.
-        let (parent, key) = if parent == "terminal" && key == "default-profile" {
-            ("terminal.default-profile", std::env::consts::OS)
-        } else {
-            (parent, key)
-        };
-
         let mut main_table = Self::get_file_table().unwrap_or_default();
 
         // Find the container table

@@ -1,8 +1,8 @@
-use std::{collections::HashMap, fmt::Display, path::PathBuf};
+use std::{fmt::Display, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use crate::{debug::LapceBreakpoint, main_split::SplitInfo, panel::data::PanelInfo};
+use crate::{main_split::SplitInfo, panel::data::PanelInfo};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct SshHost {
@@ -155,5 +155,4 @@ impl std::fmt::Display for LapceWorkspace {
 pub struct WorkspaceInfo {
     pub split: SplitInfo,
     pub panel: PanelInfo,
-    pub breakpoints: HashMap<PathBuf, Vec<LapceBreakpoint>>,
 }

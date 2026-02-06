@@ -15,13 +15,11 @@ pub enum PaletteKind {
     SshHost,
     #[cfg(windows)]
     WslHost,
-    RunAndDebug,
     ColorTheme,
     IconTheme,
     Language,
     LineEnding,
     SCMReferences,
-    TerminalProfile,
     DiffFiles,
     HelpAndFile,
 }
@@ -37,11 +35,9 @@ impl PaletteKind {
             // PaletteKind::GlobalSearch => "?",
             PaletteKind::Workspace => ">",
             PaletteKind::Command => ":",
-            PaletteKind::TerminalProfile => "<",
             PaletteKind::File
             | PaletteKind::Reference
             | PaletteKind::SshHost
-            | PaletteKind::RunAndDebug
             | PaletteKind::ColorTheme
             | PaletteKind::IconTheme
             | PaletteKind::Language
@@ -63,7 +59,6 @@ impl PaletteKind {
             _ if input.starts_with('#') => PaletteKind::WorkspaceSymbol,
             _ if input.starts_with('>') => PaletteKind::Workspace,
             _ if input.starts_with(':') => PaletteKind::Command,
-            _ if input.starts_with('<') => PaletteKind::TerminalProfile,
             _ => PaletteKind::File,
         }
     }
@@ -89,9 +84,6 @@ impl PaletteKind {
             PaletteKind::SshHost => Some(LapceWorkbenchCommand::ConnectSshHost),
             #[cfg(windows)]
             PaletteKind::WslHost => Some(LapceWorkbenchCommand::ConnectWslHost),
-            PaletteKind::RunAndDebug => {
-                Some(LapceWorkbenchCommand::PaletteRunAndDebug)
-            }
             PaletteKind::ColorTheme => Some(LapceWorkbenchCommand::ChangeColorTheme),
             PaletteKind::IconTheme => Some(LapceWorkbenchCommand::ChangeIconTheme),
             PaletteKind::Language => Some(LapceWorkbenchCommand::ChangeFileLanguage),
@@ -101,7 +93,6 @@ impl PaletteKind {
             PaletteKind::SCMReferences => {
                 Some(LapceWorkbenchCommand::PaletteSCMReferences)
             }
-            PaletteKind::TerminalProfile => None, // InternalCommand::NewTerminal
             PaletteKind::DiffFiles => Some(LapceWorkbenchCommand::DiffFiles),
         }
     }
@@ -124,7 +115,6 @@ impl PaletteKind {
             PaletteKind::File
             | PaletteKind::Reference
             | PaletteKind::SshHost
-            | PaletteKind::RunAndDebug
             | PaletteKind::ColorTheme
             | PaletteKind::IconTheme
             | PaletteKind::Language
@@ -137,7 +127,6 @@ impl PaletteKind {
             | PaletteKind::DocumentSymbol
             | PaletteKind::WorkspaceSymbol
             | PaletteKind::Line
-            | PaletteKind::TerminalProfile
             // | PaletteType::GlobalSearch
              => input.get(1..).unwrap_or(""),
         }

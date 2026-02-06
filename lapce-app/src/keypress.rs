@@ -215,7 +215,7 @@ impl KeyPressData {
             return false;
         }
         let mode = focus.get_mode();
-        if mode == Mode::Insert || mode == Mode::Terminal {
+        if mode == Mode::Insert {
             return false;
         }
 

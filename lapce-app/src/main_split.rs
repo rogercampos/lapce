@@ -494,7 +494,7 @@ impl MainSplitData {
             locations,
             current_location,
             width: cx.create_rw_signal(0.0),
-            code_lens: cx.create_rw_signal(CodeLensData::new(common.clone())),
+            code_lens: cx.create_rw_signal(CodeLensData::new()),
             common,
             references,
             implementations,

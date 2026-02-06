@@ -2919,9 +2919,6 @@ impl EditorData {
                     Some(CommandKind::Edit(EditCommand::ClipboardCut)),
                     Some(CommandKind::Edit(EditCommand::ClipboardCopy)),
                     Some(CommandKind::Edit(EditCommand::ClipboardPaste)),
-                    Some(CommandKind::Workbench(
-                        LapceWorkbenchCommand::AddRunDebugConfig,
-                    )),
                     None,
                     Some(CommandKind::Workbench(
                         LapceWorkbenchCommand::PaletteCommand,
@@ -2941,9 +2938,6 @@ impl EditorData {
                         LapceWorkbenchCommand::GoToImplementation,
                     )),
                     Some(CommandKind::Focus(FocusCommand::Rename)),
-                    Some(CommandKind::Workbench(
-                        LapceWorkbenchCommand::RunInTerminal,
-                    )),
                     None,
                     Some(CommandKind::Workbench(
                         LapceWorkbenchCommand::RevealInPanel,

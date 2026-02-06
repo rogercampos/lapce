@@ -3,7 +3,6 @@
 pub mod buffer;
 pub mod core;
 pub mod counter;
-pub mod dap_types;
 pub mod file;
 pub mod file_line;
 mod parse;
@@ -12,7 +11,6 @@ pub mod proxy;
 pub mod source_control;
 pub mod stdio;
 pub mod style;
-pub mod terminal;
 
 pub use parse::{Call, RequestId, RpcObject};
 use serde::{Deserialize, Serialize};

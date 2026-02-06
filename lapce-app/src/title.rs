@@ -274,26 +274,8 @@ fn middle(
                 .border_radius(6.0)
                 .background(config.color(LapceColor::EDITOR_BACKGROUND))
         }),
-        stack((
-            clickable_icon(
-                || LapceIcons::START,
-                move || {
-                    workbench_command.send(LapceWorkbenchCommand::PaletteRunAndDebug)
-                },
-                || false,
-                || false,
-                || "Run and Debug",
-                config,
-            )
-            .style(move |s| s.margin_horiz(6.0)),
-            drag_window_area(empty())
-                .style(|s| s.height_pct(100.0).flex_basis(0.0).flex_grow(1.0)),
-        ))
-        .style(move |s| {
-            s.flex_basis(0)
-                .flex_grow(1.0)
-                .justify_content(Some(JustifyContent::FlexStart))
-        }),
+        drag_window_area(empty())
+            .style(|s| s.height_pct(100.0).flex_basis(0.0).flex_grow(1.0)),
     ))
     .style(|s| {
         s.flex_basis(0)

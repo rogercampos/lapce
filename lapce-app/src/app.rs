@@ -78,7 +78,6 @@ use crate::{
         watcher::ConfigWatcher,
     },
     db::LapceDb,
-    debug::RunDebugMode,
     editor::{
         diff::diff_show_more_section_view,
         location::{EditorLocation, EditorPosition},
@@ -2439,75 +2438,6 @@ fn palette_item(
                 .style(|s| s.align_items(Some(AlignItems::Center)).max_width_full()),
             )
         }
-        PaletteItemContent::RunAndDebug {
-            mode,
-            config: run_config,
-        } => {
-            let mode = *mode;
-            let text = format!("{mode} {}", run_config.name);
-            let hint = format!(
-                "{} {}",
-                run_config.program,
-                run_config.args.clone().unwrap_or_default().join(" ")
-            );
-            let text_indices: Vec<usize> = item
-                .indices
-                .iter()
-                .filter_map(|i| {
-                    let i = *i;
-                    if i < text.len() { Some(i) } else { None }
-                })
-                .collect();
-            let hint_indices: Vec<usize> = item
-                .indices
-                .iter()
-                .filter_map(|i| {
-                    let i = *i;
-                    if i >= text.len() {
-                        Some(i - text.len())
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-            container(
-                stack((
-                    svg(move || {
-                        let config = config.get();
-                        match mode {
-                            RunDebugMode::Run => config.ui_svg(LapceIcons::START),
-                            RunDebugMode::Debug => config.ui_svg(LapceIcons::DEBUG),
-                        }
-                    })
-                    .style(move |s| {
-                        let config = config.get();
-                        let size = config.ui.icon_size() as f32;
-                        s.min_width(size)
-                            .size(size, size)
-                            .margin_right(5.0)
-                            .color(config.color(LapceColor::LAPCE_ICON_ACTIVE))
-                    }),
-                    focus_text(
-                        move || text.clone(),
-                        move || text_indices.clone(),
-                        move || config.get().color(LapceColor::EDITOR_FOCUS),
-                    )
-                    .style(|s| s.margin_right(6.0).max_width_full()),
-                    focus_text(
-                        move || hint.clone(),
-                        move || hint_indices.clone(),
-                        move || config.get().color(LapceColor::EDITOR_FOCUS),
-                    )
-                    .style(move |s| {
-                        s.color(config.get().color(LapceColor::EDITOR_DIM))
-                            .min_width(0.0)
-                            .flex_grow(1.0)
-                            .flex_basis(0.0)
-                    }),
-                ))
-                .style(|s| s.align_items(Some(AlignItems::Center)).max_width_full()),
-            )
-        }
         PaletteItemContent::PaletteHelp { .. }
         | PaletteItemContent::Command { .. } => {
             let text = item.filter_text;
@@ -2562,7 +2492,6 @@ fn palette_item(
         | PaletteItemContent::LineEnding { .. }
         | PaletteItemContent::ColorTheme { .. }
         | PaletteItemContent::SCMReference { .. }
-        | PaletteItemContent::TerminalProfile { .. }
         | PaletteItemContent::IconTheme { .. } => {
             let text = item.filter_text;
             let indices = item.indices;

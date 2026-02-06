@@ -10,7 +10,6 @@ use std::{
     time::Duration,
 };
 
-use alacritty_terminal::{event::WindowSize, event_loop::Msg};
 use anyhow::{Context, Result, anyhow};
 use crossbeam_channel::Sender;
 use git2::{
@@ -32,7 +31,6 @@ use lapce_rpc::{
     },
     source_control::{DiffInfo, FileDiff},
     style::{LineStyle, SemanticStyles},
-    terminal::TermId,
 };
 use lapce_xi_rope::Rope;
 use lsp_types::{
@@ -45,7 +43,6 @@ use parking_lot::Mutex;
 use crate::{
     buffer::{Buffer, get_mod_time, load_file},
     plugin::{PluginCatalogRpcHandler, catalog::PluginCatalog},
-    terminal::{Terminal, TerminalSender},
     watcher::{FileWatcher, Notify, WatchToken},
 };
 
@@ -58,7 +55,6 @@ pub struct Dispatcher {
     core_rpc: CoreRpcHandler,
     catalog_rpc: PluginCatalogRpcHandler,
     buffers: HashMap<PathBuf, Buffer>,
-    terminals: HashMap<TermId, TerminalSender>,
     file_watcher: FileWatcher,
     window_id: usize,
     tab_id: usize,
@@ -160,9 +156,6 @@ impl ProxyHandler for Dispatcher {
             }
             Shutdown {} => {
                 self.catalog_rpc.shutdown();
-                for (_, sender) in self.terminals.iter() {
-                    sender.send(Msg::Shutdown);
-                }
                 self.proxy_rpc.shutdown();
             }
             Update { path, delta, rev } => {
@@ -179,137 +172,6 @@ impl ProxyHandler for Dispatcher {
             }
             UpdatePluginConfigs { configs } => {
                 if let Err(err) = self.catalog_rpc.update_plugin_configs(configs) {
-                    tracing::error!("{:?}", err);
-                }
-            }
-            NewTerminal { term_id, profile } => {
-                let mut terminal = match Terminal::new(term_id, profile, 50, 10) {
-                    Ok(terminal) => terminal,
-                    Err(e) => {
-                        self.core_rpc.terminal_launch_failed(term_id, e.to_string());
-                        return;
-                    }
-                };
-
-                #[allow(unused)]
-                let mut child_id = None;
-
-                #[cfg(target_os = "windows")]
-                {
-                    child_id = terminal.pty.child_watcher().pid().map(|x| x.get());
-                }
-                #[cfg(not(target_os = "windows"))]
-                {
-                    child_id = Some(terminal.pty.child().id());
-                }
-
-                self.core_rpc.terminal_process_id(term_id, child_id);
-                let tx = terminal.tx.clone();
-                let poller = terminal.poller.clone();
-                let sender = TerminalSender::new(tx, poller);
-                self.terminals.insert(term_id, sender);
-                let rpc = self.core_rpc.clone();
-                thread::spawn(move || {
-                    terminal.run(rpc);
-                });
-            }
-            TerminalWrite { term_id, content } => {
-                if let Some(tx) = self.terminals.get(&term_id) {
-                    tx.send(Msg::Input(content.into_bytes().into()));
-                }
-            }
-            TerminalResize {
-                term_id,
-                width,
-                height,
-            } => {
-                if let Some(tx) = self.terminals.get(&term_id) {
-                    let size = WindowSize {
-                        num_lines: height as u16,
-                        num_cols: width as u16,
-                        cell_width: 1,
-                        cell_height: 1,
-                    };
-
-                    tx.send(Msg::Resize(size));
-                }
-            }
-            TerminalClose { term_id } => {
-                if let Some(tx) = self.terminals.remove(&term_id) {
-                    tx.send(Msg::Shutdown);
-                }
-            }
-            DapStart {
-                config,
-                breakpoints,
-            } => {
-                if let Err(err) = self.catalog_rpc.dap_start(config, breakpoints) {
-                    tracing::error!("{:?}", err);
-                }
-            }
-            DapProcessId {
-                dap_id,
-                process_id,
-                term_id,
-            } => {
-                if let Err(err) =
-                    self.catalog_rpc.dap_process_id(dap_id, process_id, term_id)
-                {
-                    tracing::error!("{:?}", err);
-                }
-            }
-            DapContinue { dap_id, thread_id } => {
-                if let Err(err) = self.catalog_rpc.dap_continue(dap_id, thread_id) {
-                    tracing::error!("{:?}", err);
-                }
-            }
-            DapPause { dap_id, thread_id } => {
-                if let Err(err) = self.catalog_rpc.dap_pause(dap_id, thread_id) {
-                    tracing::error!("{:?}", err);
-                }
-            }
-            DapStepOver { dap_id, thread_id } => {
-                if let Err(err) = self.catalog_rpc.dap_step_over(dap_id, thread_id) {
-                    tracing::error!("{:?}", err);
-                }
-            }
-            DapStepInto { dap_id, thread_id } => {
-                if let Err(err) = self.catalog_rpc.dap_step_into(dap_id, thread_id) {
-                    tracing::error!("{:?}", err);
-                }
-            }
-            DapStepOut { dap_id, thread_id } => {
-                if let Err(err) = self.catalog_rpc.dap_step_out(dap_id, thread_id) {
-                    tracing::error!("{:?}", err);
-                }
-            }
-            DapStop { dap_id } => {
-                if let Err(err) = self.catalog_rpc.dap_stop(dap_id) {
-                    tracing::error!("{:?}", err);
-                }
-            }
-            DapDisconnect { dap_id } => {
-                if let Err(err) = self.catalog_rpc.dap_disconnect(dap_id) {
-                    tracing::error!("{:?}", err);
-                }
-            }
-            DapRestart {
-                dap_id,
-                breakpoints,
-            } => {
-                if let Err(err) = self.catalog_rpc.dap_restart(dap_id, breakpoints) {
-                    tracing::error!("{:?}", err);
-                }
-            }
-            DapSetBreakpoints {
-                dap_id,
-                path,
-                breakpoints,
-            } => {
-                if let Err(err) =
-                    self.catalog_rpc
-                        .dap_set_breakpoints(dap_id, path, breakpoints)
-                {
                     tracing::error!("{:?}", err);
                 }
             }
@@ -1099,30 +961,6 @@ impl ProxyHandler for Dispatcher {
                     },
                 );
             }
-            DapVariable { dap_id, reference } => {
-                let proxy_rpc = self.proxy_rpc.clone();
-                self.catalog_rpc
-                    .dap_variable(dap_id, reference, move |result| {
-                        proxy_rpc.handle_response(
-                            id,
-                            result.map(|resp| ProxyResponse::DapVariableResponse {
-                                varialbes: resp,
-                            }),
-                        );
-                    });
-            }
-            DapGetScopes { dap_id, frame_id } => {
-                let proxy_rpc = self.proxy_rpc.clone();
-                self.catalog_rpc
-                    .dap_get_scopes(dap_id, frame_id, move |result| {
-                        proxy_rpc.handle_response(
-                            id,
-                            result.map(|resp| ProxyResponse::DapGetScopesResponse {
-                                scopes: resp,
-                            }),
-                        );
-                    });
-            }
             GetCodeLens { path } => {
                 let proxy_rpc = self.proxy_rpc.clone();
                 self.catalog_rpc
@@ -1221,7 +1059,6 @@ impl Dispatcher {
             core_rpc,
             catalog_rpc: plugin_rpc,
             buffers: HashMap::new(),
-            terminals: HashMap::new(),
             file_watcher,
             window_id: 1,
             tab_id: 1,

@@ -1,5 +1,4 @@
 pub mod catalog;
-pub mod dap;
 pub mod lsp;
 pub mod psp;
 pub mod wasi;
@@ -24,11 +23,9 @@ use lapce_core::directory::Directory;
 use lapce_rpc::{
     RequestId, RpcError,
     core::CoreRpcHandler,
-    dap_types::{self, DapId, RunDebugConfig, SourceBreakpoint, ThreadId},
     plugin::{PluginId, VoltInfo, VoltMetadata},
     proxy::ProxyRpcHandler,
     style::LineStyle,
-    terminal::TermId,
 };
 use lapce_xi_rope::{Rope, RopeDelta};
 use lsp_types::{
@@ -79,7 +76,6 @@ use tracing::error;
 
 use self::{
     catalog::PluginCatalog,
-    dap::DapRpcHandler,
     psp::{ClonableCallback, PluginServerRpcHandler, RpcCallback},
     wasi::{load_volt, start_volt},
 };
@@ -112,21 +108,6 @@ pub enum PluginCatalogRpc {
         tokens: SemanticTokens,
         text: Rope,
         f: Box<dyn RpcCallback<Vec<LineStyle>, RpcError>>,
-    },
-    DapVariable {
-        dap_id: DapId,
-        reference: usize,
-        f: Box<dyn RpcCallback<Vec<dap_types::Variable>, RpcError>>,
-    },
-    DapGetScopes {
-        dap_id: DapId,
-        frame_id: usize,
-        f: Box<
-            dyn RpcCallback<
-                    Vec<(dap_types::Scope, Vec<dap_types::Variable>)>,
-                    RpcError,
-                >,
-        >,
     },
     DidOpenTextDocument {
         document: TextDocumentItem,
@@ -161,57 +142,6 @@ pub enum PluginCatalogNotification {
     StopVolt(VoltInfo),
     EnableVolt(VoltInfo),
     ReloadVolt(VoltMetadata),
-    DapLoaded(DapRpcHandler),
-    DapDisconnected(DapId),
-    DapStart {
-        config: RunDebugConfig,
-        breakpoints: HashMap<PathBuf, Vec<SourceBreakpoint>>,
-    },
-    DapProcessId {
-        dap_id: DapId,
-        process_id: Option<u32>,
-        term_id: TermId,
-    },
-    DapContinue {
-        dap_id: DapId,
-        thread_id: ThreadId,
-    },
-    DapStepOver {
-        dap_id: DapId,
-        thread_id: ThreadId,
-    },
-    DapStepInto {
-        dap_id: DapId,
-        thread_id: ThreadId,
-    },
-    DapStepOut {
-        dap_id: DapId,
-        thread_id: ThreadId,
-    },
-    DapPause {
-        dap_id: DapId,
-        thread_id: ThreadId,
-    },
-    DapStop {
-        dap_id: DapId,
-    },
-    DapDisconnect {
-        dap_id: DapId,
-    },
-    DapRestart {
-        dap_id: DapId,
-        breakpoints: HashMap<PathBuf, Vec<SourceBreakpoint>>,
-    },
-    DapSetBreakpoints {
-        dap_id: DapId,
-        path: PathBuf,
-        breakpoints: Vec<SourceBreakpoint>,
-    },
-    RegisterDebuggerType {
-        debugger_type: String,
-        program: String,
-        args: Option<Vec<String>>,
-    },
     Shutdown,
 }
 
@@ -332,20 +262,6 @@ impl PluginCatalogRpcHandler {
                         text,
                         new_text,
                     );
-                }
-                PluginCatalogRpc::DapVariable {
-                    dap_id,
-                    reference,
-                    f,
-                } => {
-                    plugin.dap_variable(dap_id, reference, f);
-                }
-                PluginCatalogRpc::DapGetScopes {
-                    dap_id,
-                    frame_id,
-                    f,
-                } => {
-                    plugin.dap_get_scopes(dap_id, frame_id, f);
                 }
                 PluginCatalogRpc::Shutdown => {
                     return;
@@ -1372,156 +1288,6 @@ impl PluginCatalogRpcHandler {
         self.catalog_notification(PluginCatalogNotification::EnableVolt(volt))
     }
 
-    pub fn dap_disconnected(&self, dap_id: DapId) -> Result<()> {
-        self.catalog_notification(PluginCatalogNotification::DapDisconnected(dap_id))
-    }
-
-    pub fn dap_loaded(&self, dap_rpc: DapRpcHandler) -> Result<()> {
-        self.catalog_notification(PluginCatalogNotification::DapLoaded(dap_rpc))
-    }
-
-    pub fn dap_start(
-        &self,
-        config: RunDebugConfig,
-        breakpoints: HashMap<PathBuf, Vec<SourceBreakpoint>>,
-    ) -> Result<()> {
-        self.catalog_notification(PluginCatalogNotification::DapStart {
-            config,
-            breakpoints,
-        })
-    }
-
-    pub fn dap_process_id(
-        &self,
-        dap_id: DapId,
-        process_id: Option<u32>,
-        term_id: TermId,
-    ) -> Result<()> {
-        self.catalog_notification(PluginCatalogNotification::DapProcessId {
-            dap_id,
-            process_id,
-            term_id,
-        })
-    }
-
-    pub fn dap_continue(&self, dap_id: DapId, thread_id: ThreadId) -> Result<()> {
-        self.catalog_notification(PluginCatalogNotification::DapContinue {
-            dap_id,
-            thread_id,
-        })
-    }
-
-    pub fn dap_pause(&self, dap_id: DapId, thread_id: ThreadId) -> Result<()> {
-        self.catalog_notification(PluginCatalogNotification::DapPause {
-            dap_id,
-            thread_id,
-        })
-    }
-
-    pub fn dap_step_over(&self, dap_id: DapId, thread_id: ThreadId) -> Result<()> {
-        self.catalog_notification(PluginCatalogNotification::DapStepOver {
-            dap_id,
-            thread_id,
-        })
-    }
-
-    pub fn dap_step_into(&self, dap_id: DapId, thread_id: ThreadId) -> Result<()> {
-        self.catalog_notification(PluginCatalogNotification::DapStepInto {
-            dap_id,
-            thread_id,
-        })
-    }
-
-    pub fn dap_step_out(&self, dap_id: DapId, thread_id: ThreadId) -> Result<()> {
-        self.catalog_notification(PluginCatalogNotification::DapStepOut {
-            dap_id,
-            thread_id,
-        })
-    }
-
-    pub fn dap_stop(&self, dap_id: DapId) -> Result<()> {
-        self.catalog_notification(PluginCatalogNotification::DapStop { dap_id })
-    }
-
-    pub fn dap_disconnect(&self, dap_id: DapId) -> Result<()> {
-        self.catalog_notification(PluginCatalogNotification::DapDisconnect {
-            dap_id,
-        })
-    }
-
-    pub fn dap_restart(
-        &self,
-        dap_id: DapId,
-        breakpoints: HashMap<PathBuf, Vec<SourceBreakpoint>>,
-    ) -> Result<()> {
-        self.catalog_notification(PluginCatalogNotification::DapRestart {
-            dap_id,
-            breakpoints,
-        })
-    }
-
-    pub fn dap_set_breakpoints(
-        &self,
-        dap_id: DapId,
-        path: PathBuf,
-        breakpoints: Vec<SourceBreakpoint>,
-    ) -> Result<()> {
-        self.catalog_notification(PluginCatalogNotification::DapSetBreakpoints {
-            dap_id,
-            path,
-            breakpoints,
-        })
-    }
-
-    pub fn dap_variable(
-        &self,
-        dap_id: DapId,
-        reference: usize,
-        f: impl FnOnce(Result<Vec<dap_types::Variable>, RpcError>) + Send + 'static,
-    ) {
-        if let Err(err) = self.plugin_tx.send(PluginCatalogRpc::DapVariable {
-            dap_id,
-            reference,
-            f: Box::new(f),
-        }) {
-            tracing::error!("{:?}", err);
-        }
-    }
-
-    pub fn dap_get_scopes(
-        &self,
-        dap_id: DapId,
-        frame_id: usize,
-        f: impl FnOnce(
-            Result<Vec<(dap_types::Scope, Vec<dap_types::Variable>)>, RpcError>,
-        ) + Send
-        + 'static,
-    ) {
-        if let Err(err) = self.plugin_tx.send(PluginCatalogRpc::DapGetScopes {
-            dap_id,
-            frame_id,
-            f: Box::new(f),
-        }) {
-            tracing::error!("{:?}", err);
-        }
-    }
-
-    pub fn register_debugger_type(
-        &self,
-        debugger_type: String,
-        program: String,
-        args: Option<Vec<String>>,
-    ) {
-        if let Err(err) = self.catalog_notification(
-            PluginCatalogNotification::RegisterDebuggerType {
-                debugger_type,
-                program,
-                args,
-            },
-        ) {
-            tracing::error!("{:?}", err);
-        }
-    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]

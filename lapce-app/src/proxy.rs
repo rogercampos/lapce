@@ -11,15 +11,11 @@ use lapce_rpc::{
     core::{CoreHandler, CoreNotification, CoreRpcHandler},
     plugin::VoltID,
     proxy::{ProxyRpcHandler, ProxyStatus},
-    terminal::TermId,
 };
 use tracing::error;
 
 use self::{remote::start_remote, ssh::SshRemote};
-use crate::{
-    terminal::event::TermEvent,
-    workspace::{LapceWorkspace, LapceWorkspaceType},
-};
+use crate::workspace::{LapceWorkspace, LapceWorkspaceType};
 
 mod remote;
 mod ssh;
@@ -28,7 +24,6 @@ mod wsl;
 
 pub struct Proxy {
     pub tx: Sender<CoreNotification>,
-    pub term_tx: Sender<(TermId, TermEvent)>,
 }
 
 #[derive(Clone)]
@@ -50,7 +45,6 @@ pub fn new_proxy(
     disabled_volts: Vec<VoltID>,
     extra_plugin_paths: Vec<PathBuf>,
     plugin_configurations: HashMap<String, HashMap<String, serde_json::Value>>,
-    term_tx: Sender<(TermId, TermEvent)>,
 ) -> ProxyData {
     let proxy_rpc = ProxyRpcHandler::new();
     let core_rpc = CoreRpcHandler::new();
@@ -118,7 +112,7 @@ pub fn new_proxy(
         std::thread::Builder::new()
             .name("CoreRpcHandler".to_owned())
             .spawn(move || {
-                let mut proxy = Proxy { tx, term_tx };
+                let mut proxy = Proxy { tx };
                 core_rpc.mainloop(&mut proxy);
                 core_rpc.notification(CoreNotification::ProxyStatus {
                     status: ProxyStatus::Disconnected,
@@ -138,15 +132,6 @@ pub fn new_proxy(
 
 impl CoreHandler for Proxy {
     fn handle_notification(&mut self, rpc: lapce_rpc::core::CoreNotification) {
-        if let CoreNotification::UpdateTerminal { term_id, content } = &rpc {
-            if let Err(err) = self
-                .term_tx
-                .send((*term_id, TermEvent::UpdateContent(content.to_vec())))
-            {
-                tracing::error!("{:?}", err);
-            }
-            return;
-        }
         if let Err(err) = self.tx.send(rpc) {
             tracing::error!("{:?}", err);
         }

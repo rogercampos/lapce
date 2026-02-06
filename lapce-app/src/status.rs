@@ -77,14 +77,13 @@ pub fn status(
     stack((
         stack((
             label(move || match mode.get() {
-                Mode::Normal => "Normal".to_string(),
+                Mode::Normal | Mode::Terminal => "Normal".to_string(),
                 Mode::Insert => "Insert".to_string(),
                 Mode::Visual(mode) => match mode {
                     VisualMode::Normal => "Visual".to_string(),
                     VisualMode::Linewise => "Visual Line".to_string(),
                     VisualMode::Blockwise => "Visual Block".to_string(),
                 },
-                Mode::Terminal => "Terminal".to_string(),
             })
             .style(move |s| {
                 let config = config.get();
@@ -95,7 +94,7 @@ pub fn status(
                 };
 
                 let (bg, fg) = match mode.get() {
-                    Mode::Normal => (
+                    Mode::Normal | Mode::Terminal => (
                         LapceColor::STATUS_MODAL_NORMAL_BACKGROUND,
                         LapceColor::STATUS_MODAL_NORMAL_FOREGROUND,
                     ),
@@ -106,10 +105,6 @@ pub fn status(
                     Mode::Visual(_) => (
                         LapceColor::STATUS_MODAL_VISUAL_BACKGROUND,
                         LapceColor::STATUS_MODAL_VISUAL_FOREGROUND,
-                    ),
-                    Mode::Terminal => (
-                        LapceColor::STATUS_MODAL_TERMINAL_BACKGROUND,
-                        LapceColor::STATUS_MODAL_TERMINAL_FOREGROUND,
                     ),
                 };
 

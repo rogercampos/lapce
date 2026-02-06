@@ -3,7 +3,7 @@ use std::{
     cell::RefCell,
     collections::HashMap,
     ops::Range,
-    path::{Path, PathBuf},
+    path::PathBuf,
     rc::Rc,
     sync::{
         Arc,
@@ -598,14 +598,13 @@ impl Doc {
     pub fn apply_deltas(&self, deltas: &[(Rope, RopeDelta, InvalLines)]) {
         let rev = self.rev() - deltas.len() as u64;
         batch(|| {
-            for (i, (_, delta, inval)) in deltas.iter().enumerate() {
+            for (i, (_, delta, _inval)) in deltas.iter().enumerate() {
                 self.update_styles(delta);
                 self.update_inlay_hints(delta);
                 self.update_diagnostics(delta);
                 self.update_completion_lens(delta);
                 self.update_find_result(delta);
                 if let DocContent::File { path, .. } = self.content.get_untracked() {
-                    self.update_breakpoints(delta, &path, &inval.old_text);
                     self.common.proxy.update(
                         path,
                         delta.clone(),
@@ -1147,34 +1146,6 @@ impl Doc {
         if self.completion_lens.get_untracked().is_some() {
             self.completion_lens.set(None);
             self.clear_text_cache();
-        }
-    }
-
-    fn update_breakpoints(&self, delta: &RopeDelta, path: &Path, old_text: &Rope) {
-        if self
-            .common
-            .breakpoints
-            .with_untracked(|breakpoints| breakpoints.contains_key(path))
-        {
-            self.common.breakpoints.update(|breakpoints| {
-                if let Some(path_breakpoints) = breakpoints.get_mut(path) {
-                    let mut transformer = Transformer::new(delta);
-                    self.buffer.with_untracked(|buffer| {
-                        *path_breakpoints = path_breakpoints
-                            .clone()
-                            .into_values()
-                            .map(|mut b| {
-                                let offset = old_text.offset_of_line(b.line);
-                                let offset = transformer.transform(offset, false);
-                                let line = buffer.line_of_offset(offset);
-                                b.line = line;
-                                b.offset = offset;
-                                (b.line, b)
-                            })
-                            .collect();
-                    });
-                }
-            });
         }
     }
 

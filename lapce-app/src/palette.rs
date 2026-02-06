@@ -32,7 +32,6 @@ use lapce_xi_rope::Rope;
 use lsp_types::{DocumentSymbol, DocumentSymbolResponse};
 use nucleo::Utf32Str;
 use strum::{EnumMessage, IntoEnumIterator};
-use tracing::error;
 
 use self::{
     item::{PaletteItem, PaletteItemContent},
@@ -43,7 +42,6 @@ use crate::{
         CommandExecuted, CommandKind, InternalCommand, LapceCommand, WindowCommand,
     },
     db::LapceDb,
-    debug::{RunDebugConfigs, RunDebugMode},
     editor::{
         EditorData,
         location::{EditorLocation, EditorPosition},
@@ -58,8 +56,6 @@ use crate::{
 
 pub mod item;
 pub mod kind;
-
-pub const DEFAULT_RUN_TOML: &str = include_str!("../../defaults/run.toml");
 
 #[derive(Clone, PartialEq, Eq)]
 pub enum PaletteStatus {
@@ -101,7 +97,6 @@ pub struct PaletteData {
     /// Listened on for which entry in the palette has been clicked
     pub clicked_index: RwSignal<Option<usize>>,
     pub executed_commands: Rc<RefCell<HashMap<String, Instant>>>,
-    pub executed_run_configs: Rc<RefCell<HashMap<(RunDebugMode, String), Instant>>>,
     pub main_split: MainSplitData,
     pub references: RwSignal<Vec<EditorLocation>>,
     pub source_control: SourceControlData,
@@ -233,7 +228,6 @@ impl PaletteData {
             keypress,
             clicked_index,
             executed_commands: Rc::new(RefCell::new(HashMap::new())),
-            executed_run_configs: Rc::new(RefCell::new(HashMap::new())),
             references,
             source_control,
             common,
@@ -397,9 +391,6 @@ impl PaletteData {
             PaletteKind::WslHost => {
                 self.get_wsl_hosts();
             }
-            PaletteKind::RunAndDebug => {
-                self.get_run_configs();
-            }
             PaletteKind::ColorTheme => {
                 self.get_color_themes();
             }
@@ -415,7 +406,6 @@ impl PaletteData {
             PaletteKind::SCMReferences => {
                 self.get_scm_references();
             }
-            PaletteKind::TerminalProfile => self.get_terminal_profiles(),
         }
     }
 
@@ -879,96 +869,6 @@ impl PaletteData {
         self.items.set(items);
     }
 
-    fn set_run_configs(&self, content: String) {
-        let configs: Option<RunDebugConfigs> = toml::from_str(&content).ok();
-        if configs.is_none() {
-            if let Some(path) = self.workspace.path.as_ref() {
-                let path = path.join(".lapce").join("run.toml");
-                self.common
-                    .internal_command
-                    .send(InternalCommand::OpenFile { path });
-            }
-        }
-
-        let executed_run_configs = self.executed_run_configs.borrow();
-        let mut items = Vec::new();
-        if let Some(configs) = configs.as_ref() {
-            for config in &configs.configs {
-                items.push((
-                    executed_run_configs
-                        .get(&(RunDebugMode::Run, config.name.clone())),
-                    PaletteItem {
-                        content: PaletteItemContent::RunAndDebug {
-                            mode: RunDebugMode::Run,
-                            config: config.clone(),
-                        },
-                        filter_text: format!(
-                            "Run {} {} {}",
-                            config.name,
-                            config.program,
-                            config.args.clone().unwrap_or_default().join(" ")
-                        ),
-                        score: 0,
-                        indices: vec![],
-                    },
-                ));
-                if config.ty.is_some() {
-                    items.push((
-                        executed_run_configs
-                            .get(&(RunDebugMode::Debug, config.name.clone())),
-                        PaletteItem {
-                            content: PaletteItemContent::RunAndDebug {
-                                mode: RunDebugMode::Debug,
-                                config: config.clone(),
-                            },
-                            filter_text: format!(
-                                "Debug {} {} {}",
-                                config.name,
-                                config.program,
-                                config.args.clone().unwrap_or_default().join(" ")
-                            ),
-                            score: 0,
-                            indices: vec![],
-                        },
-                    ));
-                }
-            }
-        }
-
-        items.sort_by_key(|(executed, _item)| std::cmp::Reverse(executed.copied()));
-        self.items
-            .set(items.into_iter().map(|(_, item)| item).collect());
-    }
-
-    fn get_run_configs(&self) {
-        if let Some(workspace) = self.common.workspace.path.as_deref() {
-            let run_toml = workspace.join(".lapce").join("run.toml");
-            let (doc, new_doc) = self.main_split.get_doc(run_toml.clone(), None);
-            if !new_doc {
-                let content = doc.buffer.with_untracked(|b| b.to_string());
-                self.set_run_configs(content);
-            } else {
-                let loaded = doc.loaded;
-                let palette = self.clone();
-                self.common.scope.create_effect(move |prev_loaded| {
-                    if prev_loaded == Some(true) {
-                        return true;
-                    }
-
-                    let loaded = loaded.get();
-                    if loaded {
-                        let content = doc.buffer.with_untracked(|b| b.to_string());
-                        if content.is_empty() {
-                            doc.reload(Rope::from(DEFAULT_RUN_TOML), false);
-                        }
-                        palette.set_run_configs(content);
-                    }
-                    loaded
-                });
-            }
-        }
-    }
-
     fn get_color_themes(&self) {
         let config = self.common.config.get_untracked();
         let items = config
@@ -1071,42 +971,6 @@ impl PaletteData {
                 indices: Vec::new(),
             });
         }
-        self.items.set(items);
-    }
-
-    fn get_terminal_profiles(&self) {
-        let profiles = self.common.config.get().terminal.profiles.clone();
-        let mut items: im::Vector<PaletteItem> = im::Vector::new();
-
-        for (name, profile) in profiles.into_iter() {
-            let uri = match lsp_types::Url::parse(&format!(
-                "file://{}",
-                profile.workdir.unwrap_or_default().display()
-            )) {
-                Ok(v) => Some(v),
-                Err(e) => {
-                    error!("Failed to parse uri: {e}");
-                    None
-                }
-            };
-
-            items.push_back(PaletteItem {
-                content: PaletteItemContent::TerminalProfile {
-                    name: name.to_owned(),
-                    profile: lapce_rpc::terminal::TerminalProfile {
-                        name: name.to_owned(),
-                        command: profile.command,
-                        arguments: profile.arguments,
-                        workdir: uri,
-                        environment: profile.environment,
-                    },
-                },
-                filter_text: name.to_owned(),
-                score: 0,
-                indices: Vec::new(),
-            });
-        }
-
         self.items.set(items);
     }
 
@@ -1261,14 +1125,6 @@ impl PaletteData {
                         },
                     );
                 }
-                PaletteItemContent::RunAndDebug { mode, config } => {
-                    self.common.internal_command.send(
-                        InternalCommand::RunAndDebug {
-                            mode: *mode,
-                            config: config.clone(),
-                        },
-                    );
-                }
                 PaletteItemContent::ColorTheme { name } => self
                     .common
                     .internal_command
@@ -1323,12 +1179,6 @@ impl PaletteData {
                         data: Some(serde_json::json!(name.to_owned())),
                     });
                 }
-                PaletteItemContent::TerminalProfile { name: _, profile } => self
-                    .common
-                    .internal_command
-                    .send(InternalCommand::NewTerminal {
-                        profile: Some(profile.to_owned()),
-                    }),
             }
         } else if self.kind.get_untracked() == PaletteKind::SshHost {
             let input = self.input.with_untracked(|input| input.input.clone());
@@ -1388,7 +1238,6 @@ impl PaletteData {
                 }
                 PaletteItemContent::Command { .. } => {}
                 PaletteItemContent::Workspace { .. } => {}
-                PaletteItemContent::RunAndDebug { .. } => {}
                 PaletteItemContent::SshHost { .. } => {}
                 #[cfg(windows)]
                 PaletteItemContent::WslHost { .. } => {}
@@ -1460,7 +1309,6 @@ impl PaletteData {
                         save: false,
                     }),
                 PaletteItemContent::SCMReference { .. } => {}
-                PaletteItemContent::TerminalProfile { .. } => {}
             }
         }
     }

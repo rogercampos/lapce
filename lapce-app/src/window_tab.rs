@@ -1,20 +1,15 @@
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::HashSet,
     env,
     path::{Path, PathBuf},
     rc::Rc,
-    sync::{
-        Arc,
-        mpsc::{Sender, channel},
-    },
-    time::Instant,
+    sync::Arc,
 };
 
-use alacritty_terminal::vte::ansi::Handler;
 use floem::{
     ViewId,
     action::{TimerToken, open_file, remove_overlay},
-    ext_event::{create_ext_action, create_signal_from_channel},
+    ext_event::create_ext_action,
     file::FileDialogOptions,
     keyboard::Modifiers,
     kurbo::Size,
@@ -37,12 +32,10 @@ use lapce_core::{
 use lapce_rpc::{
     RpcError,
     core::CoreNotification,
-    dap_types::{ConfigSource, RunDebugConfig},
     file::{Naming, PathObject},
     plugin::PluginId,
     proxy::{ProxyResponse, ProxyRpcHandler, ProxyStatus},
     source_control::FileDiff,
-    terminal::TermId,
 };
 use lsp_types::{
     CodeActionOrCommand, CodeLens, Diagnostic, ProgressParams, ProgressToken,
@@ -62,7 +55,6 @@ use crate::{
     completion::{CompletionData, CompletionStatus},
     config::LapceConfig,
     db::LapceDb,
-    debug::{DapData, LapceBreakpoint, RunDebugMode, RunDebugProcess},
     doc::DocContent,
     editor::location::{EditorLocation, EditorPosition},
     editor_tab::EditorTabChild,
@@ -76,7 +68,7 @@ use crate::{
     listener::Listener,
     lsp::path_from_url,
     main_split::{MainSplitData, SplitData, SplitDirection, SplitMoveDirection},
-    palette::{DEFAULT_RUN_TOML, PaletteData, PaletteStatus, kind::PaletteKind},
+    palette::{PaletteData, PaletteStatus, kind::PaletteKind},
     panel::{
         call_hierarchy_view::{CallHierarchyData, CallHierarchyItemData},
         data::{PanelData, PanelSection, default_panel_order},
@@ -87,10 +79,6 @@ use crate::{
     proxy::{ProxyData, new_proxy},
     rename::RenameData,
     source_control::SourceControlData,
-    terminal::{
-        event::{TermEvent, TermNotification, terminal_update_process},
-        panel::TerminalPanelData,
-    },
     tracing::*,
     window::WindowCommonData,
     workspace::{LapceWorkspace, LapceWorkspaceType, WorkspaceInfo},
@@ -142,8 +130,6 @@ pub struct CommonData {
     pub internal_command: Listener<InternalCommand>,
     pub lapce_command: Listener<LapceCommand>,
     pub workbench_command: Listener<LapceWorkbenchCommand>,
-    pub term_tx: Sender<(TermId, TermEvent)>,
-    pub term_notification_tx: Sender<TermNotification>,
     pub proxy: ProxyRpcHandler,
     pub view_id: RwSignal<ViewId>,
     pub ui_line_height: Memo<f64>,
@@ -151,7 +137,6 @@ pub struct CommonData {
     pub config: ReadSignal<Arc<LapceConfig>>,
     pub proxy_status: RwSignal<Option<ProxyStatus>>,
     pub mouse_hover_timer: RwSignal<TimerToken>,
-    pub breakpoints: RwSignal<BTreeMap<PathBuf, BTreeMap<usize, LapceBreakpoint>>>,
     // the current focused view which will receive keyboard events
     pub keyboard_focus: RwSignal<Option<ViewId>>,
     pub window_common: Rc<WindowCommonData>,
@@ -174,7 +159,6 @@ pub struct WindowTabData {
     pub main_split: MainSplitData,
     pub file_explorer: FileExplorerData,
     pub panel: PanelData,
-    pub terminal: TerminalPanelData,
     pub plugin: PluginData,
     pub code_action: RwSignal<CodeActionData>,
     pub code_lens: RwSignal<Option<ViewId>>,
@@ -317,24 +301,11 @@ impl WindowTabData {
         let keypress = cx.create_rw_signal(KeyPressData::new(cx, &config));
         let proxy_status = cx.create_rw_signal(None);
 
-        let (term_tx, term_rx) = channel();
-        let (term_notification_tx, term_notification_rx) = channel();
-        {
-            let term_notification_tx = term_notification_tx.clone();
-            std::thread::Builder::new()
-                .name("terminal update process".to_owned())
-                .spawn(move || {
-                    terminal_update_process(term_rx, term_notification_tx);
-                })
-                .unwrap();
-        }
-
         let proxy = new_proxy(
             workspace.clone(),
             all_disabled_volts,
             window_common.extra_plugin_paths.as_ref().clone(),
             config.plugins.clone(),
-            term_tx.clone(),
         );
         let (config, set_config) = cx.create_signal(Arc::new(config));
 
@@ -375,8 +346,6 @@ impl WindowTabData {
             internal_command,
             lapce_command,
             workbench_command,
-            term_tx,
-            term_notification_tx,
             proxy: proxy.proxy_rpc.clone(),
             view_id,
             ui_line_height,
@@ -386,7 +355,6 @@ impl WindowTabData {
             proxy_status,
             mouse_hover_timer: cx.create_rw_signal(TimerToken::INVALID),
             window_origin: cx.create_rw_signal(Point::ZERO),
-            breakpoints: cx.create_rw_signal(BTreeMap::new()),
             keyboard_focus: cx.create_rw_signal(None),
             window_common: window_common.clone(),
         });
@@ -484,31 +452,6 @@ impl WindowTabData {
                 )
             });
 
-        let terminal = TerminalPanelData::new(
-            workspace.clone(),
-            common.config.get_untracked().terminal.get_default_profile(),
-            common.clone(),
-            main_split.clone(),
-        );
-        if let Some(workspace_info) = workspace_info.as_ref() {
-            terminal.debug.breakpoints.set(
-                workspace_info
-                    .breakpoints
-                    .clone()
-                    .into_iter()
-                    .map(|(path, breakpoints)| {
-                        (
-                            path,
-                            breakpoints
-                                .into_iter()
-                                .map(|b| (b.line, b))
-                                .collect::<BTreeMap<usize, LapceBreakpoint>>(),
-                        )
-                    })
-                    .collect(),
-            );
-        }
-
         let rename = RenameData::new(cx, main_split.editors, common.clone());
         let global_search = GlobalSearchData::new(cx, main_split.clone());
 
@@ -521,25 +464,6 @@ impl WindowTabData {
             proxy.core_rpc.clone(),
         );
 
-        {
-            let notification = create_signal_from_channel(term_notification_rx);
-            let terminal = terminal.clone();
-            cx.create_effect(move |_| {
-                notification.with(|notification| {
-                    if let Some(notification) = notification.as_ref() {
-                        match notification {
-                            TermNotification::SetTitle { term_id, title } => {
-                                terminal.set_title(term_id, title);
-                            }
-                            TermNotification::RequestPaint => {
-                                view_id.get_untracked().request_paint();
-                            }
-                        }
-                    }
-                });
-            });
-        }
-
         let about_data = AboutData::new(cx, common.focus);
         let alert_data = AlertBoxData::new(cx, common.clone());
 
@@ -549,7 +473,6 @@ impl WindowTabData {
             workspace,
             palette,
             main_split,
-            terminal,
             panel,
             file_explorer,
             code_action,
@@ -1035,53 +958,6 @@ impl WindowTabData {
                 }
             }
 
-            // ==== Terminal ====
-            NewTerminalTab => {
-                self.terminal.new_tab(
-                    self.common
-                        .config
-                        .get_untracked()
-                        .terminal
-                        .get_default_profile(),
-                );
-                if !self.panel.is_panel_visible(&PanelKind::Terminal) {
-                    self.panel.show_panel(&PanelKind::Terminal);
-                }
-                self.common.focus.set(Focus::Panel(PanelKind::Terminal));
-            }
-            CloseTerminalTab => {
-                self.terminal.close_tab(None);
-                if self
-                    .terminal
-                    .tab_info
-                    .with_untracked(|info| info.tabs.is_empty())
-                {
-                    if self.panel.is_panel_visible(&PanelKind::Terminal) {
-                        self.panel.hide_panel(&PanelKind::Terminal);
-                    }
-                    self.common.focus.set(Focus::Workbench);
-                } else {
-                    if !self.panel.is_panel_visible(&PanelKind::Terminal) {
-                        self.panel.show_panel(&PanelKind::Terminal);
-                    }
-                    self.common.focus.set(Focus::Panel(PanelKind::Terminal));
-                }
-            }
-            NextTerminalTab => {
-                self.terminal.next_tab();
-                if !self.panel.is_panel_visible(&PanelKind::Terminal) {
-                    self.panel.show_panel(&PanelKind::Terminal);
-                }
-                self.common.focus.set(Focus::Panel(PanelKind::Terminal));
-            }
-            PreviousTerminalTab => {
-                self.terminal.previous_tab();
-                if !self.panel.is_panel_visible(&PanelKind::Terminal) {
-                    self.panel.show_panel(&PanelKind::Terminal);
-                }
-                self.common.focus.set(Focus::Panel(PanelKind::Terminal));
-            }
-
             // ==== Remote ====
             ConnectSshHost => {
                 self.palette.run(PaletteKind::SshHost);
@@ -1121,9 +997,6 @@ impl WindowTabData {
             PaletteWorkspace => {
                 self.palette.run(PaletteKind::Workspace);
             }
-            PaletteRunAndDebug => {
-                self.palette.run(PaletteKind::RunAndDebug);
-            }
             PaletteSCMReferences => {
                 self.palette.run(PaletteKind::SCMReferences);
             }
@@ -1140,27 +1013,6 @@ impl WindowTabData {
                 self.palette.run(PaletteKind::LineEnding);
             }
             DiffFiles => self.palette.run(PaletteKind::DiffFiles),
-
-            // ==== Running / Debugging ====
-            RunAndDebugRestart => {
-                let active_term = self.terminal.debug.active_term.get_untracked();
-                if let Some(is_debug) = active_term
-                    .and_then(|term_id| self.terminal.restart_run_debug(term_id))
-                {
-                    self.panel.show_panel(&PanelKind::Terminal);
-                    if is_debug {
-                        self.panel.show_panel(&PanelKind::Debug);
-                    }
-                } else {
-                    self.palette.run(PaletteKind::RunAndDebug);
-                }
-            }
-            RunAndDebugStop => {
-                let active_term = self.terminal.debug.active_term.get_untracked();
-                if let Some(term_id) = active_term {
-                    self.terminal.stop_run_debug(term_id);
-                }
-            }
 
             // ==== UI ====
             ZoomIn => {
@@ -1249,9 +1101,6 @@ impl WindowTabData {
             TogglePanelBottomVisual => {
                 self.toggle_container_visual(&PanelContainerPosition::Bottom);
             }
-            ToggleTerminalFocus => {
-                self.toggle_panel_focus(PanelKind::Terminal);
-            }
             ToggleSourceControlFocus => {
                 self.toggle_panel_focus(PanelKind::SourceControl);
             }
@@ -1267,9 +1116,6 @@ impl WindowTabData {
             ToggleSearchFocus => {
                 self.toggle_panel_focus(PanelKind::Search);
             }
-            ToggleTerminalVisual => {
-                self.toggle_panel_visual(PanelKind::Terminal);
-            }
             ToggleSourceControlVisual => {
                 self.toggle_panel_visual(PanelKind::SourceControl);
             }
@@ -1282,17 +1128,11 @@ impl WindowTabData {
             ToggleProblemVisual => {
                 self.toggle_panel_visual(PanelKind::Problem);
             }
-            ToggleDebugVisual => {
-                self.toggle_panel_visual(PanelKind::Debug);
-            }
             ToggleSearchVisual => {
                 self.toggle_panel_visual(PanelKind::Search);
             }
             FocusEditor => {
                 self.common.focus.set(Focus::Workbench);
-            }
-            FocusTerminal => {
-                self.common.focus.set(Focus::Panel(PanelKind::Terminal));
             }
             OpenUIInspector => {
                 self.common.view_id.get_untracked().inspect();
@@ -1512,40 +1352,6 @@ impl WindowTabData {
                     editor_data.go_to_implementation(self.clone());
                 }
             }
-            RunInTerminal => {
-                if let Some(editor_data) =
-                    self.main_split.active_editor.get_untracked()
-                {
-                    let name = editor_data.word_at_cursor();
-                    if !name.is_empty() {
-                        let mut args_str = name.split(" ");
-                        let program = args_str.next().map(|x| x.to_string()).unwrap();
-                        let args: Vec<String> = args_str.map(|x| x.to_string()).collect();
-                        let args = if args.is_empty() {
-                            None
-                        } else {
-                            Some(args)
-                        };
-
-                        let config = RunDebugConfig {
-                            ty: None,
-                            name,
-                            program,
-                            args,
-                            cwd: None,
-                            env: None,
-                            prelaunch: None,
-                            debug_command: None,
-                            dap_id: Default::default(),
-                            tracing_output: false,
-                            config_source: ConfigSource::RunInTerminal,
-                        };
-                        self.common
-                            .internal_command
-                            .send(InternalCommand::RunAndDebug { mode: RunDebugMode::Run, config });
-                    }
-                }
-            }
             GoToLocation => {
                 if let Some(editor_data) =
                     self.main_split.active_editor.get_untracked()
@@ -1572,19 +1378,10 @@ impl WindowTabData {
                     } });
                 }
             }
-            AddRunDebugConfig => {
-                if let Some(editor_data) =
-                    self.main_split.active_editor.get_untracked()
-                {
-                    editor_data.receive_char(DEFAULT_RUN_TOML);
-                }
-            }
-
         }
     }
 
     pub fn run_internal_command(&self, cmd: InternalCommand) {
-        let cx = self.scope;
         match cmd {
             InternalCommand::ReloadConfig => {
                 self.reload_config();
@@ -1866,24 +1663,6 @@ impl WindowTabData {
                 self.main_split
                     .save_jump_location(path, offset, scroll_offset);
             }
-            InternalCommand::NewTerminal { profile } => {
-                self.terminal.new_tab(profile);
-            }
-            InternalCommand::SplitTerminal { term_id } => {
-                self.terminal.split(term_id);
-            }
-            InternalCommand::SplitTerminalNext { term_id } => {
-                self.terminal.split_next(term_id);
-            }
-            InternalCommand::SplitTerminalPrevious { term_id } => {
-                self.terminal.split_previous(term_id);
-            }
-            InternalCommand::SplitTerminalExchange { term_id } => {
-                self.terminal.split_exchange(term_id);
-            }
-            InternalCommand::RunAndDebug { mode, config } => {
-                self.run_and_debug(cx, &mode, &config);
-            }
             InternalCommand::StartRename {
                 path,
                 placeholder,
@@ -1993,9 +1772,6 @@ impl WindowTabData {
             InternalCommand::UpdateProxyStatus { status } => {
                 self.common.proxy_status.set(Some(status));
             }
-            InternalCommand::DapFrameScopes { dap_id, frame_id } => {
-                self.terminal.dap_frame_scopes(dap_id, frame_id);
-            }
             InternalCommand::OpenVoltView { volt_id } => {
                 self.main_split.open_volt_view(volt_id);
             }
@@ -2028,51 +1804,6 @@ impl WindowTabData {
                     }
                 };
             }
-            InternalCommand::ClearTerminalBuffer {
-                view_id,
-                tab_index,
-                terminal_index,
-            } => {
-                let Some(tab) = self.terminal.tab_info.with_untracked(|x| {
-                    x.tabs.iter().find_map(|(index, data)| {
-                        if index.get_untracked() == tab_index {
-                            Some(data.clone())
-                        } else {
-                            None
-                        }
-                    })
-                }) else {
-                    error!("cound not find terminal tab data: index={tab_index}");
-                    return;
-                };
-                let Some(raw) = tab.terminals.with_untracked(|x| {
-                    x.iter().find_map(|(index, data)| {
-                        if index.get_untracked() == terminal_index {
-                            Some(data.raw.get_untracked())
-                        } else {
-                            None
-                        }
-                    })
-                }) else {
-                    error!("cound not find terminal data: index={terminal_index}");
-                    return;
-                };
-                raw.write().term.reset_state();
-                view_id.request_paint();
-            }
-            InternalCommand::StopTerminal { term_id } => {
-                self.terminal.stop_run_debug(term_id);
-            }
-            InternalCommand::RestartTerminal { term_id } => {
-                if let Some(is_debug) = self.terminal.restart_run_debug(term_id) {
-                    self.panel.show_panel(&PanelKind::Terminal);
-                    if is_debug {
-                        self.panel.show_panel(&PanelKind::Debug);
-                    }
-                } else {
-                    self.palette.run(PaletteKind::RunAndDebug);
-                }
-            }
             InternalCommand::CallHierarchyIncoming { item_id } => {
                 self.call_hierarchy_incoming(item_id);
             }
@@ -2080,7 +1811,6 @@ impl WindowTabData {
     }
 
     fn handle_core_notification(&self, rpc: &CoreNotification) {
-        let cx = self.scope;
         match rpc {
             CoreNotification::ProxyStatus { status } => {
                 self.common.proxy_status.set(Some(status.to_owned()));
@@ -2169,92 +1899,8 @@ impl WindowTabData {
                     });
                 }
             }
-            CoreNotification::TerminalProcessStopped { term_id, exit_code } => {
-                debug!("TerminalProcessStopped {:?}, {:?}", term_id, exit_code);
-                if let Err(err) = self
-                    .common
-                    .term_tx
-                    .send((*term_id, TermEvent::CloseTerminal))
-                {
-                    tracing::error!("{:?}", err);
-                }
-                self.terminal.terminal_stopped(term_id, *exit_code);
-                if self
-                    .terminal
-                    .tab_info
-                    .with_untracked(|info| info.tabs.is_empty())
-                {
-                    if self.panel.is_panel_visible(&PanelKind::Terminal) {
-                        self.panel.hide_panel(&PanelKind::Terminal);
-                    }
-                    self.common.focus.set(Focus::Workbench);
-                }
-            }
-            CoreNotification::TerminalLaunchFailed { term_id, error } => {
-                self.terminal.launch_failed(term_id, error);
-            }
-            CoreNotification::RunInTerminal { config } => {
-                self.run_in_terminal(cx, &RunDebugMode::Debug, config, true);
-            }
-            CoreNotification::TerminalProcessId {
-                term_id,
-                process_id,
-            } => {
-                self.terminal.set_process_id(term_id, *process_id);
-            }
-            CoreNotification::DapStopped {
-                dap_id,
-                stopped,
-                stack_frames,
-                variables,
-            } => {
-                self.show_panel(PanelKind::Debug);
-                self.terminal
-                    .dap_stopped(dap_id, stopped, stack_frames, variables);
-            }
             CoreNotification::OpenPaths { paths } => {
                 self.open_paths(paths);
-            }
-            CoreNotification::DapContinued { dap_id } => {
-                self.terminal.dap_continued(dap_id);
-            }
-            CoreNotification::DapBreakpointsResp {
-                path, breakpoints, ..
-            } => {
-                self.terminal.debug.breakpoints.update(|all_breakpoints| {
-                    if let Some(current_breakpoints) = all_breakpoints.get_mut(path)
-                    {
-                        let mut line_changed = HashSet::new();
-                        let mut i = 0;
-                        for (_, current_breakpoint) in current_breakpoints.iter_mut()
-                        {
-                            if !current_breakpoint.active {
-                                continue;
-                            }
-                            if let Some(breakpoint) = breakpoints.get(i) {
-                                current_breakpoint.id = breakpoint.id;
-                                current_breakpoint.verified = breakpoint.verified;
-                                current_breakpoint
-                                    .message
-                                    .clone_from(&breakpoint.message);
-                                if let Some(new_line) = breakpoint.line {
-                                    if current_breakpoint.line + 1 != new_line {
-                                        line_changed.insert(current_breakpoint.line);
-                                        current_breakpoint.line =
-                                            new_line.saturating_sub(1);
-                                    }
-                                }
-                            }
-                            i += 1;
-                        }
-                        for line in line_changed {
-                            if let Some(changed) = current_breakpoints.remove(&line)
-                            {
-                                current_breakpoints.insert(changed.line, changed);
-                            }
-                        }
-                    }
-                });
             }
             CoreNotification::OpenFileChanged { path, content } => {
                 self.main_split.open_file_changed(path, content);
@@ -2343,9 +1989,6 @@ impl WindowTabData {
             }
             Focus::Rename => Some(keypress.key_down(event, &self.rename)),
             Focus::AboutPopup => Some(keypress.key_down(event, &self.about_data)),
-            Focus::Panel(PanelKind::Terminal) => {
-                self.terminal.key_down(event, &keypress)
-            }
             Focus::Panel(PanelKind::Search) => {
                 Some(keypress.key_down(event, &self.global_search))
             }
@@ -2386,16 +2029,6 @@ impl WindowTabData {
         WorkspaceInfo {
             split: main_split_data.get_untracked().split_info(self),
             panel: self.panel.panel_info(),
-            breakpoints: self
-                .terminal
-                .debug
-                .breakpoints
-                .get_untracked()
-                .into_iter()
-                .map(|(path, breakpoints)| {
-                    (path, breakpoints.into_values().collect::<Vec<_>>())
-                })
-                .collect(),
         }
     }
 
@@ -2600,7 +2233,7 @@ impl WindowTabData {
         origin
     }
 
-    /// Get the mode for the current editor or terminal
+    /// Get the mode for the current editor
     pub fn mode(&self) -> Mode {
         if self.common.config.get().core.modal {
             let mode = if self.common.focus.get() == Focus::Workbench {
@@ -2632,7 +2265,6 @@ impl WindowTabData {
             PanelKind::FileExplorer
             | PanelKind::Plugin
             | PanelKind::Problem
-            | PanelKind::Debug
             | PanelKind::CallHierarchy
             | PanelKind::DocumentSymbol
             | PanelKind::References
@@ -2641,7 +2273,7 @@ impl WindowTabData {
                 // in those cases.
                 self.panel.is_panel_visible(&kind)
             }
-            PanelKind::Terminal | PanelKind::SourceControl | PanelKind::Search => {
+            PanelKind::SourceControl | PanelKind::Search => {
                 self.is_panel_focused(kind)
             }
         };
@@ -2702,20 +2334,6 @@ impl WindowTabData {
     }
 
     pub fn show_panel(&self, kind: PanelKind) {
-        if kind == PanelKind::Terminal
-            && self
-                .terminal
-                .tab_info
-                .with_untracked(|info| info.tabs.is_empty())
-        {
-            self.terminal.new_tab(
-                self.common
-                    .config
-                    .get_untracked()
-                    .terminal
-                    .get_default_profile(),
-            );
-        }
         self.panel.show_panel(&kind);
         if kind == PanelKind::Search
             && self.common.focus.get_untracked() == Focus::Workbench
@@ -2729,83 +2347,6 @@ impl WindowTabData {
             }
         }
         self.common.focus.set(Focus::Panel(kind));
-    }
-
-    fn run_and_debug(
-        &self,
-        cx: Scope,
-        mode: &RunDebugMode,
-        config: &RunDebugConfig,
-    ) {
-        debug!("{:?}", config);
-        match mode {
-            RunDebugMode::Run => {
-                self.run_in_terminal(cx, mode, config, false);
-            }
-            RunDebugMode::Debug => {
-                if config.prelaunch.is_some() {
-                    self.run_in_terminal(cx, mode, config, false);
-                } else {
-                    self.common.proxy.dap_start(
-                        config.clone(),
-                        self.terminal.debug.source_breakpoints(),
-                    )
-                };
-                if !self.panel.is_panel_visible(&PanelKind::Debug) {
-                    self.panel.show_panel(&PanelKind::Debug);
-                }
-            }
-        }
-    }
-
-    fn run_in_terminal(
-        &self,
-        cx: Scope,
-        mode: &RunDebugMode,
-        config: &RunDebugConfig,
-        from_dap: bool,
-    ) {
-        // if not from dap, then run prelaunch first
-        let is_prelaunch = !from_dap;
-        let term_id = if let Some(terminal) =
-            self.terminal.get_stopped_run_debug_terminal(mode, config)
-        {
-            terminal.new_process(Some(RunDebugProcess {
-                mode: *mode,
-                config: config.clone(),
-                stopped: false,
-                created: Instant::now(),
-                is_prelaunch,
-            }));
-
-            terminal.term_id
-        } else {
-            let new_terminal_tab = self.terminal.new_tab_run_debug(
-                Some(RunDebugProcess {
-                    mode: *mode,
-                    config: config.clone(),
-                    stopped: false,
-                    created: Instant::now(),
-                    is_prelaunch,
-                }),
-                None,
-            );
-            new_terminal_tab.active_terminal(false).unwrap().term_id
-        };
-        self.common.focus.set(Focus::Panel(PanelKind::Terminal));
-        self.terminal.focus_terminal(term_id);
-
-        self.terminal.debug.active_term.set(Some(term_id));
-        self.terminal.debug.daps.update(|daps| {
-            daps.insert(
-                config.dap_id,
-                DapData::new(cx, config.dap_id, term_id, self.common.clone()),
-            );
-        });
-
-        if !self.panel.is_panel_visible(&PanelKind::Terminal) {
-            self.panel.show_panel(&PanelKind::Terminal);
-        }
     }
 
     pub fn open_paths(&self, paths: &[PathObject]) {

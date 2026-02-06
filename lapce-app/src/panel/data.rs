@@ -28,13 +28,11 @@ pub fn default_panel_order() -> PanelOrder {
             PanelKind::FileExplorer,
             PanelKind::Plugin,
             PanelKind::SourceControl,
-            PanelKind::Debug,
         ],
     );
     order.insert(
         PanelPosition::BottomLeft,
         im::vector![
-            PanelKind::Terminal,
             PanelKind::Search,
             PanelKind::Problem,
             PanelKind::CallHierarchy,
@@ -59,10 +57,6 @@ pub enum PanelSection {
     Changes,
     Installed,
     Available,
-    Process,
-    Variable,
-    StackFrame,
-    Breakpoint,
 }
 
 #[derive(Clone, Serialize, Deserialize)]

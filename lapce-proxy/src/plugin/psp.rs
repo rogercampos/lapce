@@ -52,7 +52,7 @@ use lsp_types::{
 use parking_lot::Mutex;
 use psp_types::{
     ExecuteProcess, ExecuteProcessParams, ExecuteProcessResult,
-    RegisterDebuggerType, RegisterDebuggerTypeParams, Request, SendLspNotification,
+    Request, SendLspNotification,
     SendLspNotificationParams, SendLspRequest, SendLspRequestParams,
     SendLspRequestResult, StartLspServer, StartLspServerParams,
     StartLspServerResult,
@@ -979,16 +979,6 @@ impl PluginHostHandler {
                     stdout: Some(output.stdout),
                     stderr: Some(output.stderr),
                 });
-            }
-            RegisterDebuggerType::METHOD => {
-                let params: RegisterDebuggerTypeParams =
-                    serde_json::from_value(serde_json::to_value(params)?)?;
-                self.catalog_rpc.register_debugger_type(
-                    params.debugger_type,
-                    params.program,
-                    params.args,
-                );
-                resp.send_null();
             }
             StartLspServer::METHOD => {
                 let params: StartLspServerParams =

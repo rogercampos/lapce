@@ -30,7 +30,7 @@ use crate::{
     command::CommandExecuted,
     config::{
         DropdownInfo, LapceConfig, color::LapceColor, core::CoreConfig,
-        editor::EditorConfig, icon::LapceIcons, terminal::TerminalConfig,
+        editor::EditorConfig, icon::LapceIcons,
         ui::UIConfig,
     },
     keypress::KeyPressFocus,
@@ -174,12 +174,6 @@ impl SettingsData {
                     &UIConfig::FIELDS[..],
                     &UIConfig::DESCS[..],
                     into_settings_map(&config.ui),
-                ),
-                (
-                    "Terminal",
-                    &TerminalConfig::FIELDS[..],
-                    &TerminalConfig::DESCS[..],
-                    into_settings_map(&config.terminal),
                 ),
             ] {
                 let pos = cx.create_rw_signal(Point::new(0.0, item_height_accum));
