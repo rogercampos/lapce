@@ -114,7 +114,7 @@ impl PanelData {
             PanelPosition::BottomLeft,
             PanelStyle {
                 active: 0,
-                shown: true,
+                shown: false,
                 maximized: false,
             },
         );

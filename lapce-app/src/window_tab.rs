@@ -1279,11 +1279,14 @@ impl WindowTabData {
                         path,
                         position: None,
                         scroll_offset: None,
-                        ignore_unconfirmed: false,
+                        ignore_unconfirmed: true,
                         same_editor_tab: false,
                     },
                     None,
                 );
+                if let Some(editor) = self.main_split.active_editor.get_untracked() {
+                    editor.confirmed.set(true);
+                }
             }
             InternalCommand::OpenAndConfirmedFile { path } => {
                 self.main_split.jump_to_location(
