@@ -102,6 +102,14 @@ Plugins are called **Volts** (`VoltID` = author/name, `PluginId` = runtime insta
 
 Plugins can provide: LSP servers, syntax grammars, themes, custom commands.
 
+### Bundled Plugins
+
+Plugins can be bundled into the binary at compile time via the `defaults/plugins/` directory. Each subdirectory represents a plugin and should contain a `volt.toml` plus any associated files (theme TOMLs, WASM binaries, etc.).
+
+On every app launch, `install_bundled_plugins()` (in `app.rs`) checks each bundled plugin against the user's plugins directory (`Directory::plugins_directory()`). If a plugin directory doesn't already exist at the destination, it is extracted. Existing plugins are not overwritten, preserving user customizations.
+
+The embedding uses `include_dir!` (same mechanism as SVG icons in `config/svg.rs`), so adding a new default plugin is as simple as placing its directory under `defaults/plugins/` — no code changes needed.
+
 ## Layout Structure (app.rs → workbench())
 
 ```

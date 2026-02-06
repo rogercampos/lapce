@@ -15,6 +15,7 @@ use std::{
 
 use anyhow::{Result, anyhow};
 use clap::Parser;
+use include_dir::{Dir, include_dir};
 use floem::{
     IntoView, View,
     action::show_context_menu,
@@ -111,6 +112,43 @@ use crate::{
 
 mod grammars;
 mod logging;
+
+const BUNDLED_PLUGINS_DIR: Dir =
+    include_dir!("$CARGO_MANIFEST_DIR/../defaults/plugins");
+
+fn install_bundled_plugins() {
+    let plugins_dir = match Directory::plugins_directory() {
+        Some(dir) => dir,
+        None => return,
+    };
+
+    for entry in BUNDLED_PLUGINS_DIR.dirs() {
+        let name = match entry.path().file_name() {
+            Some(name) => name,
+            None => continue,
+        };
+        let target = plugins_dir.join(name);
+        if target.exists() {
+            continue;
+        }
+        if let Err(err) = extract_dir(entry, &target) {
+            tracing::error!("Failed to install bundled plugin {:?}: {:?}", name, err);
+        }
+    }
+}
+
+fn extract_dir(dir: &Dir, target: &std::path::Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(target)?;
+    for file in dir.files() {
+        let file_path = target.join(file.path().file_name().unwrap());
+        std::fs::write(&file_path, file.contents())?;
+    }
+    for subdir in dir.dirs() {
+        let subdir_name = subdir.path().file_name().unwrap();
+        extract_dir(subdir, &target.join(subdir_name))?;
+    }
+    Ok(())
+}
 
 #[derive(Parser)]
 #[clap(name = "Lapce")]
@@ -3628,6 +3666,8 @@ pub fn launch() {
             tracing::error!("{:?}", err);
         }
     }
+
+    install_bundled_plugins();
 
     let windows = scope.create_rw_signal(im::HashMap::new());
     let config = LapceConfig::load(&LapceWorkspace::default(), &[], &plugin_paths);

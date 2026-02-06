@@ -911,7 +911,7 @@ impl View for EditorView {
                     .es
                     .with_untracked(EditorStyle::scroll_beyond_last_line)
             {
-                viewport_size.height.min(last_line_height) - line_height
+                line_height * 5.0
             } else {
                 0.0
             };
