@@ -38,13 +38,6 @@ pub enum ProxyRpc {
     Shutdown,
 }
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
-pub enum ProxyStatus {
-    Connecting,
-    Connected,
-    Disconnected,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SearchMatch {
     pub line: usize,

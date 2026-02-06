@@ -92,16 +92,6 @@ impl ProxyHandler for Dispatcher {
                     );
                     plugin_rpc.mainloop(&mut plugin);
                 });
-                self.core_rpc.notification(CoreNotification::ProxyStatus {
-                    status: lapce_rpc::proxy::ProxyStatus::Connected,
-                });
-
-                // send home directory for initinal filepicker dir
-                let dirs = directories::UserDirs::new();
-
-                if let Some(dirs) = dirs {
-                    self.core_rpc.home_dir(dirs.home_dir().into());
-                }
             }
             OpenPaths { paths } => {
                 self.core_rpc

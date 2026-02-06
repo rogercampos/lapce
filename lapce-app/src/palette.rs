@@ -1,6 +1,6 @@
 use std::{
     cell::RefCell,
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     path::PathBuf,
     rc::Rc,
     sync::{
@@ -50,7 +50,7 @@ use crate::{
     lsp::path_from_url,
     main_split::MainSplitData,
     window_tab::{CommonData, Focus},
-    workspace::{LapceWorkspace, LapceWorkspaceType, SshHost},
+    workspace::LapceWorkspace,
 };
 
 pub mod item;
@@ -330,12 +330,7 @@ impl PaletteData {
 
     /// Get the placeholder text to use in the palette input field.
     pub fn placeholder_text(&self) -> &'static str {
-        match self.kind.get() {
-            PaletteKind::SshHost => {
-                "Type [user@]host or select a previously connected workspace below"
-            }
-            _ => "",
-        }
+        ""
     }
 
     /// Execute the internal behavior of the palette for the given kind. This ignores updating and
@@ -369,13 +364,6 @@ impl PaletteData {
             }
             PaletteKind::WorkspaceSymbol => {
                 self.get_workspace_symbols();
-            }
-            PaletteKind::SshHost => {
-                self.get_ssh_hosts();
-            }
-            #[cfg(windows)]
-            PaletteKind::WslHost => {
-                self.get_wsl_hosts();
             }
             PaletteKind::ColorTheme => {
                 self.get_color_themes();
@@ -579,17 +567,7 @@ impl PaletteData {
         let items = workspaces
             .into_iter()
             .filter_map(|w| {
-                let text = w.path.as_ref()?.to_str()?.to_string();
-                let filter_text = match &w.kind {
-                    LapceWorkspaceType::Local => text,
-                    LapceWorkspaceType::RemoteSSH(remote) => {
-                        format!("[{remote}] {text}")
-                    }
-                    #[cfg(windows)]
-                    LapceWorkspaceType::RemoteWSL(remote) => {
-                        format!("[{remote}] {text}")
-                    }
-                };
+                let filter_text = w.path.as_ref()?.to_str()?.to_string();
                 Some(PaletteItem {
                     content: PaletteItemContent::Workspace { workspace: w },
                     filter_text,
@@ -771,87 +749,6 @@ impl PaletteData {
             });
     }
 
-    fn get_ssh_hosts(&self) {
-        let db: Arc<LapceDb> = use_context().unwrap();
-        let workspaces = db.recent_workspaces().unwrap_or_default();
-        let mut hosts = HashSet::new();
-        for workspace in workspaces.iter() {
-            if let LapceWorkspaceType::RemoteSSH(host) = &workspace.kind {
-                hosts.insert(host.clone());
-            }
-        }
-
-        let items = hosts
-            .iter()
-            .map(|host| PaletteItem {
-                content: PaletteItemContent::SshHost { host: host.clone() },
-                filter_text: host.to_string(),
-                score: 0,
-                indices: vec![],
-            })
-            .collect();
-        self.items.set(items);
-    }
-
-    #[cfg(windows)]
-    fn get_wsl_hosts(&self) {
-        use std::{os::windows::process::CommandExt, process};
-        let cmd = process::Command::new("wsl")
-            .creation_flags(0x08000000) // CREATE_NO_WINDOW
-            .arg("-l")
-            .arg("-v")
-            .stdout(process::Stdio::piped())
-            .output();
-
-        let distros = if let Ok(proc) = cmd {
-            let distros = String::from_utf16(bytemuck::cast_slice(&proc.stdout))
-                .unwrap_or_default()
-                .lines()
-                .skip(1)
-                .filter_map(|line| {
-                    let line = line.trim_start();
-                    // let default = line.starts_with('*');
-                    let name = line
-                        .trim_start_matches('*')
-                        .trim_start()
-                        .split(' ')
-                        .next()?;
-                    Some(name.to_string())
-                })
-                .collect();
-
-            distros
-        } else {
-            vec![]
-        };
-
-        let db: Arc<LapceDb> = use_context().unwrap();
-        let workspaces = db.recent_workspaces().unwrap_or_default();
-        let mut hosts = HashSet::new();
-        for distro in distros {
-            hosts.insert(distro);
-        }
-
-        for workspace in workspaces.iter() {
-            if let LapceWorkspaceType::RemoteWSL(host) = &workspace.kind {
-                hosts.insert(host.host.clone());
-            }
-        }
-
-        let items = hosts
-            .iter()
-            .map(|host| PaletteItem {
-                content: PaletteItemContent::WslHost {
-                    host: crate::workspace::WslHost { host: host.clone() },
-                },
-                filter_text: host.to_string(),
-                score: 0,
-                indices: vec![],
-            })
-            .collect();
-        self.items.set(items);
-    }
-
     fn get_color_themes(&self) {
         let config = self.common.config.get_untracked();
         let items = config
@@ -1006,29 +903,6 @@ impl PaletteData {
                         },
                     );
                 }
-                PaletteItemContent::SshHost { host } => {
-                    self.common.window_common.window_command.send(
-                        WindowCommand::SetWorkspace {
-                            workspace: LapceWorkspace {
-                                kind: LapceWorkspaceType::RemoteSSH(host.clone()),
-                                path: None,
-                                last_open: 0,
-                            },
-                        },
-                    );
-                }
-                #[cfg(windows)]
-                PaletteItemContent::WslHost { host } => {
-                    self.common.window_common.window_command.send(
-                        WindowCommand::SetWorkspace {
-                            workspace: LapceWorkspace {
-                                kind: LapceWorkspaceType::RemoteWSL(host.clone()),
-                                path: None,
-                                last_open: 0,
-                            },
-                        },
-                    );
-                }
                 PaletteItemContent::DocumentSymbol { range, .. } => {
                     let editor = self.main_split.active_editor.get_untracked();
                     let doc = match editor {
@@ -1110,18 +984,6 @@ impl PaletteData {
                     });
                 }
             }
-        } else if self.kind.get_untracked() == PaletteKind::SshHost {
-            let input = self.input.with_untracked(|input| input.input.clone());
-            let ssh = SshHost::from_string(&input);
-            self.common.window_common.window_command.send(
-                WindowCommand::SetWorkspace {
-                    workspace: LapceWorkspace {
-                        kind: LapceWorkspaceType::RemoteSSH(ssh),
-                        path: None,
-                        last_open: 0,
-                    },
-                },
-            );
         }
     }
 
@@ -1168,9 +1030,6 @@ impl PaletteData {
                 }
                 PaletteItemContent::Command { .. } => {}
                 PaletteItemContent::Workspace { .. } => {}
-                PaletteItemContent::SshHost { .. } => {}
-                #[cfg(windows)]
-                PaletteItemContent::WslHost { .. } => {}
                 PaletteItemContent::Language { .. } => {}
                 PaletteItemContent::LineEnding { .. } => {}
                 PaletteItemContent::Reference { location, .. } => {

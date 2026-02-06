@@ -549,8 +549,7 @@ impl FileExplorerData {
 
         menu = menu.separator();
 
-        // TODO: there are situations where we can open the file explorer to remote files
-        if !common.workspace.kind.is_remote() {
+        {
             let path = path_a.clone();
             #[cfg(not(target_os = "macos"))]
             let title = "Reveal in system file explorer";

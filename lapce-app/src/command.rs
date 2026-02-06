@@ -10,10 +10,7 @@ use lapce_core::command::{
     EditCommand, FocusCommand, MotionModeCommand, MoveCommand,
     MultiSelectionCommand, ScrollCommand,
 };
-use lapce_rpc::{
-    plugin::{PluginId, VoltID},
-    proxy::ProxyStatus,
-};
+use lapce_rpc::plugin::{PluginId, VoltID};
 use lsp_types::{CodeActionOrCommand, Position, WorkspaceEdit};
 use serde_json::Value;
 use strum::{EnumMessage, IntoEnumIterator};
@@ -321,19 +318,6 @@ pub enum LapceWorkbenchCommand {
     #[strum(message = "New File")]
     #[strum(serialize = "new_file")]
     NewFile,
-
-    #[strum(serialize = "connect_ssh_host")]
-    #[strum(message = "Connect to SSH Host")]
-    ConnectSshHost,
-
-    #[cfg(windows)]
-    #[strum(serialize = "connect_wsl_host")]
-    #[strum(message = "Connect to WSL Host")]
-    ConnectWslHost,
-
-    #[strum(serialize = "disconnect_remote")]
-    #[strum(message = "Disconnect From Remote")]
-    DisconnectRemote,
 
     #[strum(message = "Go To Line")]
     #[strum(serialize = "palette.line")]
@@ -645,9 +629,6 @@ pub enum InternalCommand {
     },
     SaveScratchDoc2 {
         doc: Rc<Doc>,
-    },
-    UpdateProxyStatus {
-        status: ProxyStatus,
     },
     OpenVoltView {
         volt_id: VoltID,

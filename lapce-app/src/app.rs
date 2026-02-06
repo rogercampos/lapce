@@ -325,19 +325,6 @@ impl AppData {
                 .unwrap_or_else(|_| (Size::new(800.0, 600.0), Point::new(0.0, 0.0)));
 
             for dir in dirs {
-                #[cfg(windows)]
-                let workspace_type = if !std::env::var("WSL_DISTRO_NAME")
-                    .unwrap_or_default()
-                    .is_empty()
-                    || !std::env::var("WSL_INTEROP").unwrap_or_default().is_empty()
-                {
-                    LapceWorkspaceType::RemoteWSL(crate::workspace::WslHost {
-                        host: String::new(),
-                    })
-                } else {
-                    LapceWorkspaceType::Local
-                };
-                #[cfg(not(windows))]
                 let workspace_type = LapceWorkspaceType::Local;
 
                 let info = WindowInfo {
@@ -2362,24 +2349,10 @@ fn palette_item(
         }
         PaletteItemContent::Line { .. }
         | PaletteItemContent::Workspace { .. }
-        | PaletteItemContent::SshHost { .. }
         | PaletteItemContent::Language { .. }
         | PaletteItemContent::LineEnding { .. }
         | PaletteItemContent::ColorTheme { .. }
         | PaletteItemContent::IconTheme { .. } => {
-            let text = item.filter_text;
-            let indices = item.indices;
-            container(
-                focus_text(
-                    move || text.clone(),
-                    move || indices.clone(),
-                    move || config.get().color(LapceColor::EDITOR_FOCUS),
-                )
-                .style(|s| s.align_items(Some(AlignItems::Center)).max_width_full()),
-            )
-        }
-        #[cfg(windows)]
-        PaletteItemContent::WslHost { .. } => {
             let text = item.filter_text;
             let indices = item.indices;
             container(
@@ -3161,12 +3134,7 @@ fn window_tab(window_tab_data: Rc<WindowTabData>) -> impl View {
 fn workspace_title(workspace: &LapceWorkspace) -> Option<String> {
     let p = workspace.path.as_ref()?;
     let dir = p.file_name().unwrap_or(p.as_os_str()).to_string_lossy();
-    Some(match &workspace.kind {
-        LapceWorkspaceType::Local => format!("{dir}"),
-        LapceWorkspaceType::RemoteSSH(remote) => format!("{dir} [{remote}]"),
-        #[cfg(windows)]
-        LapceWorkspaceType::RemoteWSL(remote) => format!("{dir} [{remote}]"),
-    })
+    Some(format!("{dir}"))
 }
 
 fn workspace_tab_header(window_data: WindowData) -> impl View {

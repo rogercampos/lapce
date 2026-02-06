@@ -19,7 +19,6 @@ use crate::{
     RequestId, RpcError, RpcMessage,
     file::PathObject,
     plugin::{PluginId, VoltInfo, VoltMetadata},
-    proxy::ProxyStatus,
 };
 
 pub enum CoreRpc {
@@ -39,9 +38,6 @@ pub enum FileChanged {
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "method", content = "params")]
 pub enum CoreNotification {
-    ProxyStatus {
-        status: ProxyStatus,
-    },
     OpenFileChanged {
         path: PathBuf,
         content: FileChanged,
@@ -80,9 +76,6 @@ pub enum CoreNotification {
     },
     LspCancel {
         params: CancelParams,
-    },
-    HomeDir {
-        path: PathBuf,
     },
     VoltInstalled {
         volt: VoltMetadata,
@@ -296,9 +289,6 @@ impl CoreRpcHandler {
         self.notification(CoreNotification::LspCancel { params });
     }
 
-    pub fn home_dir(&self, path: PathBuf) {
-        self.notification(CoreNotification::HomeDir { path });
-    }
 }
 
 impl Default for CoreRpcHandler {

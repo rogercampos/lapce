@@ -33,7 +33,7 @@ use lapce_rpc::{
     core::CoreNotification,
     file::{Naming, PathObject},
     plugin::PluginId,
-    proxy::{ProxyResponse, ProxyRpcHandler, ProxyStatus},
+    proxy::{ProxyResponse, ProxyRpcHandler},
 };
 use lsp_types::{
     CodeActionOrCommand, CodeLens, Diagnostic, ProgressParams, ProgressToken,
@@ -79,6 +79,7 @@ use crate::{
     tracing::*,
     window::WindowCommonData,
     workspace::{LapceWorkspace, LapceWorkspaceType, WorkspaceInfo},
+
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -132,7 +133,6 @@ pub struct CommonData {
     pub ui_line_height: Memo<f64>,
     pub dragging: RwSignal<Option<DragContent>>,
     pub config: ReadSignal<Arc<LapceConfig>>,
-    pub proxy_status: RwSignal<Option<ProxyStatus>>,
     pub mouse_hover_timer: RwSignal<TimerToken>,
     // the current focused view which will receive keyboard events
     pub keyboard_focus: RwSignal<Option<ViewId>>,
@@ -291,7 +291,6 @@ impl WindowTabData {
         let workbench_command = Listener::new_empty(cx);
         let internal_command = Listener::new_empty(cx);
         let keypress = cx.create_rw_signal(KeyPressData::new(cx, &config));
-        let proxy_status = cx.create_rw_signal(None);
 
         let proxy = new_proxy(
             workspace.clone(),
@@ -344,7 +343,6 @@ impl WindowTabData {
             dragging: cx.create_rw_signal(None),
             workbench_size: cx.create_rw_signal(Size::ZERO),
             config,
-            proxy_status,
             mouse_hover_timer: cx.create_rw_signal(TimerToken::INVALID),
             window_origin: cx.create_rw_signal(Point::ZERO),
             keyboard_focus: cx.create_rw_signal(None),
@@ -643,63 +641,57 @@ impl WindowTabData {
 
             // ==== Files / Folders ====
             OpenFolder => {
-                if !self.workspace.kind.is_remote() {
-                    let window_command = self.common.window_common.window_command;
-                    let mut options = FileDialogOptions::new().title("Choose a folder").select_directories();
-                    options = if let Some(parent) = self.workspace.path.as_ref().and_then(|x| x.parent()) {
-                        options.force_starting_directory(parent)
-                    } else {
-                        options
-                    };
-                    open_file(options, move |file| {
-                        if let Some(mut file) = file {
-                            let workspace = LapceWorkspace {
-                                kind: LapceWorkspaceType::Local,
-                                path: Some(if let Some(path) = file.path.pop() {
-                                    path
-                                } else {
-                                    tracing::error!("No path");
-                                    return;
-                                }),
-                                last_open: std::time::SystemTime::now()
-                                    .duration_since(std::time::UNIX_EPOCH)
-                                    .unwrap()
-                                    .as_secs(),
-                            };
-                            window_command
-                                .send(WindowCommand::SetWorkspace { workspace });
-                        }
-                    });
-                }
+                let window_command = self.common.window_common.window_command;
+                let mut options = FileDialogOptions::new().title("Choose a folder").select_directories();
+                options = if let Some(parent) = self.workspace.path.as_ref().and_then(|x| x.parent()) {
+                    options.force_starting_directory(parent)
+                } else {
+                    options
+                };
+                open_file(options, move |file| {
+                    if let Some(mut file) = file {
+                        let workspace = LapceWorkspace {
+                            kind: LapceWorkspaceType::Local,
+                            path: Some(if let Some(path) = file.path.pop() {
+                                path
+                            } else {
+                                tracing::error!("No path");
+                                return;
+                            }),
+                            last_open: std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .unwrap()
+                                .as_secs(),
+                        };
+                        window_command
+                            .send(WindowCommand::SetWorkspace { workspace });
+                    }
+                });
             }
             CloseFolder => {
-                if !self.workspace.kind.is_remote() {
-                    let window_command = self.common.window_common.window_command;
-                    let workspace = LapceWorkspace {
-                        kind: LapceWorkspaceType::Local,
-                        path: None,
-                        last_open: 0,
-                    };
-                    window_command.send(WindowCommand::SetWorkspace { workspace });
-                }
+                let window_command = self.common.window_common.window_command;
+                let workspace = LapceWorkspace {
+                    kind: LapceWorkspaceType::Local,
+                    path: None,
+                    last_open: 0,
+                };
+                window_command.send(WindowCommand::SetWorkspace { workspace });
             }
             OpenFile => {
-                if !self.workspace.kind.is_remote() {
-                    let internal_command = self.common.internal_command;
-                    let options = FileDialogOptions::new().title("Choose a file");
-                    open_file(options, move |file| {
-                        if let Some(mut file) = file {
-                            internal_command.send(InternalCommand::OpenFile {
-                                path: if let Some(path) = file.path.pop() {
-                                    path
-                                } else {
-                                    tracing::error!("No path");
-                                    return;
-                                },
-                            })
-                        }
-                    });
-                }
+                let internal_command = self.common.internal_command;
+                let options = FileDialogOptions::new().title("Choose a file");
+                open_file(options, move |file| {
+                    if let Some(mut file) = file {
+                        internal_command.send(InternalCommand::OpenFile {
+                            path: if let Some(path) = file.path.pop() {
+                                path
+                            } else {
+                                tracing::error!("No path");
+                                return;
+                            },
+                        })
+                    }
+                });
             }
             NewFile => {
                 self.main_split.new_file();
@@ -944,26 +936,6 @@ impl WindowTabData {
                         }
                     });
                 }
-            }
-
-            // ==== Remote ====
-            ConnectSshHost => {
-                self.palette.run(PaletteKind::SshHost);
-            }
-            #[cfg(windows)]
-            ConnectWslHost => {
-                self.palette.run(PaletteKind::WslHost);
-            }
-            DisconnectRemote => {
-                self.common.window_common.window_command.send(
-                    WindowCommand::SetWorkspace {
-                        workspace: LapceWorkspace {
-                            kind: LapceWorkspaceType::Local,
-                            path: None,
-                            last_open: 0,
-                        },
-                    },
-                );
             }
 
             // ==== Palette Commands ====
@@ -1672,9 +1644,6 @@ impl WindowTabData {
             InternalCommand::SaveScratchDoc2 { doc } => {
                 self.main_split.save_scratch_doc2(doc);
             }
-            InternalCommand::UpdateProxyStatus { status } => {
-                self.common.proxy_status.set(Some(status));
-            }
             InternalCommand::OpenVoltView { volt_id } => {
                 self.main_split.open_volt_view(volt_id);
             }
@@ -1711,9 +1680,6 @@ impl WindowTabData {
 
     fn handle_core_notification(&self, rpc: &CoreNotification) {
         match rpc {
-            CoreNotification::ProxyStatus { status } => {
-                self.common.proxy_status.set(Some(status.to_owned()));
-            }
             CoreNotification::CompletionResponse {
                 request_id,
                 input,

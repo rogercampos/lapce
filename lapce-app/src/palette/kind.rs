@@ -12,9 +12,6 @@ pub enum PaletteKind {
     Reference,
     DocumentSymbol,
     WorkspaceSymbol,
-    SshHost,
-    #[cfg(windows)]
-    WslHost,
     ColorTheme,
     IconTheme,
     Language,
@@ -30,19 +27,15 @@ impl PaletteKind {
             PaletteKind::Line => "/",
             PaletteKind::DocumentSymbol => "@",
             PaletteKind::WorkspaceSymbol => "#",
-            // PaletteKind::GlobalSearch => "?",
             PaletteKind::Workspace => ">",
             PaletteKind::Command => ":",
             PaletteKind::File
             | PaletteKind::Reference
-            | PaletteKind::SshHost
             | PaletteKind::ColorTheme
             | PaletteKind::IconTheme
             | PaletteKind::Language
             | PaletteKind::LineEnding
             | PaletteKind::HelpAndFile => "",
-            #[cfg(windows)]
-            PaletteKind::WslHost => "",
         }
     }
 
@@ -77,9 +70,6 @@ impl PaletteKind {
                 Some(LapceWorkbenchCommand::PaletteHelpAndFile)
             }
             PaletteKind::Reference => None, // InternalCommand::PaletteReferences
-            PaletteKind::SshHost => Some(LapceWorkbenchCommand::ConnectSshHost),
-            #[cfg(windows)]
-            PaletteKind::WslHost => Some(LapceWorkbenchCommand::ConnectWslHost),
             PaletteKind::ColorTheme => Some(LapceWorkbenchCommand::ChangeColorTheme),
             PaletteKind::IconTheme => Some(LapceWorkbenchCommand::ChangeIconTheme),
             PaletteKind::Language => Some(LapceWorkbenchCommand::ChangeFileLanguage),
@@ -89,24 +79,10 @@ impl PaletteKind {
         }
     }
 
-    // pub fn has_preview(&self) -> bool {
-    //     matches!(
-    //         self,
-    //         PaletteType::Line
-    //             | PaletteType::DocumentSymbol
-    //             | PaletteType::WorkspaceSymbol
-    //             | PaletteType::GlobalSearch
-    //             | PaletteType::Reference
-    //     )
-    // }
-
     pub fn get_input<'a>(&self, input: &'a str) -> &'a str {
         match self {
-            #[cfg(windows)]
-            PaletteKind::WslHost => input,
             PaletteKind::File
             | PaletteKind::Reference
-            | PaletteKind::SshHost
             | PaletteKind::ColorTheme
             | PaletteKind::IconTheme
             | PaletteKind::Language
@@ -118,7 +94,6 @@ impl PaletteKind {
             | PaletteKind::DocumentSymbol
             | PaletteKind::WorkspaceSymbol
             | PaletteKind::Line
-            // | PaletteType::GlobalSearch
              => input.get(1..).unwrap_or(""),
         }
     }

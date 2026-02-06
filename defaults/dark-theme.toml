@@ -105,12 +105,6 @@ dim-text = "#5C6370"
 "lapce.icon.active" = "$text"
 "lapce.icon.inactive" = "$dim-text"
 
-"lapce.remote.icon" = "$black"
-"lapce.remote.local" = "#4078F2"
-"lapce.remote.connected" = "#50A14F"
-"lapce.remote.connecting" = "#C18401"
-"lapce.remote.disconnected" = "#E45649"
-
 "lapce.plugin.name" = "#DDDDDD"
 "lapce.plugin.description" = "$text"
 "lapce.plugin.author" = "#B0B0B0"

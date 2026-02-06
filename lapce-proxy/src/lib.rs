@@ -6,33 +6,18 @@ pub mod dispatch;
 pub mod plugin;
 pub mod watcher;
 
-use std::{
-    io::{BufReader, stdin, stdout},
-    process::exit,
-    sync::Arc,
-    thread,
-};
+use std::process::exit;
 
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use clap::Parser;
-use dispatch::Dispatcher;
-use lapce_core::{directory::Directory, meta};
-use lapce_rpc::{
-    RpcMessage,
-    core::{CoreRpc, CoreRpcHandler},
-    file::PathObject,
-    proxy::{ProxyMessage, ProxyNotification, ProxyRpcHandler},
-    stdio::stdio_transport,
-};
+use lapce_core::meta;
+use lapce_rpc::file::PathObject;
 use tracing::error;
 
 #[derive(Parser)]
 #[clap(name = "Lapce-proxy")]
 #[clap(version = meta::VERSION)]
 struct Cli {
-    #[clap(short, long, action, hide = true)]
-    proxy: bool,
-
     /// Paths to file(s) and/or folder(s) to open.
     /// When path is a file (that exists or not),
     /// it accepts `path:line:column` syntax
@@ -44,101 +29,16 @@ struct Cli {
 
 pub fn mainloop() {
     let cli = Cli::parse();
-    if !cli.proxy {
-        if let Err(e) = cli::try_open_in_existing_process(&cli.paths) {
-            error!("failed to open path(s): {e}");
-        };
-        exit(1);
-    }
-    let core_rpc = CoreRpcHandler::new();
-    let proxy_rpc = ProxyRpcHandler::new();
-    let mut dispatcher = Dispatcher::new(core_rpc.clone(), proxy_rpc.clone());
-
-    let (writer_tx, writer_rx) = crossbeam_channel::unbounded();
-    let (reader_tx, reader_rx) = crossbeam_channel::unbounded();
-    stdio_transport(stdout(), writer_rx, BufReader::new(stdin()), reader_tx);
-
-    let local_core_rpc = core_rpc.clone();
-    let local_writer_tx = writer_tx.clone();
-    thread::spawn(move || {
-        for msg in local_core_rpc.rx() {
-            match msg {
-                CoreRpc::Request(id, rpc) => {
-                    if let Err(err) =
-                        local_writer_tx.send(RpcMessage::Request(id, rpc))
-                    {
-                        tracing::error!("{:?}", err);
-                    }
-                }
-                CoreRpc::Notification(rpc) => {
-                    if let Err(err) =
-                        local_writer_tx.send(RpcMessage::Notification(rpc))
-                    {
-                        tracing::error!("{:?}", err);
-                    }
-                }
-                CoreRpc::Shutdown => {
-                    return;
-                }
-            }
-        }
-    });
-
-    let local_proxy_rpc = proxy_rpc.clone();
-    let writer_tx = Arc::new(writer_tx);
-    thread::spawn(move || {
-        for msg in reader_rx {
-            match msg {
-                RpcMessage::Request(id, req) => {
-                    let writer_tx = writer_tx.clone();
-                    local_proxy_rpc.request_async(req, move |result| match result {
-                        Ok(resp) => {
-                            if let Err(err) =
-                                writer_tx.send(RpcMessage::Response(id, resp))
-                            {
-                                tracing::error!("{:?}", err);
-                            }
-                        }
-                        Err(e) => {
-                            if let Err(err) =
-                                writer_tx.send(RpcMessage::Error(id, e))
-                            {
-                                tracing::error!("{:?}", err);
-                            }
-                        }
-                    });
-                }
-                RpcMessage::Notification(n) => {
-                    local_proxy_rpc.notification(n);
-                }
-                RpcMessage::Response(id, resp) => {
-                    core_rpc.handle_response(id, Ok(resp));
-                }
-                RpcMessage::Error(id, err) => {
-                    core_rpc.handle_response(id, Err(err));
-                }
-            }
-        }
-        local_proxy_rpc.shutdown();
-    });
-
-    let local_proxy_rpc = proxy_rpc.clone();
-    std::thread::spawn(move || {
-        if let Err(err) = listen_local_socket(local_proxy_rpc) {
-            tracing::error!("{:?}", err);
-        }
-    });
-    if let Err(err) = register_lapce_path() {
-        tracing::error!("{:?}", err);
-    }
-
-    proxy_rpc.mainloop(&mut dispatcher);
+    if let Err(e) = cli::try_open_in_existing_process(&cli.paths) {
+        error!("failed to open path(s): {e}");
+    };
+    exit(1);
 }
 
 pub fn register_lapce_path() -> Result<()> {
     let exedir = std::env::current_exe()?
         .parent()
-        .ok_or(anyhow!("can't get parent dir of exe"))?
+        .ok_or(anyhow::anyhow!("can't get parent dir of exe"))?
         .canonicalize()?;
 
     let current_path = std::env::var("PATH")?;
@@ -155,33 +55,6 @@ pub fn register_lapce_path() -> Result<()> {
         std::env::set_var("PATH", paths);
     }
 
-    Ok(())
-}
-
-fn listen_local_socket(proxy_rpc: ProxyRpcHandler) -> Result<()> {
-    let local_socket = Directory::local_socket()
-        .ok_or_else(|| anyhow!("can't get local socket folder"))?;
-    if let Err(err) = std::fs::remove_file(&local_socket) {
-        tracing::error!("{:?}", err);
-    }
-    let socket =
-        interprocess::local_socket::LocalSocketListener::bind(local_socket)?;
-    for stream in socket.incoming().flatten() {
-        let mut reader = BufReader::new(stream);
-        let proxy_rpc = proxy_rpc.clone();
-        thread::spawn(move || -> Result<()> {
-            loop {
-                let msg: Option<ProxyMessage> =
-                    lapce_rpc::stdio::read_msg(&mut reader)?;
-                if let Some(RpcMessage::Notification(
-                    ProxyNotification::OpenPaths { paths },
-                )) = msg
-                {
-                    proxy_rpc.notification(ProxyNotification::OpenPaths { paths });
-                }
-            }
-        });
-    }
     Ok(())
 }
 

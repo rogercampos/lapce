@@ -27,7 +27,7 @@ use self::{
     svg::SvgStore,
     ui::UIConfig,
 };
-use crate::workspace::{LapceWorkspace, LapceWorkspaceType};
+use crate::workspace::LapceWorkspace;
 
 pub mod color;
 pub mod color_theme;
@@ -206,22 +206,15 @@ impl LapceConfig {
                 .unwrap_or_else(|_| config.clone());
         }
 
-        match workspace.kind {
-            LapceWorkspaceType::Local => {
-                if let Some(path) = workspace.path.as_ref() {
-                    let path = path.join("./.lapce/settings.toml");
-                    config = config::Config::builder()
-                        .add_source(config.clone())
-                        .add_source(
-                            config::File::from(path.as_path()).required(false),
-                        )
-                        .build()
-                        .unwrap_or_else(|_| config.clone());
-                }
-            }
-            LapceWorkspaceType::RemoteSSH(_) => {}
-            #[cfg(windows)]
-            LapceWorkspaceType::RemoteWSL(_) => {}
+        if let Some(path) = workspace.path.as_ref() {
+            let path = path.join("./.lapce/settings.toml");
+            config = config::Config::builder()
+                .add_source(config.clone())
+                .add_source(
+                    config::File::from(path.as_path()).required(false),
+                )
+                .build()
+                .unwrap_or_else(|_| config.clone());
         }
 
         config

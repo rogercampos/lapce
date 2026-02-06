@@ -6,7 +6,7 @@ use lsp_types::{Range, SymbolKind};
 use crate::{
     command::{LapceCommand, LapceWorkbenchCommand},
     editor::location::EditorLocation,
-    workspace::{LapceWorkspace, SshHost},
+    workspace::LapceWorkspace,
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -51,13 +51,6 @@ pub enum PaletteItemContent {
         name: String,
         container_name: Option<String>,
         location: EditorLocation,
-    },
-    SshHost {
-        host: SshHost,
-    },
-    #[cfg(windows)]
-    WslHost {
-        host: crate::workspace::WslHost,
     },
     ColorTheme {
         name: String,
