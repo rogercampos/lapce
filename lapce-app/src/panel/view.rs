@@ -90,9 +90,9 @@ impl PanelBuilder {
         }
     }
 
-    fn add_general(
+    fn add_general_with_header(
         mut self,
-        name: &'static str,
+        header: impl View + 'static,
         height: Option<PxPctAuto>,
         view: impl View + 'static,
         open: RwSignal<bool>,
@@ -100,7 +100,7 @@ impl PanelBuilder {
     ) -> Self {
         let position = self.position;
         let view = foldable_panel_section(
-            text(name).style(move |s| s.selectable(false)),
+            header,
             view,
             open,
             self.config,
@@ -127,6 +127,23 @@ impl PanelBuilder {
         self
     }
 
+    fn add_general(
+        self,
+        name: &'static str,
+        height: Option<PxPctAuto>,
+        view: impl View + 'static,
+        open: RwSignal<bool>,
+        style: impl Fn(Style) -> Style + 'static,
+    ) -> Self {
+        self.add_general_with_header(
+            text(name).style(move |s| s.selectable(false)),
+            height,
+            view,
+            open,
+            style,
+        )
+    }
+
     /// Add a view to the panel
     pub fn add(
         self,
@@ -135,6 +152,22 @@ impl PanelBuilder {
         open: RwSignal<bool>,
     ) -> Self {
         self.add_general(name, None, view, open, std::convert::identity)
+    }
+
+    /// Add a view to the panel with a custom header view
+    pub fn add_with_header(
+        self,
+        header: impl View + 'static,
+        view: impl View + 'static,
+        open: RwSignal<bool>,
+    ) -> Self {
+        self.add_general_with_header(
+            header,
+            None,
+            view,
+            open,
+            std::convert::identity,
+        )
     }
 
     /// Add a view to the panel with a custom style applied to the overall header+section-content

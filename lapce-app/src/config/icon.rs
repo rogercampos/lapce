@@ -28,6 +28,7 @@ impl LapceIcons {
     pub const FILE: &'static str = "file";
     pub const FILE_EXPLORER: &'static str = "file_explorer";
     pub const FILE_PICKER_UP: &'static str = "file_picker_up";
+    pub const LOCATE_FILE: &'static str = "locate_file";
 
     pub const IMAGE_LOADING: &'static str = "image_loading";
     pub const IMAGE_ERROR: &'static str = "image_error";
