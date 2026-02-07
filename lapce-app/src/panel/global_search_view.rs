@@ -283,7 +283,7 @@ fn search_result(
                                                         ),
                                                     ),
                                                     scroll_offset: None,
-                                                    ignore_unconfirmed: false,
+
                                                     same_editor_tab: false,
                                                 },
                                             },

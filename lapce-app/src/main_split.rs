@@ -271,14 +271,12 @@ impl Editors {
         cx: Scope,
         doc: Rc<Doc>,
         editor_tab_id: Option<EditorTabId>,
-        confirmed: Option<RwSignal<bool>>,
         common: Rc<CommonData>,
     ) -> EditorId {
         let editor = EditorData::new_doc(
             cx,
             doc,
             editor_tab_id,
-            confirmed,
             common,
         );
 
@@ -291,14 +289,12 @@ impl Editors {
         cx: Scope,
         doc: Rc<Doc>,
         editor_tab_id: Option<EditorTabId>,
-        confirmed: Option<RwSignal<bool>>,
         common: Rc<CommonData>,
     ) -> EditorData {
         let id = self.new_from_doc(
             cx,
             doc,
             editor_tab_id,
-            confirmed,
             common,
         );
         self.editor_untracked(id).unwrap()
@@ -310,10 +306,9 @@ impl Editors {
         editor_id: EditorId,
         cx: Scope,
         editor_tab_id: Option<EditorTabId>,
-        confirmed: Option<RwSignal<bool>>,
     ) -> Option<EditorId> {
         let editor = self.editor_untracked(editor_id)?;
-        let new_editor = editor.copy(cx, editor_tab_id, confirmed);
+        let new_editor = editor.copy(cx, editor_tab_id);
 
         Some(self.insert(new_editor))
     }
@@ -323,10 +318,9 @@ impl Editors {
         editor_id: EditorId,
         cx: Scope,
         editor_tab_id: Option<EditorTabId>,
-        confirmed: Option<RwSignal<bool>>,
     ) -> Option<EditorData> {
         let editor_id =
-            self.copy(editor_id, cx, editor_tab_id, confirmed)?;
+            self.copy(editor_id, cx, editor_tab_id)?;
         self.editor_untracked(editor_id)
     }
 
@@ -541,7 +535,7 @@ impl MainSplitData {
             path,
             position: Some(EditorPosition::Offset(offset)),
             scroll_offset: Some(scroll_offset),
-            ignore_unconfirmed: false,
+
             same_editor_tab: false,
         };
         locations.push_back(location.clone());
@@ -650,7 +644,6 @@ impl MainSplitData {
 
         let child = self.get_editor_tab_child(
             EditorTabChildSource::Editor { path, doc },
-            location.ignore_unconfirmed,
             location.same_editor_tab,
         );
         if let EditorTabChild::Editor(editor_id) = child {
@@ -689,7 +682,6 @@ impl MainSplitData {
     fn get_editor_tab_child(
         &self,
         source: EditorTabChildSource,
-        ignore_unconfirmed: bool,
         same_editor_tab: bool,
     ) -> EditorTabChild {
         let config = self.common.config.get_untracked();
@@ -774,121 +766,42 @@ impl MainSplitData {
                         editor_tab
                             .get_editor(editors, path)
                             .map(|(i, _)| i)
-                            .or_else(|| {
-                                if ignore_unconfirmed {
-                                    None
-                                } else {
-                                    editor_tab
-                                        .get_unconfirmed_editor_tab_child(
-                                            editors,
-                                        )
-                                        .map(|(i, _)| i)
-                                }
-                            })
                     }),
-                EditorTabChildSource::NewFileEditor => {
-                    if ignore_unconfirmed {
-                        None
-                    } else {
-                        active_editor_tab.with_untracked(|editor_tab| {
-                            editor_tab
-                                .get_unconfirmed_editor_tab_child(
-                                    editors,
-                                )
-                                .map(|(i, _)| i)
-                        })
-                    }
-                }
+                EditorTabChildSource::NewFileEditor => None,
                 EditorTabChildSource::Settings => {
-                    if let Some(index) =
-                        active_editor_tab.with_untracked(|editor_tab| {
-                            editor_tab.children.iter().position(|(_, _, child)| {
-                                matches!(child, EditorTabChild::Settings(_))
-                            })
+                    active_editor_tab.with_untracked(|editor_tab| {
+                        editor_tab.children.iter().position(|(_, _, child)| {
+                            matches!(child, EditorTabChild::Settings(_))
                         })
-                    {
-                        Some(index)
-                    } else if ignore_unconfirmed {
-                        None
-                    } else {
-                        active_editor_tab.with_untracked(|editor_tab| {
-                            editor_tab
-                                .get_unconfirmed_editor_tab_child(
-                                    editors,
-                                )
-                                .map(|(i, _)| i)
-                        })
-                    }
+                    })
                 }
                 EditorTabChildSource::ThemeColorSettings => {
-                    if let Some(index) =
-                        active_editor_tab.with_untracked(|editor_tab| {
-                            editor_tab.children.iter().position(|(_, _, child)| {
-                                matches!(
-                                    child,
-                                    EditorTabChild::ThemeColorSettings(_)
-                                )
-                            })
+                    active_editor_tab.with_untracked(|editor_tab| {
+                        editor_tab.children.iter().position(|(_, _, child)| {
+                            matches!(
+                                child,
+                                EditorTabChild::ThemeColorSettings(_)
+                            )
                         })
-                    {
-                        Some(index)
-                    } else if ignore_unconfirmed {
-                        None
-                    } else {
-                        active_editor_tab.with_untracked(|editor_tab| {
-                            editor_tab
-                                .get_unconfirmed_editor_tab_child(
-                                    editors,
-                                )
-                                .map(|(i, _)| i)
-                        })
-                    }
+                    })
                 }
                 EditorTabChildSource::Keymap => {
-                    if let Some(index) =
-                        active_editor_tab.with_untracked(|editor_tab| {
-                            editor_tab.children.iter().position(|(_, _, child)| {
-                                matches!(child, EditorTabChild::Keymap(_))
-                            })
+                    active_editor_tab.with_untracked(|editor_tab| {
+                        editor_tab.children.iter().position(|(_, _, child)| {
+                            matches!(child, EditorTabChild::Keymap(_))
                         })
-                    {
-                        Some(index)
-                    } else if ignore_unconfirmed {
-                        None
-                    } else {
-                        active_editor_tab.with_untracked(|editor_tab| {
-                            editor_tab
-                                .get_unconfirmed_editor_tab_child(
-                                    editors,
-                                )
-                                .map(|(i, _)| i)
-                        })
-                    }
+                    })
                 }
                 EditorTabChildSource::Volt(id) => {
-                    if let Some(index) =
-                        active_editor_tab.with_untracked(|editor_tab| {
-                            editor_tab.children.iter().position(|(_, _, child)| {
-                                if let EditorTabChild::Volt(_, current_id) = child {
-                                    current_id == id
-                                } else {
-                                    false
-                                }
-                            })
+                    active_editor_tab.with_untracked(|editor_tab| {
+                        editor_tab.children.iter().position(|(_, _, child)| {
+                            if let EditorTabChild::Volt(_, current_id) = child {
+                                current_id == id
+                            } else {
+                                false
+                            }
                         })
-                    {
-                        Some(index)
-                    } else if ignore_unconfirmed {
-                        None
-                    } else {
-                        active_editor_tab.with_untracked(|editor_tab| {
-                            editor_tab
-                                .get_unconfirmed_editor_tab_child(
-                                    editors,
-                                )
-                                .map(|(i, _)| i)
-                        })
-                    }
+                    })
                 }
             }
         };
@@ -901,7 +814,6 @@ impl MainSplitData {
                         self.scope,
                         doc.clone(),
                         Some(editor_tab_id),
-                        None,
                         self.common.clone(),
                     );
 
@@ -927,7 +839,6 @@ impl MainSplitData {
                         self.scope,
                         doc,
                         Some(editor_tab_id),
-                        None,
                         self.common.clone(),
                     );
 
@@ -1029,7 +940,7 @@ impl MainSplitData {
         }
 
         // check file exists in non active editor tabs
-        if config.editor.show_tab && !ignore_unconfirmed && !same_editor_tab {
+        if config.editor.show_tab && !same_editor_tab {
             for (editor_tab_id, editor_tab) in &editor_tabs {
                 if Some(*editor_tab_id) != active_editor_tab_id {
                     if let Some(index) =
@@ -1347,7 +1258,7 @@ impl MainSplitData {
             EditorTabChild::Editor(editor_id) => {
                 let editor_id = self
                     .editors
-                    .copy(*editor_id, cx, Some(editor_tab_id), None)
+                    .copy(*editor_id, cx, Some(editor_tab_id))
                     .unwrap();
 
                 EditorTabChild::Editor(editor_id)
@@ -2026,7 +1937,6 @@ impl MainSplitData {
                         path,
                         position,
                         scroll_offset: None,
-                        ignore_unconfirmed: true,
                         same_editor_tab: false,
                     };
                     self.jump_to_location(location, Some(edits));
@@ -2058,7 +1968,7 @@ impl MainSplitData {
             path,
             position: Some(position),
             scroll_offset: None,
-            ignore_unconfirmed: false,
+
             same_editor_tab: false,
         };
         self.jump_to_location(location, None);
@@ -2186,27 +2096,26 @@ impl MainSplitData {
     }
 
     pub fn open_volt_view(&self, id: VoltID) {
-        self.get_editor_tab_child(EditorTabChildSource::Volt(id), false, false);
+        self.get_editor_tab_child(EditorTabChildSource::Volt(id), false);
     }
 
     pub fn open_settings(&self) {
-        self.get_editor_tab_child(EditorTabChildSource::Settings, false, false);
+        self.get_editor_tab_child(EditorTabChildSource::Settings, false);
     }
 
     pub fn open_theme_color_settings(&self) {
         self.get_editor_tab_child(
             EditorTabChildSource::ThemeColorSettings,
             false,
-            false,
         );
     }
 
     pub fn open_keymap(&self) {
-        self.get_editor_tab_child(EditorTabChildSource::Keymap, false, false);
+        self.get_editor_tab_child(EditorTabChildSource::Keymap, false);
     }
 
     pub fn new_file(&self) -> EditorTabChild {
-        self.get_editor_tab_child(EditorTabChildSource::NewFileEditor, false, false)
+        self.get_editor_tab_child(EditorTabChildSource::NewFileEditor, false)
     }
 
     pub fn save_as(&self, doc: Rc<Doc>, path: PathBuf, action: impl Fn() + 'static) {

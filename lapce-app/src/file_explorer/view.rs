@@ -9,7 +9,6 @@ use floem::{
         ReadSignal, RwSignal, SignalGet, SignalUpdate, SignalWith, create_rw_signal,
     },
     style::{AlignItems, CursorStyle, Position, Style},
-    text::Style as FontStyle,
     views::{
         Container, Decorators, container, dyn_stack, label, scroll, stack, svg,
         virtual_stack,
@@ -504,15 +503,7 @@ fn open_editors_view(window_tab_data: Rc<WindowTabData>) -> impl View {
                 },
             ))
             .style(|s| s.padding_horiz(6.0)),
-            label(move || info.with(|info| info.name.clone())).style(move |s| {
-                s.apply_if(
-                    !info
-                        .with(|info| info.confirmed)
-                        .map(|confirmed| confirmed.get())
-                        .unwrap_or(true),
-                    |s| s.font_style(FontStyle::Italic),
-                )
-            }),
+            label(move || info.with(|info| info.name.clone())),
         ))
         .style(move |s| {
             let config = config.get();

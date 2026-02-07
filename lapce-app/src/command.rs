@@ -488,13 +488,9 @@ pub enum InternalCommand {
     OpenFile {
         path: PathBuf,
     },
-    OpenAndConfirmedFile {
-        path: PathBuf,
-    },
     OpenFileInNewTab {
         path: PathBuf,
     },
-    MakeConfirmed,
     ReloadFileExplorer,
     /// Test whether a file/directory can be created at that path
     TestPathCreation {

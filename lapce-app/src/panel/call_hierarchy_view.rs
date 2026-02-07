@@ -229,7 +229,7 @@ pub fn show_hierarchy_panel(
                                     path,
                                     position: Some(crate::editor::location::EditorPosition::Position(data.from_range.start)),
                                     scroll_offset: None,
-                                    ignore_unconfirmed: false,
+
                                     same_editor_tab: false,
                                 } });
                         }

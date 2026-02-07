@@ -11,7 +11,7 @@ use floem::{
     },
     reactive::{
         Memo, ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith,
-        create_memo, create_rw_signal,
+        create_memo,
     },
     views::editor::id::EditorId,
 };
@@ -141,7 +141,6 @@ pub struct EditorTabChildViewInfo {
     pub color: Option<Color>,
     pub name: String,
     pub path: Option<PathBuf>,
-    pub confirmed: Option<RwSignal<bool>>,
     pub is_pristine: bool,
 }
 
@@ -191,26 +190,25 @@ impl EditorTabChild {
                 let editor_data = editors.editor(editor_id);
                 let path = if let Some(editor_data) = editor_data {
                     let doc = editor_data.doc_signal().get();
-                    let (content, is_pristine, confirmed) = (
+                    let (content, is_pristine) = (
                         doc.content.get(),
                         doc.buffer.with(|b| b.is_pristine()),
-                        editor_data.confirmed,
                     );
                     match content {
                         DocContent::File { path, .. } => {
-                            Some((path, confirmed, is_pristine))
+                            Some((path, is_pristine))
                         }
                         DocContent::Local => None,
                         DocContent::History(_) => None,
                         DocContent::Scratch { name, .. } => {
-                            Some((PathBuf::from(name), confirmed, is_pristine))
+                            Some((PathBuf::from(name), is_pristine))
                         }
                     }
                 } else {
                     None
                 };
-                let (icon, color, name, confirmed, is_pristine) = match path {
-                    Some((ref path, confirmed, is_pritine)) => {
+                let (icon, color, name, is_pristine) = match path {
+                    Some((ref path, is_pristine)) => {
                         let (svg, color) = config.file_svg(path);
                         (
                             svg,
@@ -219,15 +217,13 @@ impl EditorTabChild {
                                 .unwrap_or_default()
                                 .to_string_lossy()
                                 .into_owned(),
-                            confirmed,
-                            is_pritine,
+                            is_pristine,
                         )
                     }
                     None => (
                         config.ui_svg(LapceIcons::FILE),
                         Some(config.color(LapceColor::LAPCE_ICON_ACTIVE)),
                         "local".to_string(),
-                        create_rw_signal(true),
                         true,
                     ),
                 };
@@ -236,7 +232,6 @@ impl EditorTabChild {
                     color,
                     name,
                     path: path.map(|opt| opt.0),
-                    confirmed: Some(confirmed),
                     is_pristine,
                 }
             }),
@@ -247,7 +242,7 @@ impl EditorTabChild {
                     color: Some(config.color(LapceColor::LAPCE_ICON_ACTIVE)),
                     name: "Settings".to_string(),
                     path: None,
-                    confirmed: None,
+
                     is_pristine: true,
                 }
             }),
@@ -258,7 +253,7 @@ impl EditorTabChild {
                     color: Some(config.color(LapceColor::LAPCE_ICON_ACTIVE)),
                     name: "Theme Colors".to_string(),
                     path: None,
-                    confirmed: None,
+
                     is_pristine: true,
                 }
             }),
@@ -269,7 +264,7 @@ impl EditorTabChild {
                     color: Some(config.color(LapceColor::LAPCE_ICON_ACTIVE)),
                     name: "Keyboard Shortcuts".to_string(),
                     path: None,
-                    confirmed: None,
+
                     is_pristine: true,
                 }
             }),
@@ -293,7 +288,7 @@ impl EditorTabChild {
                     color: Some(config.color(LapceColor::LAPCE_ICON_ACTIVE)),
                     name: display_name,
                     path: None,
-                    confirmed: None,
+
                     is_pristine: true,
                 }
             }),
@@ -334,26 +329,6 @@ impl EditorTabData {
                         return Some((i, editor));
                     }
                 }
-            }
-        }
-        None
-    }
-
-    pub fn get_unconfirmed_editor_tab_child(
-        &self,
-        editors: Editors,
-    ) -> Option<(usize, EditorTabChild)> {
-        for (i, (_, _, child)) in self.children.iter().enumerate() {
-            match child {
-                EditorTabChild::Editor(editor_id) => {
-                    if let Some(editor) = editors.editor_untracked(*editor_id) {
-                        let confirmed = editor.confirmed.get_untracked();
-                        if !confirmed {
-                            return Some((i, child.clone()));
-                        }
-                    }
-                }
-                _ => (),
             }
         }
         None

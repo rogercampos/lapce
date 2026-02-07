@@ -270,7 +270,7 @@ fn item_view(
         path,
         position: Some(position),
         scroll_offset: None,
-        ignore_unconfirmed: false,
+
         same_editor_tab: false,
     };
     stack((
@@ -346,7 +346,7 @@ fn related_view(
                         related.location.range.start,
                     )),
                     scroll_offset: None,
-                    ignore_unconfirmed: false,
+            
                     same_editor_tab: false,
                 };
                 let message = format!("{path}{}", related.message);

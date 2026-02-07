@@ -308,7 +308,7 @@ pub fn symbol_panel(
                                     path: path.to_path_buf(),
                                     position: Some(crate::editor::location::EditorPosition::Position(data.item.selection_range.start)),
                                     scroll_offset: None,
-                                    ignore_unconfirmed: false,
+
                                     same_editor_tab: false,
                                 } });
                     }

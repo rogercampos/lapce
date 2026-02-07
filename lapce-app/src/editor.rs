@@ -113,7 +113,6 @@ impl EditorInfo {
                     data.scope,
                     doc,
                     Some(editor_tab_id),
-                    None,
                     common,
                 );
                 editor.go_to_location(
@@ -124,7 +123,7 @@ impl EditorInfo {
                             self.scroll_offset.0,
                             self.scroll_offset.1,
                         )),
-                        ignore_unconfirmed: false,
+
                         same_editor_tab: false,
                     },
                     new_doc,
@@ -165,7 +164,6 @@ impl EditorInfo {
                     data.scope,
                     doc,
                     Some(editor_tab_id),
-                    None,
                     common,
                 )
             }
@@ -198,7 +196,6 @@ pub type SnippetIndex = Vec<(usize, (usize, usize))>;
 pub struct EditorData {
     pub scope: Scope,
     pub editor_tab_id: RwSignal<Option<EditorTabId>>,
-    pub confirmed: RwSignal<bool>,
     pub snippet: RwSignal<Option<SnippetIndex>>,
     pub inline_find: RwSignal<Option<InlineFindDirection>>,
     pub on_screen_find: RwSignal<OnScreenFind>,
@@ -222,16 +219,13 @@ impl EditorData {
         cx: Scope,
         editor: Editor,
         editor_tab_id: Option<EditorTabId>,
-        confirmed: Option<RwSignal<bool>>,
         common: Rc<CommonData>,
     ) -> Self {
         let cx = cx.create_child();
 
-        let confirmed = confirmed.unwrap_or_else(|| cx.create_rw_signal(false));
         EditorData {
             scope: cx,
             editor_tab_id: cx.create_rw_signal(editor_tab_id),
-            confirmed,
             snippet: cx.create_rw_signal(None),
             inline_find: cx.create_rw_signal(None),
             on_screen_find: cx.create_rw_signal(OnScreenFind {
@@ -268,7 +262,7 @@ impl EditorData {
         let cx = cx.create_child();
         let doc = Rc::new(Doc::new_local(cx, editors, common.clone()));
         let editor = doc.create_editor(cx, editor_id, true);
-        Self::new(cx, editor, None, None, common)
+        Self::new(cx, editor, None, common)
     }
 
     /// Create a new editor with a specific doc.  
@@ -277,11 +271,10 @@ impl EditorData {
         cx: Scope,
         doc: Rc<Doc>,
         editor_tab_id: Option<EditorTabId>,
-        confirmed: Option<RwSignal<bool>>,
         common: Rc<CommonData>,
     ) -> Self {
         let editor = doc.create_editor(cx, EditorId::next(), false);
-        Self::new(cx, editor, editor_tab_id, confirmed, common)
+        Self::new(cx, editor, editor_tab_id, common)
     }
 
     /// Swap out the document this editor is for
@@ -295,17 +288,13 @@ impl EditorData {
         &self,
         cx: Scope,
         editor_tab_id: Option<EditorTabId>,
-        confirmed: Option<RwSignal<bool>>,
     ) -> Self {
         let cx = cx.create_child();
-
-        let confirmed = confirmed.unwrap_or_else(|| cx.create_rw_signal(true));
 
         let editor = Self::new_doc(
             cx,
             self.doc(),
             editor_tab_id,
-            Some(confirmed),
             self.common.clone(),
         );
         editor.editor.cursor.set(self.editor.cursor.get_untracked());
@@ -1049,7 +1038,7 @@ impl EditorData {
                                     l.range.start,
                                 )),
                                 scroll_offset: None,
-                                ignore_unconfirmed: false,
+        
                                 same_editor_tab: false,
                             })
                             .collect(),
@@ -1111,7 +1100,7 @@ impl EditorData {
                                                         ),
                                                     ),
                                                     scroll_offset: None,
-                                                    ignore_unconfirmed: false,
+                            
                                                     same_editor_tab: false,
                                                 },
                                             ));
@@ -1131,7 +1120,7 @@ impl EditorData {
                                     location.range.start,
                                 )),
                                 scroll_offset: None,
-                                ignore_unconfirmed: false,
+        
                                 same_editor_tab: false,
                             }));
                         }
@@ -1882,9 +1871,6 @@ impl EditorData {
     }
 
     fn apply_deltas(&self, deltas: &[(Rope, RopeDelta, InvalLines)]) {
-        if !deltas.is_empty() && !self.confirmed.get_untracked() {
-            self.confirmed.set(true);
-        }
         for (_, delta, _) in deltas {
             // self.inactive_apply_delta(delta);
             self.update_snippet_offset(delta);
@@ -2465,7 +2451,7 @@ impl EditorData {
                                     path: path.clone(),
                                     position: Some(EditorPosition::Line(*line)),
                                     scroll_offset: None,
-                                    ignore_unconfirmed: true,
+
                                     same_editor_tab: false,
                                 },
                             },
@@ -2502,7 +2488,7 @@ impl EditorData {
                                             location.range.start,
                                         )),
                                         scroll_offset: None,
-                                        ignore_unconfirmed: true,
+    
                                         same_editor_tab: false,
                                     },
                                 },

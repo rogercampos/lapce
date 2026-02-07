@@ -750,7 +750,7 @@ impl WindowTabData {
                             path,
                             position: None,
                             scroll_offset: None,
-                            ignore_unconfirmed: false,
+
                             same_editor_tab: false,
                         },
                         None,
@@ -775,7 +775,7 @@ impl WindowTabData {
                             path,
                             position: None,
                             scroll_offset: None,
-                            ignore_unconfirmed: false,
+
                             same_editor_tab: false,
                         },
                         None,
@@ -1246,12 +1246,10 @@ impl WindowTabData {
                     let offset = editor_data.cursor().with_untracked(|c| c.offset());
                     let internal_command = self.common.internal_command;
 
-                    internal_command.send(InternalCommand::MakeConfirmed);
                     internal_command.send(InternalCommand::GoToLocation { location: EditorLocation {
                         path,
                         position: Some(EditorPosition::Offset(offset)),
                         scroll_offset: None,
-                        ignore_unconfirmed: false,
                         same_editor_tab: false,
                     } });
                 }
@@ -1268,40 +1266,16 @@ impl WindowTabData {
                 // TODO: implement logging panel, runtime log level change
                 debug!("{level}");
             }
-            InternalCommand::MakeConfirmed => {
-                if let Some(editor) = self.main_split.active_editor.get_untracked() {
-                    editor.confirmed.set(true);
-                }
-            }
             InternalCommand::OpenFile { path } => {
                 self.main_split.jump_to_location(
                     EditorLocation {
                         path,
                         position: None,
                         scroll_offset: None,
-                        ignore_unconfirmed: true,
                         same_editor_tab: false,
                     },
                     None,
                 );
-                if let Some(editor) = self.main_split.active_editor.get_untracked() {
-                    editor.confirmed.set(true);
-                }
-            }
-            InternalCommand::OpenAndConfirmedFile { path } => {
-                self.main_split.jump_to_location(
-                    EditorLocation {
-                        path,
-                        position: None,
-                        scroll_offset: None,
-                        ignore_unconfirmed: false,
-                        same_editor_tab: false,
-                    },
-                    None,
-                );
-                if let Some(editor) = self.main_split.active_editor.get_untracked() {
-                    editor.confirmed.set(true);
-                }
             }
             InternalCommand::OpenFileInNewTab { path } => {
                 self.main_split.jump_to_location(
@@ -1309,7 +1283,6 @@ impl WindowTabData {
                         path,
                         position: None,
                         scroll_offset: None,
-                        ignore_unconfirmed: true,
                         same_editor_tab: false,
                     },
                     None,
@@ -2220,9 +2193,6 @@ impl WindowTabData {
                         path: file.path.clone(),
                         position,
                         scroll_offset: None,
-                        // Create a new editor for the file, so we don't change any current unconfirmed
-                        // editor
-                        ignore_unconfirmed: true,
                         same_editor_tab: false,
                     },
                 });

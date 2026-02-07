@@ -725,7 +725,7 @@ impl PaletteData {
                                         s.location.range.start,
                                     )),
                                     scroll_offset: None,
-                                    ignore_unconfirmed: false,
+
                                     same_editor_tab: false,
                                 },
                                 container_name: s.container_name.clone(),
@@ -880,7 +880,7 @@ impl PaletteData {
                                 path,
                                 position: Some(EditorPosition::Line(*line)),
                                 scroll_offset: None,
-                                ignore_unconfirmed: false,
+
                                 same_editor_tab: false,
                             },
                         },
@@ -926,7 +926,7 @@ impl PaletteData {
                                     range.start,
                                 )),
                                 scroll_offset: None,
-                                ignore_unconfirmed: false,
+
                                 same_editor_tab: false,
                             },
                         },
@@ -1021,7 +1021,7 @@ impl PaletteData {
                             path,
                             position: Some(EditorPosition::Line(*line)),
                             scroll_offset: None,
-                            ignore_unconfirmed: false,
+
                             same_editor_tab: false,
                         },
                         false,
@@ -1065,7 +1065,7 @@ impl PaletteData {
                             path,
                             position: Some(EditorPosition::Position(range.start)),
                             scroll_offset: None,
-                            ignore_unconfirmed: false,
+
                             same_editor_tab: false,
                         },
                         false,

@@ -39,7 +39,7 @@ use floem::{
         Line,
         style_helpers::{self, auto, fr},
     },
-    text::{Style as FontStyle, Weight},
+    text::Weight,
     unit::PxPctAuto,
     views::{
         Decorators, VirtualVector, clip, container, drag_resize_window_area,
@@ -507,9 +507,6 @@ impl AppData {
                         path: file.path.clone(),
                         position,
                         scroll_offset: None,
-                        // Create a new editor for the file, so we don't change any current unconfirmed
-                        // editor
-                        ignore_unconfirmed: true,
                         same_editor_tab: false,
                     },
                 });
@@ -689,7 +686,7 @@ impl AppData {
                                     path: file.path.clone(),
                                     position: None,
                                     scroll_offset: None,
-                                    ignore_unconfirmed: false,
+
                                     same_editor_tab: false,
                                 },
                             },
@@ -745,7 +742,6 @@ fn editor_tab_header(
         RwSignal<Rect>,
         EditorTabChild,
     )| {
-        let local_child = child.clone();
         let child_for_close = child.clone();
         let child_for_mouse_close = child.clone();
         let child_for_mouse_close_2 = child.clone();
@@ -779,14 +775,7 @@ fn editor_tab_header(
 
             let tab_content = tooltip(
                 label(move || info.with(|info| info.name.clone())).style(move |s| {
-                    s.apply_if(
-                        !info
-                            .with(|info| info.confirmed)
-                            .map(|confirmed| confirmed.get())
-                            .unwrap_or(true),
-                        |s| s.font_style(FontStyle::Italic),
-                    )
-                    .selectable(false)
+                    s.selectable(false)
                 }),
                 move || {
                     tooltip_tip(
@@ -881,22 +870,10 @@ fn editor_tab_header(
             })
         };
 
-        let confirmed = match local_child {
-            EditorTabChild::Editor(editor_id) => {
-                editors.editor_untracked(editor_id).map(|e| e.confirmed)
-            }
-            _ => None,
-        };
-
         let header_content_size = create_rw_signal(Size::ZERO);
         let drag_over_left: RwSignal<Option<bool>> = create_rw_signal(None);
         stack((
             child_view
-                .on_double_click_stop(move |_| {
-                    if let Some(confirmed) = confirmed {
-                        confirmed.set(true);
-                    }
-                })
                 .on_event(EventListener::PointerDown, move |event| {
                     if let Event::PointerDown(pointer_event) = event {
                         if pointer_event.button.is_auxiliary() {

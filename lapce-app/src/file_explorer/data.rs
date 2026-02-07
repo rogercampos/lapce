@@ -464,15 +464,12 @@ impl FileExplorerData {
             EventPropagation::Continue
         } else if config.get_untracked().core.file_explorer_double_click {
             self.common.internal_command.send(
-                InternalCommand::OpenAndConfirmedFile {
+                InternalCommand::OpenFile {
                     path: path.to_path_buf(),
                 },
             );
             EventPropagation::Stop
         } else {
-            self.common
-                .internal_command
-                .send(InternalCommand::MakeConfirmed);
             EventPropagation::Stop
         }
     }
