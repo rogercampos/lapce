@@ -17,7 +17,6 @@ use crate::{
     command::{LapceCommand, LapceWorkbenchCommand, WindowCommand},
     config::{LapceConfig, color::LapceColor, icon::LapceIcons},
     listener::Listener,
-    main_split::MainSplitData,
     update::ReleaseInfo,
     window_tab::WindowTabData,
     workspace::LapceWorkspace,
@@ -75,45 +74,10 @@ fn left(
 
 fn middle(
     workspace: Arc<LapceWorkspace>,
-    main_split: MainSplitData,
     workbench_command: Listener<LapceWorkbenchCommand>,
     config: ReadSignal<Arc<LapceConfig>>,
 ) -> impl View {
     let local_workspace = workspace.clone();
-    let can_jump_backward = {
-        let main_split = main_split.clone();
-        create_memo(move |_| main_split.can_jump_location_backward(true))
-    };
-    let can_jump_forward =
-        create_memo(move |_| main_split.can_jump_location_forward(true));
-
-    let jump_backward = move || {
-        clickable_icon(
-            || LapceIcons::LOCATION_BACKWARD,
-            move || {
-                workbench_command.send(LapceWorkbenchCommand::JumpLocationBackward);
-            },
-            || false,
-            move || !can_jump_backward.get(),
-            || "Jump Backward",
-            config,
-        )
-        .style(move |s| s.margin_horiz(6.0))
-    };
-    let jump_forward = move || {
-        clickable_icon(
-            || LapceIcons::LOCATION_FORWARD,
-            move || {
-                workbench_command.send(LapceWorkbenchCommand::JumpLocationForward);
-            },
-            || false,
-            move || !can_jump_forward.get(),
-            || "Jump Forward",
-            config,
-        )
-        .style(move |s| s.margin_right(6.0))
-    };
-
     let open_folder = move || {
         not_clickable_icon(
             || LapceIcons::PALETTE_MENU,
@@ -137,8 +101,6 @@ fn middle(
         stack((
             drag_window_area(empty())
                 .style(|s| s.height_pct(100.0).flex_basis(0.0).flex_grow(1.0)),
-            jump_backward(),
-            jump_forward(),
         ))
         .style(|s| {
             s.flex_basis(0)
@@ -335,7 +297,6 @@ pub fn title(window_tab_data: Rc<WindowTabData>) -> impl View {
         ),
         middle(
             workspace,
-            window_tab_data.main_split.clone(),
             workbench_command,
             config,
         ),

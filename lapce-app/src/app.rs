@@ -714,7 +714,6 @@ fn editor_tab_header(
     let focus = window_tab_data.common.focus;
     let config = window_tab_data.common.config;
     let internal_command = window_tab_data.common.internal_command;
-    let workbench_command = window_tab_data.common.workbench_command;
     let editor_tab_id =
         editor_tab.with_untracked(|editor_tab| editor_tab.editor_tab_id);
 
@@ -1058,61 +1057,6 @@ fn editor_tab_header(
     let content_size = create_rw_signal(Size::ZERO);
     let scroll_offset = create_rw_signal(Rect::ZERO);
     stack((
-        stack({
-            let size = create_rw_signal(Size::ZERO);
-            (
-                clip(empty().style(move |s| {
-                    let config = config.get();
-                    s.absolute()
-                        .height_full()
-                        .width(size.get().width as f32)
-                        .background(config.color(LapceColor::PANEL_BACKGROUND))
-                        .box_shadow_blur(3.0)
-                        .box_shadow_color(
-                            config.color(LapceColor::LAPCE_DROPDOWN_SHADOW),
-                        )
-                }))
-                .style(move |s| {
-                    let scroll_offset = scroll_offset.get();
-                    s.absolute()
-                        .width(size.get().width as f32 + 30.0)
-                        .height_full()
-                        .apply_if(scroll_offset.x0 == 0.0, |s| s.hide())
-                }),
-                stack((
-                    clickable_icon(
-                        || LapceIcons::TAB_PREVIOUS,
-                        move || {
-                            workbench_command
-                                .send(LapceWorkbenchCommand::PreviousEditorTab);
-                        },
-                        || false,
-                        || false,
-                        || "Previous Tab",
-                        config,
-                    )
-                    .style(|s| s.margin_horiz(6.0).margin_vert(7.0)),
-                    clickable_icon(
-                        || LapceIcons::TAB_NEXT,
-                        move || {
-                            workbench_command
-                                .send(LapceWorkbenchCommand::NextEditorTab);
-                        },
-                        || false,
-                        || false,
-                        || "Next Tab",
-                        config,
-                    )
-                    .style(|s| s.margin_right(6.0)),
-                ))
-                .on_resize(move |rect| {
-                    size.set(rect.size());
-                })
-                .debug_name("Next/Previoius Tab Buttons")
-                .style(move |s| s.items_center()),
-            )
-        })
-        .style(|s| s.flex_shrink(0.)),
         container(
             scroll({
                 dyn_stack(items, key, view_fn)
