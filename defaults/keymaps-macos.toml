@@ -184,7 +184,7 @@ key = "meta+k f"
 command = "close_folder"
 
 [[keymaps]]
-key = "meta+\\"
+key = "meta+shift+d"
 command = "split_vertical"
 
 # --------------------------------- Rich Language Editing ----------------------------
@@ -281,8 +281,7 @@ command = "goto_definition"
 
 [[keymaps]]
 key = "meta+d"
-command = "duplicate_line_down"
-mode = "i"
+command = "split_horizontal"
 
 [[keymaps]]
 key = "alt+up"
