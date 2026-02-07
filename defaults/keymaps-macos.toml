@@ -7,11 +7,11 @@ key = "Meta+Shift+W"
 # --------------------------------- General --------------------------------------------
 
 [[keymaps]]
-key = "meta+p"
+key = "meta+shift+o"
 command = "palette"
 
 [[keymaps]]
-key = "meta+shift+p"
+key = "meta+shift+a"
 command = "palette.command"
 
 [[keymaps]]
@@ -105,18 +105,13 @@ command = "line_end"
 mode = "i"
 
 [[keymaps]]
-key = "meta+shift+k"
+key = "meta+backspace"
 command = "delete_line"
 mode = "i"
 
 [[keymaps]]
 key = "alt+backspace"
 command = "delete_word_backward"
-mode = "i"
-
-[[keymaps]]
-key = "meta+backspace"
-command = "delete_to_beginning_of_line"
 mode = "i"
 
 [[keymaps]]
@@ -207,13 +202,13 @@ command = "get_signature"
 mode = "i"
 
 [[keymaps]]
-key = "meta+."
+key = "alt+enter"
 command = "show_code_actions"
 
 # --------------------------------- Display -------------------------------------------
 
 [[keymaps]]
-key = "meta+shift+e"
+key = "meta+1"
 command = "toggle_file_explorer_focus"
 
 [[keymaps]]
@@ -225,7 +220,7 @@ key = "meta+shift+x"
 command = "toggle_plugin_focus"
 
 [[keymaps]]
-key = "meta+shift+m"
+key = "meta+6"
 command = "toggle_problem_focus"
 
 # ------------------------------------ Navigation -------------------------------------
@@ -256,7 +251,7 @@ when = "!list_focus"
 mode = "i"
 
 [[keymaps]]
-key = "meta+shift+o"
+key = "meta+alt+o"
 command = "palette.symbol"
 
 [[keymaps]]
@@ -264,5 +259,49 @@ key = "meta+t"
 command = "palette.workspace_symbol"
 
 [[keymaps]]
-key = "ctrl+g"
+key = "meta+l"
 command = "palette.line"
+
+# --------------------------------- RubyMine overrides ---------------------------------
+
+[[keymaps]]
+key = "meta+alt+left"
+command = "jump_location_backward"
+
+[[keymaps]]
+key = "meta+alt+right"
+command = "jump_location_forward"
+
+[[keymaps]]
+key = "meta+b"
+command = "goto_definition"
+
+[[keymaps]]
+key = "meta+d"
+command = "duplicate_line_down"
+mode = "i"
+
+[[keymaps]]
+key = "alt+up"
+command = "select_next_syntax_item"
+
+[[keymaps]]
+key = "alt+down"
+command = "select_previous_syntax_item"
+
+# Unbind common ctrl+- / ctrl+shift+- (replaced by meta+alt+left/right above)
+[[keymaps]]
+key = "ctrl+-"
+command = "-jump_location_backward"
+
+[[keymaps]]
+key = "ctrl+shift+-"
+command = "-jump_location_forward"
+
+[[keymaps]]
+key = "meta+shift+]"
+command = "next_editor_tab"
+
+[[keymaps]]
+key = "meta+shift+["
+command = "previous_editor_tab"

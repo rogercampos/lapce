@@ -7,11 +7,11 @@ key = "Alt+F4"
 # --------------------------------- General --------------------------------------------
 
 [[keymaps]]
-key = "ctrl+p"
+key = "ctrl+shift+n"
 command = "palette"
 
 [[keymaps]]
-key = "ctrl+shift+p"
+key = "ctrl+shift+a"
 command = "palette.command"
 
 [[keymaps]]
@@ -195,13 +195,13 @@ command = "get_signature"
 mode = "i"
 
 [[keymaps]]
-key = "ctrl+."
+key = "alt+enter"
 command = "show_code_actions"
 
 # --------------------------------- Display -------------------------------------------
 
 [[keymaps]]
-key = "ctrl+shift+e"
+key = "alt+1"
 command = "toggle_file_explorer_focus"
 
 [[keymaps]]
@@ -213,7 +213,7 @@ key = "ctrl+shift+x"
 command = "toggle_plugin_focus"
 
 [[keymaps]]
-key = "ctrl+shift+m"
+key = "alt+6"
 command = "toggle_problem_focus"
 
 # ------------------------------------ Navigation -------------------------------------
@@ -249,7 +249,7 @@ when = "!list_focus"
 mode = "n"
 
 [[keymaps]]
-key = "ctrl+shift+o"
+key = "ctrl+alt+shift+n"
 command = "palette.symbol"
 
 [[keymaps]]
@@ -259,3 +259,39 @@ command = "palette.workspace_symbol"
 [[keymaps]]
 key = "ctrl+g"
 command = "palette.line"
+
+# --------------------------------- RubyMine overrides ---------------------------------
+
+[[keymaps]]
+key = "ctrl+b"
+command = "goto_definition"
+
+[[keymaps]]
+key = "ctrl+d"
+command = "duplicate_line_down"
+mode = "i"
+
+[[keymaps]]
+key = "ctrl+alt+left"
+command = "jump_location_backward"
+
+[[keymaps]]
+key = "ctrl+alt+right"
+command = "jump_location_forward"
+
+# Unbind common ctrl+- / ctrl+shift+- (replaced by ctrl+alt+left/right above)
+[[keymaps]]
+key = "ctrl+-"
+command = "-jump_location_backward"
+
+[[keymaps]]
+key = "ctrl+shift+-"
+command = "-jump_location_forward"
+
+[[keymaps]]
+key = "alt+right"
+command = "next_editor_tab"
+
+[[keymaps]]
+key = "alt+left"
+command = "previous_editor_tab"

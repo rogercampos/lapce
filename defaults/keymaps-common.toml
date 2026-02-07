@@ -11,12 +11,12 @@ command = "palette.command"
 # --------------------------------- Basic editing ---------------------------------------
 
 [[keymaps]]
-key = "alt+up"
+key = "alt+shift+up"
 command = "move_line_up"
 mode = "i"
 
 [[keymaps]]
-key = "alt+down"
+key = "alt+shift+down"
 command = "move_line_down"
 mode = "i"
 
@@ -303,15 +303,6 @@ command = "insert_new_line"
 when = "!list_focus"
 mode = "i"
 
-[[keymaps]]
-key = "alt+shift+up"
-command = "duplicate_line_up"
-mode = "i"
-
-[[keymaps]]
-key = "alt+shift+down"
-command = "duplicate_line_down"
-mode = "i"
 
 # ------------------------------------ Modal -----------------------------------------
 
