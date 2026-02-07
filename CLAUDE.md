@@ -169,3 +169,11 @@ User config stored at `Directory::config_directory()` (macOS: `~/Library/Applica
 - **Panel toggle commands:** `toggle_*_focus` shows the panel AND focuses it. `toggle_*_visual` only toggles visibility. The keyboard shortcuts use the `_focus` variants.
 
 - **Strum enum serialization:** Command names in keybindings must match the `#[strum(serialize = "...")]` attribute exactly. The command palette uses `get_message()` for display names.
+
+- **Adding new UI icons:** Requires two steps: (1) add a constant to `lapce-app/src/config/icon.rs` (e.g. `pub const FOO: &'static str = "foo";`), (2) map it in `defaults/icon-theme.toml` under `[icon-theme.ui]` (e.g. `"foo" = "some-codicon.svg"`). Available SVGs are in `icons/codicons/` (~158 files) and `icons/lapce/`.
+
+- **PanelBuilder custom headers:** `PanelBuilder` in `panel/view.rs` has `add()` (string header) and `add_with_header()` (custom View header). Both delegate to `add_general_with_header()` → `foldable_panel_section()`. Buttons inside the header using `clickable_icon()` won't trigger fold because `on_click_stop` stops propagation.
+
+- **Active editor file path:** `window_tab_data.main_split.active_editor` is a `Memo<Option<EditorData>>`. Get file path: `editor_data.doc().content.get_untracked()` then match `DocContent::File { path, .. }`. Use `get_untracked()` in handlers, not view code.
+
+- **File explorer reveal:** `FileExplorerData::reveal_in_file_tree(path)` in `file_explorer/data.rs` opens ancestor dirs, reads unread dirs async, scrolls to file, and selects it. The `RevealInPanel` workbench command wraps this with panel show/open logic.

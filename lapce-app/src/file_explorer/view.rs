@@ -11,8 +11,8 @@ use floem::{
     style::{AlignItems, CursorStyle, Position, Style},
     text::Style as FontStyle,
     views::{
-        Container, Decorators, container, dyn_stack, label, scroll, stack, svg,
-        virtual_stack,
+        Container, Decorators, container, dyn_stack, h_stack, label, scroll, stack,
+        svg, text, virtual_stack,
     },
 };
 use lapce_core::selection::Selection;
@@ -24,6 +24,7 @@ use crate::{
     app::clickable_icon,
     command::InternalCommand,
     config::{LapceConfig, color::LapceColor, icon::LapceIcons},
+    doc::DocContent,
     editor_tab::{EditorTabChild, EditorTabData},
     panel::{
         data::PanelSection, kind::PanelKind, position::PanelPosition,
@@ -62,6 +63,34 @@ pub fn file_explorer_panel(
 ) -> impl View {
     let config = window_tab_data.common.config;
     let data = window_tab_data.file_explorer.clone();
+
+    let file_explorer_header = {
+        let wtd = window_tab_data.clone();
+        h_stack((
+            text("File Explorer")
+                .style(move |s| s.selectable(false).flex_grow(1.0)),
+            clickable_icon(
+                || LapceIcons::LOCATE_FILE,
+                move || {
+                    if let Some(editor_data) =
+                        wtd.main_split.active_editor.get_untracked()
+                    {
+                        if let DocContent::File { path, .. } =
+                            editor_data.doc().content.get_untracked()
+                        {
+                            wtd.file_explorer.reveal_in_file_tree(path);
+                        }
+                    }
+                },
+                || false,
+                || false,
+                || "Reveal Active File in File Explorer",
+                config,
+            ),
+        ))
+        .style(|s| s.width_full().align_items(AlignItems::Center))
+    };
+
     PanelBuilder::new(config, position)
         .add_height_style(
             "Open Editors",
@@ -71,8 +100,8 @@ pub fn file_explorer_panel(
             window_tab_data.panel.section_open(PanelSection::OpenEditor),
             move |s| s.apply_if(!config.get().ui.open_editors_visible, |s| s.hide()),
         )
-        .add(
-            "File Explorer",
+        .add_with_header(
+            file_explorer_header,
             container(file_explorer_view(data))
                 .style(|s| s.size_full()),
             window_tab_data
