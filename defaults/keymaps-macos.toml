@@ -156,6 +156,10 @@ key = "meta+shift+enter"
 command = "new_line_above"
 mode = "i"
 
+[[keymaps]]
+key = "meta+shift+c"
+command = "copy_file_path"
+
 # ------------------------------------ File Management --------------------------------
 
 [[keymaps]]

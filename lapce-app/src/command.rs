@@ -199,6 +199,10 @@ pub enum LapceWorkbenchCommand {
     #[strum(message = "Reveal Active File in File Explorer")]
     RevealActiveFileInFileExplorer,
 
+    #[strum(serialize = "copy_file_path")]
+    #[strum(message = "Copy File Path")]
+    CopyFilePath,
+
     #[strum(serialize = "open_ui_inspector")]
     #[strum(message = "Open Internal UI Inspector")]
     OpenUIInspector,

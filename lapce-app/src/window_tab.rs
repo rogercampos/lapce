@@ -20,13 +20,14 @@ use floem::{
         WriteSignal, use_context,
     },
     text::{Attrs, AttrsList, FamilyOwned, LineHeightValue, TextLayout},
+    views::editor::text::SystemClipboard,
 };
 use im::HashMap;
 use indexmap::IndexMap;
 use itertools::Itertools;
 use lapce_core::{
     command::FocusCommand, cursor::CursorAffinity, directory::Directory, meta,
-    mode::Mode, register::Register,
+    mode::Mode, register::{Clipboard, Register},
 };
 use lapce_rpc::{
     RpcError,
@@ -713,6 +714,14 @@ impl WindowTabData {
                 }
             }
 
+            CopyFilePath => {
+                if let Some(editor_data) = self.main_split.active_editor.get_untracked() {
+                    if let DocContent::File { path, .. } = editor_data.doc().content.get_untracked() {
+                        let mut clipboard = SystemClipboard::new();
+                        clipboard.put_string(path.to_string_lossy());
+                    }
+                }
+            }
             SaveAll => {
                 self.main_split.editors.with_editors_untracked(|editors| {
                     let mut paths = HashSet::new();
