@@ -119,7 +119,7 @@ Floating modals (popups that appear centered over the editor with a dimmed backd
 pub fn exclusive_popup(config, visibility, on_close, content) -> impl View
 ```
 
-It provides: dimmed overlay (`Position::Absolute`, full-screen), click-outside-to-close (outer container captures `PointerDown`), inner content prevents propagation, centered with flex.
+It provides: dimmed overlay (`Position::Absolute`, full-screen), click-outside-to-close (outer container captures `PointerDown`), inner content prevents propagation, centered with flex. The content is responsible for its own styling (padding, border, background, border-radius) — `exclusive_popup` only handles the overlay and centering.
 
 ### Adding a new floating popup
 
