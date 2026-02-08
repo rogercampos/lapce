@@ -438,6 +438,10 @@ pub enum LapceWorkbenchCommand {
     #[strum(serialize = "restart_to_update")]
     RestartToUpdate,
 
+    #[strum(serialize = "recent_files")]
+    #[strum(message = "Recent Files")]
+    RecentFiles,
+
     #[strum(serialize = "show_about")]
     #[strum(message = "About Lapce")]
     ShowAbout,
@@ -632,6 +636,9 @@ pub enum InternalCommand {
     },
     CallHierarchyIncoming {
         item_id: ViewId,
+    },
+    TrackRecentFile {
+        path: PathBuf,
     },
 }
 

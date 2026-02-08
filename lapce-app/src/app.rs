@@ -68,7 +68,7 @@ use serde::{Deserialize, Serialize};
 use tracing_subscriber::{filter::Targets, reload::Handle};
 
 use crate::{
-    about, alert,
+    about, alert, recent_files,
     code_action::CodeActionStatus,
     command::{
         CommandKind, InternalCommand, LapceCommand, LapceWorkbenchCommand,
@@ -3062,6 +3062,7 @@ fn window_tab(window_tab_data: Rc<WindowTabData>) -> impl View {
         code_action(window_tab_data.clone()),
         rename(window_tab_data.clone()),
         palette(window_tab_data.clone()),
+        recent_files::recent_files_popup(window_tab_data.clone()),
         about::about_popup(window_tab_data.clone()),
         alert::alert_box(window_tab_data.alert_data.clone()),
     ))
