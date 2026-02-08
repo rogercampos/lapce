@@ -7,9 +7,9 @@ use floem::{
     reactive::{
         Memo, ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith,
     },
-    style::{CursorStyle, Display, Style},
+    style::{CursorStyle, Display},
     views::{
-        Decorators, VirtualVector, container, label, scroll, stack, svg, text,
+        Decorators, VirtualVector, container, scroll, stack, text,
         scroll::PropagatePointerWheel, virtual_stack,
     },
 };
@@ -325,51 +325,14 @@ fn recent_files_content(window_tab_data: Rc<WindowTabData>) -> impl View {
                         file_display_parts(&path, &all_items, &workspace_path);
                     let data = data.clone();
                     let icon_path = path.clone();
-                    let style_path = path.clone();
-                    let has_dir_hint = !dir_hint.is_empty();
 
                     container(
-                        stack((
-                            svg(move || {
-                                config.get().file_svg(&icon_path).0
-                            })
-                            .style(move |s| {
-                                let config = config.get();
-                                let size = config.ui.icon_size() as f32;
-                                let color =
-                                    config.file_svg(&style_path).1;
-                                s.min_width(size)
-                                    .size(size, size)
-                                    .margin_right(6.0)
-                                    .apply_opt(color, Style::color)
-                            }),
-                            label(move || filename.clone()).style(
-                                move |s| {
-                                    s.text_ellipsis().color(
-                                        config.get().color(
-                                            LapceColor::EDITOR_FOREGROUND,
-                                        ),
-                                    )
-                                },
-                            ),
-                            label(move || dir_hint.clone()).style(
-                                move |s| {
-                                    s.margin_left(8.0)
-                                        .text_ellipsis()
-                                        .min_width(0.0)
-                                        .flex_shrink(1.0)
-                                        .color(config.get().color(
-                                            LapceColor::EDITOR_DIM,
-                                        ))
-                                        .apply_if(!has_dir_hint, |s| {
-                                            s.display(Display::None)
-                                        })
-                                },
-                            ),
-                        ))
-                        .style(|s| {
-                            s.flex_row().items_center().min_width(0.0)
-                        }),
+                        crate::file_icon::file_icon_with_name(
+                            config,
+                            move || icon_path.clone(),
+                            move || filename.clone(),
+                            move || dir_hint.clone(),
+                        ),
                     )
                     .on_click_stop(move |_| {
                         data.index.set(i);

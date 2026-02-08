@@ -4,8 +4,8 @@ use floem::{
     View,
     event::EventListener,
     reactive::{ReadSignal, SignalGet, SignalUpdate},
-    style::{CursorStyle, Style},
-    views::{Decorators, container, label, scroll, stack, svg, virtual_stack},
+    style::CursorStyle,
+    views::{Decorators, container, scroll, stack, svg, virtual_stack},
 };
 use lapce_xi_rope::find::CaseMatching;
 
@@ -129,8 +129,6 @@ fn search_result(
                     } else {
                         path
                     };
-                    let style_path = path.clone();
-
                     let file_name = path
                         .file_name()
                         .and_then(|s| s.to_str())
@@ -165,32 +163,12 @@ fn search_result(
                                         config.color(LapceColor::LAPCE_ICON_ACTIVE),
                                     )
                             }),
-                            svg(move || config.get().file_svg(&path).0).style(
-                                move |s| {
-                                    let config = config.get();
-                                    let size = config.ui.icon_size() as f32;
-                                    let color = config.file_svg(&style_path).1;
-                                    s.margin_right(6.0)
-                                        .size(size, size)
-                                        .min_size(size, size)
-                                        .apply_opt(color, Style::color)
-                                },
+                            crate::file_icon::file_icon_with_name(
+                                config,
+                                move || path.clone(),
+                                move || file_name.clone(),
+                                move || folder.clone(),
                             ),
-                            stack((
-                                label(move || file_name.clone()).style(|s| {
-                                    s.margin_right(6.0)
-                                        .max_width_pct(100.0)
-                                        .text_ellipsis()
-                                }),
-                                label(move || folder.clone()).style(move |s| {
-                                    s.color(
-                                        config.get().color(LapceColor::EDITOR_DIM),
-                                    )
-                                    .min_width(0.0)
-                                    .text_ellipsis()
-                                }),
-                            ))
-                            .style(move |s| s.min_width(0.0).items_center()),
                         ))
                         .on_click_stop(move |_| {
                             expanded.update(|expanded| *expanded = !*expanded);

@@ -78,6 +78,7 @@ All state uses **Floem reactive signals** (`RwSignal<T>`, `ReadSignal<T>`, `Memo
 | `panel/` | Panel system: `kind.rs` (types), `data.rs` (state/order), `view.rs` (rendering) |
 | `palette/` | Command palette: `kind.rs` (modes with prefix symbols like `/`, `@`, `:`) |
 | `recent_files.rs` | Recent files popup: data, KeyPressFocus impl, view (uses `exclusive_popup`) |
+| `file_icon.rs` | Reusable file icon + filename view helpers (`file_icon_svg`, `file_icon_with_name`) |
 | `keypress/` | Keybinding resolution and condition evaluation |
 
 ## Command System
@@ -210,8 +211,39 @@ User config stored at `Directory::config_directory()` (macOS: `~/Library/Applica
 
 - **Adding new UI icons:** Requires two steps: (1) add a constant to `lapce-app/src/config/icon.rs` (e.g. `pub const FOO: &'static str = "foo";`), (2) map it in `defaults/icon-theme.toml` under `[icon-theme.ui]` (e.g. `"foo" = "some-codicon.svg"`). Available SVGs are in `icons/codicons/` (~158 files) and `icons/lapce/`.
 
+- **Adding new file type icons:** Add colored SVG to `icons/filetypes/`, map the extension in `defaults/icon-theme.toml` under `[icon-theme.extension]` (e.g. `"rb" = "ruby.svg"`). For filename matches (e.g. `Dockerfile`), use `[icon-theme.filename]`. The SVGs are embedded at compile time via `FILETYPES_ICONS_DIR` in `config/svg.rs`. The fallback chain in `files_svg()` is: plugin icon theme on-disk → default theme embedded filetypes → generic file.svg.
+
 - **PanelBuilder custom headers:** `PanelBuilder` in `panel/view.rs` has `add()` (string header) and `add_with_header()` (custom View header). Both delegate to `add_general_with_header()` → `foldable_panel_section()`. Buttons inside the header using `clickable_icon()` won't trigger fold because `on_click_stop` stops propagation.
 
 - **Active editor file path:** `window_tab_data.main_split.active_editor` is a `Memo<Option<EditorData>>`. Get file path: `editor_data.doc().content.get_untracked()` then match `DocContent::File { path, .. }`. Use `get_untracked()` in handlers, not view code.
 
 - **File explorer reveal:** `FileExplorerData::reveal_in_file_tree(path)` in `file_explorer/data.rs` opens ancestor dirs, reads unread dirs async, scrolls to file, and selects it. The `RevealInPanel` workbench command wraps this with panel show/open logic.
+
+## Reusable View Helpers
+
+### File Icon Views (`file_icon.rs`)
+
+Two helpers for rendering file-type icons consistently across the UI:
+
+- `file_icon_svg(config, path_fn)` — renders a file type SVG icon with correct size and color from `config.file_svg()`. Returns an `impl View`.
+- `file_icon_with_name(config, path_fn, name_fn, folder_fn)` — renders icon + filename label + dimmed folder hint as a horizontal stack. Used in recent files, global search results, and problem panel.
+
+These should be used whenever showing a file entry with its icon. Call sites that are too specialized (file palette with fuzzy highlighting, editor tabs with unsaved indicators) render icons directly.
+
+## Icon Theme System
+
+Three embedded icon directories in `config/svg.rs`:
+- `icons/codicons/` — 158 monochrome SVGs from VS Code codicons (UI icons)
+- `icons/lapce/` — Lapce logo only
+- `icons/filetypes/` — ~24 colored SVGs for file type differentiation (devicon, MIT licensed)
+
+Icon resolution for files (`config.rs` → `files_svg()`):
+1. Active icon theme's `extension`/`filename` mappings → loads SVG from plugin directory on disk
+2. Default theme's `extension`/`filename` mappings → loads SVG from embedded `FILETYPES_ICONS_DIR`
+3. Falls back to generic `file.svg` with editor icon color
+
+Icon resolution for UI elements (`config.rs` → `ui_svg()`):
+1. Active icon theme's `ui` map → loads from plugin directory on disk
+2. Default theme's `ui` map → loads from embedded `CODICONS_ICONS_DIR`
+
+When `use_editor_color` is `None` or `false` in the icon theme, colored SVGs retain their original colors. This is important for file type icons.

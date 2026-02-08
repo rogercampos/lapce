@@ -7,7 +7,7 @@ use floem::{
         ReadSignal, SignalGet, SignalUpdate, SignalWith, create_effect,
         create_rw_signal,
     },
-    style::{CursorStyle, Style},
+    style::CursorStyle,
     views::{Decorators, container, dyn_stack, label, scroll, stack, svg},
 };
 use lsp_types::{DiagnosticRelatedInformation, DiagnosticSeverity};
@@ -134,8 +134,6 @@ fn file_view(
     } else {
         path
     };
-    let style_path = path.clone();
-
     let icon = match severity {
         DiagnosticSeverity::ERROR => LapceIcons::ERROR,
         _ => LapceIcons::WARNING,
@@ -209,14 +207,10 @@ fn file_view(
                         .size(size, size)
                         .color(config.color(LapceColor::LAPCE_ICON_ACTIVE))
                 }),
-                svg(move || config.get().file_svg(&path).0).style(move |s| {
-                    let config = config.get();
-                    let size = config.ui.icon_size() as f32;
-                    let color = config.file_svg(&style_path).1;
-                    s.min_width(size)
-                        .size(size, size)
-                        .apply_opt(color, Style::color)
-                }),
+                crate::file_icon::file_icon_svg(
+                    config,
+                    move || path.clone(),
+                ),
                 label(|| " ".to_string()).style(move |s| s.selectable(false)),
             ))
             .style(|s| s.absolute().items_center().margin_left(10.0)),
