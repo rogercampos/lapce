@@ -600,6 +600,16 @@ impl LapceConfig {
                 None
             };
             (svg, color)
+        } else if let Some(icon_name) = DEFAULT_ICON_THEME_ICON_CONFIG
+            .resolve_path_to_icon(paths)
+            .and_then(|p| {
+                p.file_name()
+                    .and_then(|s| s.to_str())
+                    .map(|s| s.to_string())
+            })
+        {
+            let svg = self.svg_store.write().get_default_svg(&icon_name);
+            (svg, None)
         } else {
             (
                 self.ui_svg(LapceIcons::FILE),
