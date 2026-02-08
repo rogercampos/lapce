@@ -6,7 +6,7 @@ use floem::{
     text::{Attrs, AttrsList, FamilyOwned, TextLayout},
 };
 use im::HashMap;
-use lapce_core::{buffer::rope_text::RopeText, mode::Mode};
+use lapce_core::buffer::rope_text::RopeText;
 use serde::{Deserialize, Serialize};
 
 use super::EditorData;
@@ -93,7 +93,7 @@ impl View for EditorGutterView {
 
         let kind_is_normal =
             self.editor.kind.with_untracked(|kind| kind.is_normal());
-        let (offset, mode) = cursor.with_untracked(|c| (c.offset(), c.get_mode()));
+        let offset = cursor.with_untracked(|c| c.offset());
         let config = config.get_untracked();
         let line_height = config.editor.line_height() as f64;
         let last_line = self.editor.editor.last_line();
@@ -115,10 +115,7 @@ impl View for EditorGutterView {
                 .clone()
                 .color(config.color(LapceColor::EDITOR_FOREGROUND)),
         );
-        let show_relative = config.core.modal
-            && config.editor.modal_mode_relative_line_numbers
-            && mode != Mode::Insert
-            && kind_is_normal;
+        let show_relative = false;
 
         screen_lines.with_untracked(|screen_lines| {
             for (line, y) in screen_lines.iter_lines_y() {

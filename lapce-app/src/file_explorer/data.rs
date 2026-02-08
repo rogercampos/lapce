@@ -19,7 +19,6 @@ use floem::{
 use globset::Glob;
 use lapce_core::{
     command::{EditCommand, FocusCommand},
-    mode::Mode,
     register::Clipboard,
 };
 use lapce_rpc::{
@@ -59,10 +58,6 @@ pub struct FileExplorerData {
 }
 
 impl KeyPressFocus for FileExplorerData {
-    fn get_mode(&self) -> Mode {
-        Mode::Insert
-    }
-
     fn check_condition(&self, condition: Condition) -> bool {
         self.naming.with_untracked(Naming::is_accepting_input)
             && condition == Condition::ModalFocus

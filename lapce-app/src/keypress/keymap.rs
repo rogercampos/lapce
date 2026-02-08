@@ -4,8 +4,6 @@ use floem::{
     keyboard::{Key, KeyCode, Modifiers, NamedKey, PhysicalKey},
     pointer::{MouseButton, PointerButton},
 };
-use lapce_core::mode::Modes;
-
 #[derive(PartialEq, Debug, Clone)]
 pub enum KeymapMatch {
     Full(String),
@@ -17,7 +15,6 @@ pub enum KeymapMatch {
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub struct KeyMap {
     pub key: Vec<KeyMapPress>,
-    pub modes: Modes,
     pub when: Option<String>,
     pub command: String,
 }

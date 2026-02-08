@@ -8,7 +8,7 @@ use floem::{
     style::{CursorStyle, Display, Position},
     views::{Decorators, container, label, stack, svg},
 };
-use lapce_core::{command::FocusCommand, meta::VERSION, mode::Mode};
+use lapce_core::{command::FocusCommand, meta::VERSION};
 
 use crate::{
     command::{CommandExecuted, CommandKind},
@@ -53,10 +53,6 @@ impl AboutData {
 }
 
 impl KeyPressFocus for AboutData {
-    fn get_mode(&self) -> Mode {
-        Mode::Insert
-    }
-
     fn check_condition(
         &self,
         _condition: crate::keypress::condition::Condition,

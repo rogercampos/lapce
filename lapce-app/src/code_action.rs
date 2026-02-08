@@ -5,7 +5,7 @@ use floem::{
     peniko::kurbo::Rect,
     reactive::{RwSignal, Scope, SignalGet, SignalUpdate},
 };
-use lapce_core::{command::FocusCommand, mode::Mode, movement::Movement};
+use lapce_core::{command::FocusCommand, movement::Movement};
 use lapce_rpc::plugin::PluginId;
 use lsp_types::CodeActionOrCommand;
 
@@ -53,10 +53,6 @@ pub struct CodeActionData {
 }
 
 impl KeyPressFocus for CodeActionData {
-    fn get_mode(&self) -> Mode {
-        Mode::Insert
-    }
-
     fn check_condition(&self, condition: Condition) -> bool {
         matches!(condition, Condition::ListFocus | Condition::ModalFocus)
     }

@@ -27,7 +27,7 @@ use indexmap::IndexMap;
 use itertools::Itertools;
 use lapce_core::{
     command::FocusCommand, cursor::CursorAffinity, directory::Directory, meta,
-    mode::Mode, register::{Clipboard, Register},
+    register::{Clipboard, Register},
 };
 use lapce_rpc::{
     RpcError,
@@ -189,10 +189,6 @@ impl std::fmt::Debug for WindowTabData {
 }
 
 impl KeyPressFocus for WindowTabData {
-    fn get_mode(&self) -> Mode {
-        Mode::Normal
-    }
-
     fn check_condition(&self, condition: Condition) -> bool {
         match condition {
             Condition::PanelFocus => {
@@ -651,16 +647,6 @@ impl WindowTabData {
     ) {
         use LapceWorkbenchCommand::*;
         match cmd {
-            // ==== Modal ====
-            EnableModal => {
-                let internal_command = self.common.internal_command;
-                internal_command.send(InternalCommand::SetModal { modal: true });
-            }
-            DisableModal => {
-                let internal_command = self.common.internal_command;
-                internal_command.send(InternalCommand::SetModal { modal: false });
-            }
-
             // ==== Files / Folders ====
             OpenFolder => {
                 let window_command = self.common.window_common.window_command;
@@ -1615,13 +1601,6 @@ impl WindowTabData {
                     self.set_config.set(new_config);
                 }
             }
-            InternalCommand::SetModal { modal } => {
-                LapceConfig::update_file(
-                    "core",
-                    "modal",
-                    toml_edit::Value::from(modal),
-                );
-            }
             InternalCommand::OpenWebUri { uri } => {
                 if !uri.is_empty() {
                     match open::that(&uri) {
@@ -2082,24 +2061,6 @@ impl WindowTabData {
         }
 
         origin
-    }
-
-    /// Get the mode for the current editor
-    pub fn mode(&self) -> Mode {
-        if self.common.config.get().core.modal {
-            let mode = if self.common.focus.get() == Focus::Workbench {
-                self.main_split
-                    .active_editor
-                    .get()
-                    .map(|editor| editor.cursor().with(|c| c.get_mode()))
-            } else {
-                None
-            };
-
-            mode.unwrap_or(Mode::Normal)
-        } else {
-            Mode::Insert
-        }
     }
 
     pub fn toggle_panel_visual(&self, kind: PanelKind) {

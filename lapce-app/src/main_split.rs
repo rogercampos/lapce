@@ -897,9 +897,7 @@ impl MainSplitData {
                             .with_untracked(|content| content.path() == Some(path));
                         if !same_path {
                             editor.update_doc(doc.clone());
-                            editor.cursor().set(Cursor::origin(
-                                self.common.config.with_untracked(|c| c.core.modal),
-                            ));
+                            editor.cursor().set(Cursor::origin(false));
                         }
                     }
 

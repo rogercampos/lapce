@@ -8,11 +8,10 @@ use floem::{
     reactive::{
         Memo, ReadSignal, RwSignal, SignalGet, SignalUpdate, SignalWith, create_memo,
     },
-    style::{AlignItems, CursorStyle, Display},
+    style::{CursorStyle, Display},
     views::{Decorators, dyn_stack, label, stack, svg},
 };
 use indexmap::IndexMap;
-use lapce_core::mode::{Mode, VisualMode};
 use lsp_types::{DiagnosticSeverity, ProgressToken};
 
 use crate::{
@@ -51,53 +50,9 @@ pub fn status(
         (errors, warnings)
     });
     let progresses = window_tab_data.progresses;
-    let mode = create_memo(move |_| window_tab_data.mode());
 
     stack((
         stack((
-            label(move || match mode.get() {
-                Mode::Normal | Mode::Terminal => "Normal".to_string(),
-                Mode::Insert => "Insert".to_string(),
-                Mode::Visual(mode) => match mode {
-                    VisualMode::Normal => "Visual".to_string(),
-                    VisualMode::Linewise => "Visual Line".to_string(),
-                    VisualMode::Blockwise => "Visual Block".to_string(),
-                },
-            })
-            .style(move |s| {
-                let config = config.get();
-                let display = if config.core.modal {
-                    Display::Flex
-                } else {
-                    Display::None
-                };
-
-                let (bg, fg) = match mode.get() {
-                    Mode::Normal | Mode::Terminal => (
-                        LapceColor::STATUS_MODAL_NORMAL_BACKGROUND,
-                        LapceColor::STATUS_MODAL_NORMAL_FOREGROUND,
-                    ),
-                    Mode::Insert => (
-                        LapceColor::STATUS_MODAL_INSERT_BACKGROUND,
-                        LapceColor::STATUS_MODAL_INSERT_FOREGROUND,
-                    ),
-                    Mode::Visual(_) => (
-                        LapceColor::STATUS_MODAL_VISUAL_BACKGROUND,
-                        LapceColor::STATUS_MODAL_VISUAL_FOREGROUND,
-                    ),
-                };
-
-                let bg = config.color(bg);
-                let fg = config.color(fg);
-
-                s.display(display)
-                    .padding_horiz(10.0)
-                    .color(fg)
-                    .background(bg)
-                    .height_pct(100.0)
-                    .align_items(Some(AlignItems::Center))
-                    .selectable(false)
-            }),
             {
                 let panel = panel.clone();
                 stack((

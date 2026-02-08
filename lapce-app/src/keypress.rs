@@ -14,7 +14,7 @@ use floem::{
 };
 use indexmap::IndexMap;
 use itertools::Itertools;
-use lapce_core::mode::{Mode, Modes};
+use lapce_core::mode::Mode;
 
 pub use self::press::KeyPress;
 use self::{
@@ -40,7 +40,9 @@ const DEFAULT_KEYMAPS_NONMACOS: &str =
     include_str!("../../defaults/keymaps-nonmacos.toml");
 
 pub trait KeyPressFocus: std::fmt::Debug {
-    fn get_mode(&self) -> Mode;
+    fn get_mode(&self) -> Mode {
+        Mode::Insert
+    }
 
     fn check_condition(&self, condition: Condition) -> bool;
 
@@ -62,10 +64,6 @@ pub trait KeyPressFocus: std::fmt::Debug {
     fn receive_char(&self, c: &str);
 }
 impl KeyPressFocus for () {
-    fn get_mode(&self) -> Mode {
-        Mode::Normal
-    }
-
     fn check_condition(&self, _condition: Condition) -> bool {
         false
     }
@@ -90,10 +88,6 @@ impl KeyPressFocus for () {
     fn receive_char(&self, _c: &str) {}
 }
 impl KeyPressFocus for Box<dyn KeyPressFocus> {
-    fn get_mode(&self) -> Mode {
-        (**self).get_mode()
-    }
-
     fn check_condition(&self, condition: Condition) -> bool {
         (**self).check_condition(condition)
     }
@@ -146,7 +140,6 @@ pub struct KeyPressHandle {
 
 #[derive(Clone, Debug)]
 pub struct KeyPressData {
-    count: RwSignal<Option<usize>>,
     pending_keypress: RwSignal<(Vec<KeyPress>, Option<SystemTime>)>,
     pub commands: Rc<IndexMap<String, LapceCommand>>,
     pub keymaps: Rc<IndexMap<Vec<KeyMapPress>, Vec<KeyMap>>>,
@@ -160,7 +153,6 @@ impl KeyPressData {
         let (keymaps, command_keymaps) =
             Self::get_keymaps(config).unwrap_or((IndexMap::new(), IndexMap::new()));
         let mut keypress = Self {
-            count: cx.create_rw_signal(None),
             pending_keypress: cx.create_rw_signal((Vec::new(), None)),
             keymaps: Rc::new(keymaps),
             command_keymaps: Rc::new(command_keymaps),
@@ -204,40 +196,6 @@ impl KeyPressData {
 
         self.commands_with_keymap = Rc::new(commands_with_keymap);
         self.commands_without_keymap = Rc::new(commands_without_keymap);
-    }
-
-    fn handle_count<T: KeyPressFocus + ?Sized>(
-        &self,
-        focus: &T,
-        keypress: &KeyPress,
-    ) -> bool {
-        if focus.expect_char() {
-            return false;
-        }
-        let mode = focus.get_mode();
-        if mode == Mode::Insert {
-            return false;
-        }
-
-        if !keypress.mods.is_empty() {
-            return false;
-        }
-
-        if let KeyInput::Keyboard {
-            logical: Key::Character(c),
-            ..
-        } = &keypress.key
-        {
-            if let Ok(n) = c.parse::<usize>() {
-                if self.count.with_untracked(|count| count.is_some()) || n > 0 {
-                    self.count
-                        .update(|count| *count = Some(count.unwrap_or(0) * 10 + n));
-                    return true;
-                }
-            }
-        }
-
-        false
     }
 
     fn run_command<T: KeyPressFocus + ?Sized>(
@@ -297,14 +255,6 @@ impl KeyPressData {
             }
         };
 
-        if self.handle_count(focus, &keypress) {
-            return KeyPressHandle {
-                handled: true,
-                keymatch: KeymapMatch::None,
-                keypress,
-            };
-        }
-
         self.pending_keypress
             .update(|(pending_keypress, last_time)| {
                 let last_time = last_time.replace(SystemTime::now());
@@ -342,8 +292,7 @@ impl KeyPressData {
                         last_time.take();
                         pending_keypress.clear();
                     });
-                let count = self.count.try_update(|count| count.take()).unwrap();
-                let handled = self.run_command(command, count, mods, focus)
+                let handled = self.run_command(command, None, mods, focus)
                     == CommandExecuted::Yes;
                 return KeyPressHandle {
                     handled,
@@ -357,9 +306,8 @@ impl KeyPressData {
                         last_time.take();
                         pending_keypress.clear();
                     });
-                let count = self.count.try_update(|count| count.take()).unwrap();
                 for command in commands {
-                    let handled = self.run_command(command, count, mods, focus)
+                    let handled = self.run_command(command, None, mods, focus)
                         == CommandExecuted::Yes;
                     if handled {
                         return KeyPressHandle {
@@ -391,7 +339,7 @@ impl KeyPressData {
                         pending_keypress.clear();
                         last_time.take();
                     });
-                if focus.get_mode() == Mode::Insert {
+                {
                     let old_keypress = keypress.clone();
                     let mut keypress = keypress.clone();
                     keypress.mods.set(Modifiers::SHIFT, false);
@@ -430,7 +378,6 @@ impl KeyPressData {
             if let KeyInput::Keyboard { logical, .. } = &keypress.key {
                 if let Key::Character(c) = logical {
                     focus.receive_char(c);
-                    self.count.set(None);
                     return KeyPressHandle {
                         handled: true,
                         keymatch,
@@ -438,7 +385,6 @@ impl KeyPressData {
                     };
                 } else if let Key::Named(NamedKey::Space) = logical {
                     focus.receive_char(" ");
-                    self.count.set(None);
                     return KeyPressHandle {
                         handled: true,
                         keymatch,
@@ -487,11 +433,6 @@ impl KeyPressData {
                         if check.expect_char()
                             && keypresses.len() == 1
                             && keypresses[0].is_char()
-                        {
-                            return false;
-                        }
-                        if !keymap.modes.is_empty()
-                            && !keymap.modes.contains(check.get_mode().into())
                         {
                             return false;
                         }
@@ -564,16 +505,14 @@ impl KeyPressData {
 
     #[allow(clippy::type_complexity)]
     fn get_keymaps(
-        config: &LapceConfig,
+        _config: &LapceConfig,
     ) -> Result<(
         IndexMap<Vec<KeyMapPress>, Vec<KeyMap>>,
         IndexMap<String, Vec<KeyMap>>,
     )> {
-        let is_modal = config.core.modal;
-
         let mut loader = KeyMapLoader::new();
 
-        if let Err(err) = loader.load_from_str(DEFAULT_KEYMAPS_COMMON, is_modal) {
+        if let Err(err) = loader.load_from_str(DEFAULT_KEYMAPS_COMMON) {
             trace!(TraceLevel::ERROR, "Failed to load common defaults: {err}");
         }
 
@@ -583,13 +522,13 @@ impl KeyPressData {
             DEFAULT_KEYMAPS_NONMACOS
         };
 
-        if let Err(err) = loader.load_from_str(os_keymaps, is_modal) {
+        if let Err(err) = loader.load_from_str(os_keymaps) {
             trace!(TraceLevel::ERROR, "Failed to load OS defaults: {err}");
         }
 
         if let Some(path) = Self::file() {
             if let Ok(content) = std::fs::read_to_string(&path) {
-                if let Err(err) = loader.load_from_str(&content, is_modal) {
+                if let Err(err) = loader.load_from_str(&content) {
                     trace!(TraceLevel::WARN, "Failed to load from {path:?}: {err}");
                 }
             }
@@ -620,7 +559,6 @@ impl KeyPressData {
                 == value.get("command").and_then(|c| c.as_str())
                 && keymap.when.as_deref()
                     == value.get("when").and_then(|w| w.as_str())
-                && keymap.modes == get_modes(value)
                 && Some(keymap.key.clone())
                     == value
                         .get("key")
@@ -643,14 +581,6 @@ impl KeyPressData {
                 "command",
                 toml_edit::value(toml_edit::Value::from(keymap.command.clone())),
             );
-            if !keymap.modes.is_empty() {
-                table.insert(
-                    "mode",
-                    toml_edit::value(toml_edit::Value::from(
-                        keymap.modes.to_string(),
-                    )),
-                );
-            }
             if let Some(when) = keymap.when.as_ref() {
                 table.insert(
                     "when",
@@ -692,10 +622,3 @@ impl KeyPressData {
     }
 }
 
-fn get_modes(toml_keymap: &toml_edit::Table) -> Modes {
-    toml_keymap
-        .get("mode")
-        .and_then(|v| v.as_str())
-        .map(Modes::parse)
-        .unwrap_or_else(Modes::empty)
-}

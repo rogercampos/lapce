@@ -23,7 +23,7 @@ use floem::{
     },
 };
 use indexmap::IndexMap;
-use lapce_core::{command::EditCommand, directory::Directory, mode::Mode};
+use lapce_core::{command::EditCommand, directory::Directory};
 use lapce_proxy::plugin::{download_volt, volt_icon, wasi::find_all_volts};
 use lapce_rpc::{
     core::{CoreNotification, CoreRpcHandler},
@@ -110,10 +110,6 @@ pub struct PluginData {
 }
 
 impl KeyPressFocus for PluginData {
-    fn get_mode(&self) -> Mode {
-        Mode::Insert
-    }
-
     fn check_condition(&self, condition: Condition) -> bool {
         matches!(condition, Condition::PanelFocus)
     }

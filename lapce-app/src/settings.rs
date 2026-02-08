@@ -20,7 +20,7 @@ use floem::{
 };
 use indexmap::IndexMap;
 use inflector::Inflector;
-use lapce_core::{buffer::rope_text::RopeText, mode::Mode};
+use lapce_core::buffer::rope_text::RopeText;
 use lapce_rpc::plugin::VoltID;
 use lapce_xi_rope::Rope;
 use serde::Serialize;
@@ -93,10 +93,6 @@ struct SettingsData {
 }
 
 impl KeyPressFocus for SettingsData {
-    fn get_mode(&self) -> lapce_core::mode::Mode {
-        Mode::Insert
-    }
-
     fn check_condition(
         &self,
         _condition: crate::keypress::condition::Condition,

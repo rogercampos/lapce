@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     rc::Rc,
     str::FromStr,
     sync::Arc,
@@ -35,10 +35,9 @@ use lapce_core::{
         InvalLines,
         rope_text::{RopeText, RopeTextVal},
     },
-    command::{EditCommand, FocusCommand, MotionModeCommand, ScrollCommand},
+    command::{EditCommand, FocusCommand, ScrollCommand},
     cursor::{Cursor, CursorMode},
     editor::EditType,
-    mode::{Mode, MotionMode},
     rope_text_pos::RopeTextPosition,
     selection::{InsertDrift, SelRegion, Selection},
 };
@@ -49,7 +48,6 @@ use lsp_types::{
     HoverContents, InlayHint, InlayHintLabel, InlineCompletionTriggerKind, Location,
     MarkedString, MarkupKind, Range, TextEdit,
 };
-use nucleo::Utf32Str;
 use serde::{Deserialize, Serialize};
 use view::StickyHeaderInfo;
 
@@ -391,8 +389,7 @@ impl EditorData {
     fn run_edit_command(&self, cmd: &EditCommand) -> CommandExecuted {
         let doc = self.doc();
         let text = self.editor.rope_text();
-        let is_local = doc.content.with_untracked(|content| content.is_local());
-        let modal = self.editor.es.with_untracked(|s| s.modal()) && !is_local;
+        let modal = false;
         let smart_tab = self
             .common
             .config
@@ -401,12 +398,7 @@ impl EditorData {
         let mut cursor = self.editor.cursor.get_untracked();
         let mut register = self.common.register.get_untracked();
 
-        let yank_data =
-            if let lapce_core::cursor::CursorMode::Visual { .. } = &cursor.mode {
-                Some(cursor.yank(&text))
-            } else {
-                None
-            };
+        let yank_data = None;
 
         let deltas =
             batch(|| doc.do_edit(&mut cursor, cmd, modal, &mut register, smart_tab));
@@ -442,35 +434,6 @@ impl EditorData {
             self.snippet.set(None);
             self.quit_on_screen_find();
         }
-
-        CommandExecuted::Yes
-    }
-
-    fn run_motion_mode_command(
-        &self,
-        cmd: &MotionModeCommand,
-        count: Option<usize>,
-    ) -> CommandExecuted {
-        let count = count.unwrap_or(1);
-        let motion_mode = match cmd {
-            MotionModeCommand::MotionModeDelete => MotionMode::Delete { count },
-            MotionModeCommand::MotionModeIndent => MotionMode::Indent,
-            MotionModeCommand::MotionModeOutdent => MotionMode::Outdent,
-            MotionModeCommand::MotionModeYank => MotionMode::Yank { count },
-        };
-        let mut cursor = self.editor.cursor.get_untracked();
-        let mut register = self.common.register.get_untracked();
-
-        movement::do_motion_mode(
-            &self.editor,
-            &*self.doc(),
-            &mut cursor,
-            motion_mode,
-            &mut register,
-        );
-
-        self.editor.cursor.set(cursor);
-        self.common.register.set(register);
 
         CommandExecuted::Yes
     }
@@ -935,62 +898,6 @@ impl EditorData {
         }
     }
 
-    fn on_screen_find(&self, pattern: &str) -> Vec<SelRegion> {
-        let screen_lines = self.screen_lines().get_untracked();
-        let lines: HashSet<usize> =
-            screen_lines.lines.iter().map(|l| l.line).collect();
-
-        let mut matcher = nucleo::Matcher::new(nucleo::Config::DEFAULT);
-        let pattern = nucleo::pattern::Pattern::parse(
-            pattern,
-            nucleo::pattern::CaseMatching::Ignore,
-            nucleo::pattern::Normalization::Smart,
-        );
-        let mut indices = Vec::new();
-        let mut filter_text_buf = Vec::new();
-        let mut items = Vec::new();
-
-        let buffer = self.doc().buffer;
-
-        for line in lines {
-            filter_text_buf.clear();
-            indices.clear();
-
-            buffer.with_untracked(|buffer| {
-                let start = buffer.offset_of_line(line);
-                let end = buffer.offset_of_line(line + 1);
-                let text = buffer.text().slice_to_cow(start..end);
-                let filter_text = Utf32Str::new(&text, &mut filter_text_buf);
-
-                if let Some(score) =
-                    pattern.indices(filter_text, &mut matcher, &mut indices)
-                {
-                    indices.sort();
-                    let left =
-                        start + indices.first().copied().unwrap_or(0) as usize;
-                    let right =
-                        start + indices.last().copied().unwrap_or(0) as usize + 1;
-                    let right = if right == left { left + 1 } else { right };
-                    items.push((score, left, right));
-                }
-            });
-        }
-
-        items.sort_by_key(|(score, _, _)| -(*score as i64));
-        if let Some((_, offset, _)) = items.first().copied() {
-            self.run_move_command(
-                &lapce_core::movement::Movement::Offset(offset),
-                None,
-                Modifiers::empty(),
-            );
-        }
-
-        items
-            .into_iter()
-            .map(|(_, start, end)| SelRegion::new(start, end, None))
-            .collect()
-    }
-
     fn go_to_definition(&self) {
         let doc = self.doc();
         let path = match if doc.loaded() {
@@ -1380,11 +1287,6 @@ impl EditorData {
 
     /// Update the current inline completion
     fn update_inline_completion(&self, trigger_kind: InlineCompletionTriggerKind) {
-        if self.get_mode() != Mode::Insert {
-            self.cancel_inline_completion();
-            return;
-        }
-
         let doc = self.doc();
         let path = match if doc.loaded() {
             doc.content.with_untracked(|c| c.path().cloned())
@@ -1539,11 +1441,6 @@ impl EditorData {
     /// Update the displayed autocompletion box
     /// Sends a request to the LSP for completion information
     fn update_completion(&self, display_if_empty_input: bool) {
-        if self.get_mode() != Mode::Insert {
-            self.cancel_completion();
-            return;
-        }
-
         let doc = self.doc();
         let path = match if doc.loaded() {
             doc.content.with_untracked(|c| c.path().cloned())
@@ -1960,12 +1857,7 @@ impl EditorData {
             .doc()
             .buffer
             .with_untracked(|buffer| position.to_offset(buffer));
-        let config = self.common.config.get_untracked();
-        self.cursor().set(if config.core.modal {
-            Cursor::new(CursorMode::Normal(offset), None, None)
-        } else {
-            Cursor::new(CursorMode::Insert(Selection::caret(offset)), None, None)
-        });
+        self.cursor().set(Cursor::new(CursorMode::Insert(Selection::caret(offset)), None, None));
         if let Some(scroll_offset) = scroll_offset {
             self.editor.scroll_to.set(Some(scroll_offset));
         }
@@ -2787,15 +2679,6 @@ impl EditorData {
 }
 
 impl KeyPressFocus for EditorData {
-    fn get_mode(&self) -> Mode {
-        if self.common.find.visual.get_untracked() && self.find_focus.get_untracked()
-        {
-            Mode::Insert
-        } else {
-            self.cursor().with_untracked(|c| c.get_mode())
-        }
-    }
-
     #[instrument]
     fn check_condition(&self, condition: Condition) -> bool {
         match condition {
@@ -2825,13 +2708,7 @@ impl KeyPressFocus for EditorData {
                     && self.common.find.replace_focus.get_untracked()
             }
             Condition::SearchActive => {
-                if self.common.config.get_untracked().core.modal
-                    && self.cursor().with_untracked(|c| !c.is_normal())
-                {
-                    false
-                } else {
-                    self.common.find.visual.get_untracked()
-                }
+                self.common.find.visual.get_untracked()
             }
             _ => false,
         }
@@ -2899,8 +2776,8 @@ impl KeyPressFocus for EditorData {
                 }
                 self.run_focus_command(cmd, count, mods)
             }
-            crate::command::CommandKind::MotionMode(cmd) => {
-                self.run_motion_mode_command(cmd, count)
+            crate::command::CommandKind::MotionMode(_) => {
+                CommandExecuted::No
             }
             crate::command::CommandKind::MultiSelection(_) => {
                 CommandExecuted::No
@@ -2933,40 +2810,28 @@ impl KeyPressFocus for EditorData {
             }
         } else {
             // normal editor receive char
-            if self.get_mode() == Mode::Insert {
-                let mut cursor = self.cursor().get_untracked();
-                let deltas = self.doc().do_insert(
-                    &mut cursor,
-                    c,
-                    &self.common.config.get_untracked(),
-                );
-                self.cursor().set(cursor);
+            let mut cursor = self.cursor().get_untracked();
+            let deltas = self.doc().do_insert(
+                &mut cursor,
+                c,
+                &self.common.config.get_untracked(),
+            );
+            self.cursor().set(cursor);
 
-                if !c
-                    .chars()
-                    .all(|c| c.is_whitespace() || c.is_ascii_whitespace())
-                {
-                    self.update_completion(false);
-                } else {
-                    self.cancel_completion();
-                }
-
-                self.update_inline_completion(
-                    InlineCompletionTriggerKind::Automatic,
-                );
-
-                self.apply_deltas(&deltas);
-            } else if let Some(direction) = self.inline_find.get_untracked() {
-                self.inline_find(direction.clone(), c);
-                self.last_inline_find.set(Some((direction, c.to_string())));
-                self.inline_find.set(None);
-            } else if self.on_screen_find.with_untracked(|f| f.active) {
-                self.on_screen_find.update(|find| {
-                    let pattern = format!("{}{c}", find.pattern);
-                    find.regions = self.on_screen_find(&pattern);
-                    find.pattern = pattern;
-                });
+            if !c
+                .chars()
+                .all(|c| c.is_whitespace() || c.is_ascii_whitespace())
+            {
+                self.update_completion(false);
+            } else {
+                self.cancel_completion();
             }
+
+            self.update_inline_completion(
+                InlineCompletionTriggerKind::Automatic,
+            );
+
+            self.apply_deltas(&deltas);
         }
     }
 }

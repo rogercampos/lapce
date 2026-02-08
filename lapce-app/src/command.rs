@@ -126,14 +126,6 @@ pub fn lapce_internal_commands() -> IndexMap<String, LapceCommand> {
         commands.insert(c.to_string(), command);
     }
 
-    for c in MotionModeCommand::iter() {
-        let command = LapceCommand {
-            kind: CommandKind::MotionMode(c.clone()),
-            data: None,
-        };
-        commands.insert(c.to_string(), command);
-    }
-
     commands
 }
 
@@ -149,14 +141,6 @@ pub fn lapce_internal_commands() -> IndexMap<String, LapceCommand> {
     IntoStaticStr,
 )]
 pub enum LapceWorkbenchCommand {
-    #[strum(serialize = "enable_modal_editing")]
-    #[strum(message = "Enable Modal Editing")]
-    EnableModal,
-
-    #[strum(serialize = "disable_modal_editing")]
-    #[strum(message = "Disable Modal Editing")]
-    DisableModal,
-
     #[strum(serialize = "open_folder")]
     #[strum(message = "Open Folder")]
     OpenFolder,
@@ -604,9 +588,6 @@ pub enum InternalCommand {
         name: String,
         /// Whether to save the theme to the config file
         save: bool,
-    },
-    SetModal {
-        modal: bool,
     },
     UpdateLogLevel {
         level: tracing_subscriber::filter::LevelFilter,

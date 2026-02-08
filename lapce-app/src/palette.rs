@@ -24,7 +24,7 @@ use im::Vector;
 use itertools::Itertools;
 use lapce_core::{
     buffer::rope_text::RopeText, command::FocusCommand, language::LapceLanguage,
-    line_ending::LineEnding, mode::Mode, movement::Movement, selection::Selection,
+    line_ending::LineEnding, movement::Movement, selection::Selection,
     syntax::Syntax,
 };
 use lapce_rpc::proxy::ProxyResponse;
@@ -1293,10 +1293,6 @@ impl PaletteData {
 }
 
 impl KeyPressFocus for PaletteData {
-    fn get_mode(&self) -> lapce_core::mode::Mode {
-        Mode::Insert
-    }
-
     fn check_condition(
         &self,
         condition: crate::keypress::condition::Condition,

@@ -6,7 +6,7 @@ use floem::{
     peniko::kurbo::Rect,
     reactive::{RwSignal, Scope, SignalGet, SignalUpdate, SignalWith},
 };
-use lapce_core::{command::FocusCommand, mode::Mode, selection::Selection};
+use lapce_core::{command::FocusCommand, selection::Selection};
 use lapce_rpc::proxy::ProxyResponse;
 use lapce_xi_rope::Rope;
 use lsp_types::Position;
@@ -31,10 +31,6 @@ pub struct RenameData {
 }
 
 impl KeyPressFocus for RenameData {
-    fn get_mode(&self) -> Mode {
-        Mode::Insert
-    }
-
     fn check_condition(&self, condition: Condition) -> bool {
         matches!(condition, Condition::RenameFocus | Condition::ModalFocus)
     }

@@ -364,11 +364,11 @@ impl Doc {
         self: &Rc<Doc>,
         cx: Scope,
         id: EditorId,
-        is_local: bool,
+        _is_local: bool,
     ) -> Editor {
         let common = &self.common;
         let config = common.config.get_untracked();
-        let modal = config.core.modal && !is_local;
+        let modal = false;
 
         let register = common.register;
         // TODO: we could have these Rcs created once and stored somewhere, maybe on

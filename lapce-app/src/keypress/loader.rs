@@ -1,7 +1,6 @@
 use anyhow::{Result, anyhow};
 use indexmap::IndexMap;
-use lapce_core::mode::Modes;
-use tracing::{debug, error};
+use tracing::error;
 
 use super::keymap::{KeyMap, KeyMapPress};
 
@@ -21,7 +20,6 @@ impl KeyMapLoader {
     pub fn load_from_str<'a>(
         &'a mut self,
         s: &str,
-        modal: bool,
     ) -> Result<&'a mut Self> {
         let toml_keymaps: toml_edit::Document = s.parse()?;
         let toml_keymaps = toml_keymaps
@@ -30,7 +28,7 @@ impl KeyMapLoader {
             .ok_or_else(|| anyhow!("no keymaps"))?;
 
         for toml_keymap in toml_keymaps {
-            let keymap = match Self::get_keymap(toml_keymap, modal) {
+            let keymap = match Self::get_keymap(toml_keymap) {
                 Ok(Some(keymap)) => keymap,
                 Ok(None) => {
                     // Keymap ignored
@@ -57,7 +55,6 @@ impl KeyMapLoader {
             } else {
                 let is_keymap = |k: &KeyMap| -> bool {
                     k.when == keymap.when
-                        && k.modes == keymap.modes
                         && k.key == keymap.key
                 };
                 if let Some(index) = current_keymaps.iter().position(is_keymap) {
@@ -93,27 +90,14 @@ impl KeyMapLoader {
 
     fn get_keymap(
         toml_keymap: &toml_edit::Table,
-        modal: bool,
     ) -> Result<Option<KeyMap>> {
         let key = toml_keymap
             .get("key")
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow!("no key in keymap"))?;
 
-        let modes = get_modes(toml_keymap);
-        // If not using modal editing, remove keymaps that only make sense in modal.
-        if !modal
-            && !modes.is_empty()
-            && !modes.contains(Modes::INSERT)
-            && !modes.contains(Modes::TERMINAL)
-        {
-            debug!("Keymap ignored: {}", key);
-            return Ok(None);
-        }
-
         Ok(Some(KeyMap {
             key: KeyMapPress::parse(key),
-            modes,
             when: toml_keymap
                 .get("when")
                 .and_then(|w| w.as_str())
@@ -125,14 +109,6 @@ impl KeyMapLoader {
                 .unwrap_or_default(),
         }))
     }
-}
-
-fn get_modes(toml_keymap: &toml_edit::Table) -> Modes {
-    toml_keymap
-        .get("mode")
-        .and_then(|v| v.as_str())
-        .map(Modes::parse)
-        .unwrap_or_else(Modes::empty)
 }
 
 #[cfg(test)]
@@ -188,7 +164,7 @@ key = "Ctrl+MouseMiddle"
 command = "goto_definition"
         "#;
         let mut loader = KeyMapLoader::new();
-        loader.load_from_str(keymaps, true).unwrap();
+        loader.load_from_str(keymaps).unwrap();
 
         let (keymaps, _) = loader.finalize();
 

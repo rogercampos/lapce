@@ -5,15 +5,13 @@ use floem::{
     event::{Event, EventListener},
     reactive::{
         Memo, ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith,
-        create_effect, create_memo, create_rw_signal,
+        create_effect, create_rw_signal,
     },
     style::CursorStyle,
     views::{
         Decorators, container, dyn_stack, label, scroll, stack, text, virtual_stack,
     },
 };
-use lapce_core::mode::Modes;
-
 use crate::{
     command::LapceCommand,
     config::{LapceConfig, color::LapceColor},
@@ -38,7 +36,6 @@ pub fn keymap_view(editors: Editors, common: Rc<CommonData>) -> impl View {
     let keypress = common.keypress;
     let ui_line_height_memo = common.ui_line_height;
     let ui_line_height = move || ui_line_height_memo.get() * 1.2;
-    let modal = create_memo(move |_| config.get().core.modal);
     let picker = KeymapPicker {
         cmd: create_rw_signal(None),
         keymap: create_rw_signal(None),
@@ -175,56 +172,6 @@ pub fn keymap_view(editors: Editors, common: Rc<CommonData>) -> impl View {
                             )
                     })
                 },
-                {
-                    let keymap = keymap.clone();
-                    let bits = [
-                        (Modes::INSERT, "Insert"),
-                        (Modes::NORMAL, "Normal"),
-                        (Modes::VISUAL, "Visual"),
-                        (Modes::TERMINAL, "Terminal"),
-                    ];
-                    let modes = keymap
-                        .as_ref()
-                        .map(|keymap| {
-                            bits.iter()
-                                .filter_map(|(bit, mode)| {
-                                    if keymap.modes.contains(*bit) {
-                                        Some(mode.to_string())
-                                    } else {
-                                        None
-                                    }
-                                })
-                                .collect::<Vec<String>>()
-                        })
-                        .unwrap_or_default();
-                    dyn_stack(
-                        move || modes.clone(),
-                        |m| m.clone(),
-                        move |mode| {
-                            text(mode.clone()).style(move |s| {
-                                s.padding_horiz(5.0)
-                                    .padding_vert(1.0)
-                                    .margin_right(5.0)
-                                    .border(1.0)
-                                    .border_radius(3.0)
-                                    .border_color(
-                                        config.get().color(LapceColor::LAPCE_BORDER),
-                                    )
-                            })
-                        },
-                    )
-                    .style(move |s| {
-                        s.items_center()
-                            .padding_horiz(10.0)
-                            .min_width(200.0)
-                            .height_pct(100.0)
-                            .border_right(1.0)
-                            .border_color(
-                                config.get().color(LapceColor::LAPCE_BORDER),
-                            )
-                            .apply_if(!modal.get(), |s| s.hide())
-                    })
-                },
                 container(
                     text(
                         keymap
@@ -255,7 +202,6 @@ pub fn keymap_view(editors: Editors, common: Rc<CommonData>) -> impl View {
                     KeyMap {
                         command: local_cmd.kind.str().to_string(),
                         key: Vec::new(),
-                        modes: Modes::empty(),
                         when: None,
                     }
                 };
@@ -312,15 +258,6 @@ pub fn keymap_view(editors: Editors, common: Rc<CommonData>) -> impl View {
                     .height_pct(100.0)
                     .border_right(1.0)
                     .border_color(config.get().color(LapceColor::LAPCE_BORDER))
-            }),
-            text("Modes").style(move |s| {
-                s.width(200.0)
-                    .items_center()
-                    .padding_horiz(10.0)
-                    .height_pct(100.0)
-                    .border_right(1.0)
-                    .border_color(config.get().color(LapceColor::LAPCE_BORDER))
-                    .apply_if(!modal.get(), |s| s.hide())
             }),
             container(text("When").style(move |s| {
                 s.text_ellipsis().padding_horiz(10.0).min_width(0.0)

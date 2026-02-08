@@ -1,7 +1,6 @@
 #:schema ../extra/schemas/settings.json
 
 [core]
-modal = false
 color-theme = "Lapce Dark"
 icon-theme = "Lapce Codicons"
 custom-titlebar = true
@@ -31,7 +30,6 @@ signature-label-code-block = true
 auto-closing-matching-pairs = true
 auto-surround = true
 hover-delay = 300                                            # ms
-modal-mode-relative-line-numbers = true
 format-on-save = false
 highlight-matching-brackets = true
 highlight-selection-occurrences = true

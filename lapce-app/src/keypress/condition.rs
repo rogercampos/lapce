@@ -74,7 +74,6 @@ pub enum Condition {
 #[cfg(test)]
 mod test {
     use floem::keyboard::Modifiers;
-    use lapce_core::mode::Mode;
 
     use super::Condition;
     use crate::keypress::{KeyPressData, KeyPressFocus, condition::CheckCondition};
@@ -87,10 +86,6 @@ mod test {
     impl KeyPressFocus for MockFocus {
         fn check_condition(&self, condition: Condition) -> bool {
             self.accepted_conditions.contains(&condition)
-        }
-
-        fn get_mode(&self) -> Mode {
-            unimplemented!()
         }
 
         fn run_command(

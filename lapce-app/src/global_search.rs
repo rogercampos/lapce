@@ -7,7 +7,7 @@ use floem::{
     views::VirtualVector,
 };
 use indexmap::IndexMap;
-use lapce_core::{mode::Mode, selection::Selection};
+use lapce_core::selection::Selection;
 use lapce_rpc::proxy::{ProxyResponse, SearchMatch};
 use lapce_xi_rope::Rope;
 
@@ -47,10 +47,6 @@ pub struct GlobalSearchData {
 }
 
 impl KeyPressFocus for GlobalSearchData {
-    fn get_mode(&self) -> Mode {
-        Mode::Insert
-    }
-
     fn check_condition(&self, condition: Condition) -> bool {
         matches!(condition, Condition::PanelFocus)
     }

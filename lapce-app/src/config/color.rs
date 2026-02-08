@@ -131,17 +131,5 @@ impl LapceColor {
 
     pub const STATUS_BACKGROUND: &'static str = "status.background";
     pub const STATUS_FOREGROUND: &'static str = "status.foreground";
-    pub const STATUS_MODAL_NORMAL_BACKGROUND: &'static str =
-        "status.modal.normal.background";
-    pub const STATUS_MODAL_NORMAL_FOREGROUND: &'static str =
-        "status.modal.normal.foreground";
-    pub const STATUS_MODAL_INSERT_BACKGROUND: &'static str =
-        "status.modal.insert.background";
-    pub const STATUS_MODAL_INSERT_FOREGROUND: &'static str =
-        "status.modal.insert.foreground";
-    pub const STATUS_MODAL_VISUAL_BACKGROUND: &'static str =
-        "status.modal.visual.background";
-    pub const STATUS_MODAL_VISUAL_FOREGROUND: &'static str =
-        "status.modal.visual.foreground";
     pub const MARKDOWN_BLOCKQUOTE: &'static str = "markdown.blockquote";
 }

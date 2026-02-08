@@ -44,48 +44,39 @@ when = "source_control_focus"
 [[keymaps]]
 key = "ctrl+z"
 command = "undo"
-mode = "i"
 
 [[keymaps]]
 key = "ctrl+shift+z"
 command = "redo"
-mode = "i"
 
 
 [[keymaps]]
 key = "ctrl+y"
 command = "redo"
-mode = "i"
 
 [[keymaps]]
 key = "ctrl+x"
 command = "clipboard_cut"
-mode = "i"
 
 [[keymaps]]
 key = "shift+Delete"
 command = "clipboard_cut"
-mode = "i"
 
 [[keymaps]]
 key = "ctrl+c"
 command = "clipboard_copy"
-mode = "i"
 
 [[keymaps]]
 key = "ctrl+insert"
 command = "clipboard_copy"
-mode = "i"
 
 [[keymaps]]
 key = "ctrl+v"
 command = "clipboard_paste"
-mode = "i"
 
 [[keymaps]]
 key = "shift+insert"
 command = "clipboard_paste"
-mode = "i"
 
 [[keymaps]]
 key = "ctrl+f"
@@ -94,27 +85,22 @@ command = "search"
 [[keymaps]]
 key = "ctrl+right"
 command = "word_end_forward"
-mode = "i"
 
 [[keymaps]]
 key = "ctrl+left"
 command = "word_backward"
-mode = "i"
 
 [[keymaps]]
 key = "ctrl+backspace"
 command = "delete_word_backward"
-mode = "i"
 
 [[keymaps]]
 key = "ctrl+delete"
 command = "delete_word_forward"
-mode = "i"
 
 [[keymaps]]
 key = "ctrl+shift+\\"
 command = "match_pairs"
-mode = "i"
 
 [[keymaps]]
 key = "ctrl+/"
@@ -136,12 +122,10 @@ command = "select_all"
 key = "ctrl+enter"
 command = "new_line_below"
 when = "!source_control_focus"
-mode = "i"
 
 [[keymaps]]
 key = "ctrl+shift+enter"
 command = "new_line_above"
-mode = "i"
 
 # ------------------------------------ File Management --------------------------------
 
@@ -162,7 +146,6 @@ command = "new_file"
 [[keymaps]]
 key = "ctrl+w"
 command = "split_close"
-mode = "i"
 
 [[keymaps]]
 key = "ctrl+k f"
@@ -181,17 +164,14 @@ command = "split_vertical"
 [[keymaps]]
 key = "ctrl+space"
 command = "get_completion"
-mode = "i"
 
 [[keymaps]]
 key = "ctrl+i"
 command = "get_completion"
-mode = "i"
 
 [[keymaps]]
 key = "ctrl+shift+space"
 command = "get_signature"
-mode = "i"
 
 [[keymaps]]
 key = "alt+enter"
@@ -226,28 +206,6 @@ key = "Ctrl+End"
 command = "document_end"
 
 [[keymaps]]
-key = "ctrl+b"
-command = "left"
-mode = "n"
-
-[[keymaps]]
-key = "ctrl+f"
-command = "right"
-mode = "n"
-
-[[keymaps]]
-key = "ctrl+p"
-command = "up"
-when = "!list_focus"
-mode = "n"
-
-[[keymaps]]
-key = "ctrl+n"
-command = "down"
-when = "!list_focus"
-mode = "n"
-
-[[keymaps]]
 key = "ctrl+alt+shift+n"
 command = "palette.symbol"
 
@@ -268,7 +226,6 @@ command = "goto_definition"
 [[keymaps]]
 key = "ctrl+d"
 command = "duplicate_line_down"
-mode = "i"
 
 [[keymaps]]
 key = "ctrl+alt+left"
