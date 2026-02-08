@@ -1,0 +1,465 @@
+use std::{ops::Range, path::PathBuf, rc::Rc, sync::Arc};
+
+use floem::{
+    View,
+    keyboard::Modifiers,
+    peniko::kurbo::{Point, Size},
+    reactive::{
+        Memo, ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith,
+    },
+    style::{CursorStyle, Display, Style},
+    views::{
+        Decorators, VirtualVector, container, label, scroll, stack, svg, text,
+        scroll::PropagatePointerWheel, virtual_stack,
+    },
+};
+use lapce_core::{command::FocusCommand, mode::Mode, selection::Selection};
+use lapce_xi_rope::Rope;
+use nucleo::Utf32Str;
+
+use crate::{
+    about::exclusive_popup,
+    command::{CommandExecuted, CommandKind, LapceCommand},
+    config::{LapceConfig, color::LapceColor},
+    editor::EditorData,
+    editor::location::EditorLocation,
+    keypress::KeyPressFocus,
+    main_split::MainSplitData,
+    text_input::TextInputBuilder,
+    window_tab::{CommonData, Focus, WindowTabData},
+};
+
+#[derive(Clone)]
+pub struct RecentFilesData {
+    pub visible: RwSignal<bool>,
+    pub index: RwSignal<usize>,
+    pub input_editor: EditorData,
+    pub recent_files: RwSignal<Vec<PathBuf>>,
+    pub filtered_items: Memo<Vec<PathBuf>>,
+    pub main_split: MainSplitData,
+    pub common: Rc<CommonData>,
+}
+
+impl std::fmt::Debug for RecentFilesData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RecentFilesData").finish()
+    }
+}
+
+impl RecentFilesData {
+    pub fn new(
+        cx: Scope,
+        main_split: MainSplitData,
+        recent_files: RwSignal<Vec<PathBuf>>,
+        common: Rc<CommonData>,
+    ) -> Self {
+        let visible = cx.create_rw_signal(false);
+        let index = cx.create_rw_signal(0usize);
+        let input_editor = main_split.editors.make_local(cx, common.clone());
+
+        let doc = input_editor.doc();
+        let filter_text = cx.create_rw_signal(String::new());
+        {
+            let buffer = doc.buffer;
+            cx.create_effect(move |_| {
+                let content = buffer.with(|b| b.to_string());
+                filter_text.set(content);
+            });
+        }
+
+        let filtered_items = cx.create_memo(move |_| {
+            let files = recent_files.get();
+            let input = filter_text.get();
+
+            if input.is_empty() {
+                return files;
+            }
+
+            let pattern = nucleo::pattern::Pattern::parse(
+                &input,
+                nucleo::pattern::CaseMatching::Ignore,
+                nucleo::pattern::Normalization::Smart,
+            );
+            let mut matcher =
+                nucleo::Matcher::new(nucleo::Config::DEFAULT);
+            let mut buf = Vec::new();
+
+            let mut scored: Vec<(PathBuf, u32)> = files
+                .into_iter()
+                .filter_map(|path| {
+                    buf.clear();
+                    let filename = path
+                        .file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or_else(|| path.to_string_lossy().to_string());
+                    let utf32 = Utf32Str::new(&filename, &mut buf);
+                    let score = pattern.score(utf32, &mut matcher)?;
+                    Some((path, score))
+                })
+                .collect();
+
+            scored.sort_by(|a, b| b.1.cmp(&a.1));
+            scored.into_iter().map(|(p, _)| p).collect()
+        });
+
+        // Reset index when filtered items change
+        {
+            cx.create_effect(move |_| {
+                let _ = filtered_items.get();
+                index.set(0);
+            });
+        }
+
+        // Auto-close when focus changes away
+        {
+            let visible = visible;
+            let focus = common.focus;
+            cx.create_effect(move |_| {
+                let f = focus.get();
+                if f != Focus::RecentFiles && visible.get_untracked() {
+                    visible.set(false);
+                }
+            });
+        }
+
+        Self {
+            visible,
+            index,
+            input_editor,
+            recent_files,
+            filtered_items,
+            main_split,
+            common,
+        }
+    }
+
+    pub fn open(&self) {
+        self.input_editor.doc().reload(Rope::from(""), true);
+        self.input_editor
+            .cursor()
+            .update(|cursor| cursor.set_insert(Selection::caret(0)));
+        self.index.set(0);
+        self.visible.set(true);
+        self.common.focus.set(Focus::RecentFiles);
+    }
+
+    pub fn close(&self) {
+        self.visible.set(false);
+        if self.common.focus.get_untracked() == Focus::RecentFiles {
+            self.common.focus.set(Focus::Workbench);
+        }
+    }
+
+    pub fn select(&self) {
+        let items = self.filtered_items.get_untracked();
+        let idx = self.index.get_untracked();
+        if let Some(path) = items.get(idx) {
+            self.main_split.go_to_location(
+                EditorLocation {
+                    path: path.clone(),
+                    position: None,
+                    scroll_offset: None,
+                    same_editor_tab: false,
+                },
+                None,
+            );
+        }
+        self.close();
+    }
+
+    fn next(&self) {
+        let len = self.filtered_items.with_untracked(|items| items.len());
+        if len == 0 {
+            return;
+        }
+        let index = self.index.get_untracked();
+        if index + 1 < len {
+            self.index.set(index + 1);
+        }
+    }
+
+    fn previous(&self) {
+        let index = self.index.get_untracked();
+        if index > 0 {
+            self.index.set(index - 1);
+        }
+    }
+}
+
+impl KeyPressFocus for RecentFilesData {
+    fn get_mode(&self) -> Mode {
+        Mode::Insert
+    }
+
+    fn check_condition(
+        &self,
+        condition: crate::keypress::condition::Condition,
+    ) -> bool {
+        matches!(
+            condition,
+            crate::keypress::condition::Condition::ListFocus
+                | crate::keypress::condition::Condition::ModalFocus
+        )
+    }
+
+    fn run_command(
+        &self,
+        command: &LapceCommand,
+        count: Option<usize>,
+        mods: Modifiers,
+    ) -> CommandExecuted {
+        match &command.kind {
+            CommandKind::Focus(cmd) => match cmd {
+                FocusCommand::ModalClose => self.close(),
+                FocusCommand::ListNext => self.next(),
+                FocusCommand::ListPrevious => self.previous(),
+                FocusCommand::ListSelect => self.select(),
+                _ => return CommandExecuted::No,
+            },
+            _ => {
+                self.input_editor.run_command(command, count, mods);
+            }
+        }
+        CommandExecuted::Yes
+    }
+
+    fn receive_char(&self, c: &str) {
+        self.input_editor.receive_char(c);
+    }
+
+    fn focus_only(&self) -> bool {
+        true
+    }
+}
+
+// -- View --
+
+struct RecentFileItems(Vec<PathBuf>);
+
+impl VirtualVector<(usize, PathBuf)> for RecentFileItems {
+    fn total_len(&self) -> usize {
+        self.0.len()
+    }
+
+    fn slice(
+        &mut self,
+        range: Range<usize>,
+    ) -> impl Iterator<Item = (usize, PathBuf)> {
+        let start = range.start;
+        self.0[range]
+            .iter()
+            .cloned()
+            .enumerate()
+            .map(move |(i, item)| (i + start, item))
+    }
+}
+
+fn file_display_parts(
+    path: &PathBuf,
+    all_items: &[PathBuf],
+    workspace_path: &Option<PathBuf>,
+) -> (String, String) {
+    let filename = path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| path.to_string_lossy().to_string());
+
+    let is_duplicate = all_items
+        .iter()
+        .filter(|p| p.file_name() == path.file_name())
+        .count()
+        > 1;
+
+    let dir_hint = if is_duplicate {
+        path.parent()
+            .and_then(|p| {
+                workspace_path
+                    .as_ref()
+                    .and_then(|ws| p.strip_prefix(ws).ok())
+                    .map(|p| p.to_string_lossy().to_string())
+                    .or_else(|| Some(p.to_string_lossy().to_string()))
+            })
+            .unwrap_or_default()
+    } else {
+        String::new()
+    };
+
+    (filename, dir_hint)
+}
+
+pub fn recent_files_popup(window_tab_data: Rc<WindowTabData>) -> impl View {
+    let data = window_tab_data.recent_files_data.clone();
+    let config = window_tab_data.common.config;
+    let visibility = data.visible;
+    let close_data = data.clone();
+
+    exclusive_popup(
+        config,
+        visibility,
+        move || close_data.close(),
+        move || recent_files_content(window_tab_data),
+    )
+    .debug_name("Recent Files Popup")
+}
+
+fn recent_files_content(window_tab_data: Rc<WindowTabData>) -> impl View {
+    let data = window_tab_data.recent_files_data.clone();
+    let config = window_tab_data.common.config;
+    let focus = window_tab_data.common.focus;
+    let index = data.index;
+    let filtered_items = data.filtered_items;
+    let workspace_path = window_tab_data.workspace.path.clone();
+    let item_height = 30.0;
+
+    stack((
+        recent_files_input(data.clone(), config, focus),
+        scroll({
+            let data = data.clone();
+            let workspace_path = workspace_path.clone();
+            virtual_stack(
+                move || RecentFileItems(filtered_items.get()),
+                move |(i, path)| (*i, path.clone()),
+                move |(i, path)| {
+                    let all_items = filtered_items.get_untracked();
+                    let (filename, dir_hint) =
+                        file_display_parts(&path, &all_items, &workspace_path);
+                    let data = data.clone();
+                    let icon_path = path.clone();
+                    let style_path = path.clone();
+                    let has_dir_hint = !dir_hint.is_empty();
+
+                    container(
+                        stack((
+                            svg(move || {
+                                config.get().file_svg(&icon_path).0
+                            })
+                            .style(move |s| {
+                                let config = config.get();
+                                let size = config.ui.icon_size() as f32;
+                                let color =
+                                    config.file_svg(&style_path).1;
+                                s.min_width(size)
+                                    .size(size, size)
+                                    .margin_right(6.0)
+                                    .apply_opt(color, Style::color)
+                            }),
+                            label(move || filename.clone()).style(
+                                move |s| {
+                                    s.text_ellipsis().color(
+                                        config.get().color(
+                                            LapceColor::EDITOR_FOREGROUND,
+                                        ),
+                                    )
+                                },
+                            ),
+                            label(move || dir_hint.clone()).style(
+                                move |s| {
+                                    s.margin_left(8.0)
+                                        .text_ellipsis()
+                                        .min_width(0.0)
+                                        .flex_shrink(1.0)
+                                        .color(config.get().color(
+                                            LapceColor::EDITOR_DIM,
+                                        ))
+                                        .apply_if(!has_dir_hint, |s| {
+                                            s.display(Display::None)
+                                        })
+                                },
+                            ),
+                        ))
+                        .style(|s| {
+                            s.flex_row().items_center().min_width(0.0)
+                        }),
+                    )
+                    .on_click_stop(move |_| {
+                        data.index.set(i);
+                        data.select();
+                    })
+                    .style(move |s| {
+                        let is_selected = index.get() == i;
+                        let config = config.get();
+                        s.width_full()
+                            .height(item_height as f32)
+                            .padding_horiz(10.0)
+                            .items_center()
+                            .cursor(CursorStyle::Pointer)
+                            .apply_if(is_selected, |s| {
+                                s.background(
+                                    config.color(
+                                        LapceColor::PALETTE_CURRENT_BACKGROUND,
+                                    ),
+                                )
+                            })
+                            .hover(|s| {
+                                s.background(
+                                    config.color(
+                                        LapceColor::PANEL_HOVERED_BACKGROUND,
+                                    ),
+                                )
+                            })
+                    })
+                },
+            )
+            .item_size_fixed(move || item_height)
+            .style(|s| s.width_full().flex_col())
+        })
+        .ensure_visible(move || {
+            Size::new(1.0, item_height)
+                .to_rect()
+                .with_origin(Point::new(0.0, index.get() as f64 * item_height))
+        })
+        .style(|s| {
+            s.width_full()
+                .min_height(0.0)
+                .max_height(400.0)
+                .set(PropagatePointerWheel, false)
+        }),
+        text("No recent files").style(move |s| {
+            s.display(
+                if filtered_items.with(|items| items.is_empty()) {
+                    Display::Flex
+                } else {
+                    Display::None
+                },
+            )
+            .padding(10.0)
+            .items_center()
+            .height(item_height as f32)
+            .color(config.get().color(LapceColor::EDITOR_DIM))
+        }),
+    ))
+    .style(move |s| {
+        let config = config.get();
+        s.flex_col()
+            .width(500.0)
+            .max_width_pct(80.0)
+            .border(1.0)
+            .border_radius(6.0)
+            .border_color(config.color(LapceColor::LAPCE_BORDER))
+            .background(config.color(LapceColor::PALETTE_BACKGROUND))
+    })
+}
+
+fn recent_files_input(
+    data: RecentFilesData,
+    config: ReadSignal<Arc<LapceConfig>>,
+    focus: RwSignal<Focus>,
+) -> impl View {
+    let is_focused = move || focus.get() == Focus::RecentFiles;
+    let input = TextInputBuilder::new()
+        .is_focused(is_focused)
+        .build_editor(data.input_editor.clone())
+        .placeholder(|| "Search recent files...".to_owned())
+        .style(|s| s.width_full());
+
+    container(container(input).style(move |s| {
+        let config = config.get();
+        s.width_full()
+            .height(30.0)
+            .items_center()
+            .border_bottom(1.0)
+            .border_color(config.color(LapceColor::LAPCE_BORDER))
+            .background(config.color(LapceColor::EDITOR_BACKGROUND))
+    }))
+    .style(|s| s.padding_bottom(5.0))
+}

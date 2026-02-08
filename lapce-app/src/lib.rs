@@ -28,6 +28,7 @@ pub mod palette;
 pub mod panel;
 pub mod plugin;
 pub mod proxy;
+pub mod recent_files;
 pub mod rename;
 pub mod settings;
 pub mod snippet;

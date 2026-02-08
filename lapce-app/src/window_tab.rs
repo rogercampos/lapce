@@ -75,6 +75,7 @@ use crate::{
     },
     plugin::PluginData,
     proxy::{ProxyData, new_proxy},
+    recent_files::RecentFilesData,
     rename::RenameData,
     tracing::*,
     window::WindowCommonData,
@@ -89,6 +90,7 @@ pub enum Focus {
     CodeAction,
     Rename,
     AboutPopup,
+    RecentFiles,
     Panel(PanelKind),
 }
 
@@ -163,6 +165,8 @@ pub struct WindowTabData {
     pub global_search: GlobalSearchData,
     pub call_hierarchy_data: CallHierarchyData,
     pub about_data: AboutData,
+    pub recent_files: RwSignal<Vec<PathBuf>>,
+    pub recent_files_data: RecentFilesData,
     pub alert_data: AlertBoxData,
     pub layout_rect: RwSignal<Rect>,
     pub title_height: RwSignal<f64>,
@@ -452,6 +456,13 @@ impl WindowTabData {
         );
 
         let about_data = AboutData::new(cx, common.focus);
+        let recent_files = cx.create_rw_signal(Vec::<PathBuf>::new());
+        let recent_files_data = RecentFilesData::new(
+            cx,
+            main_split.clone(),
+            recent_files,
+            common.clone(),
+        );
         let alert_data = AlertBoxData::new(cx, common.clone());
 
         let window_tab_data = Self {
@@ -473,6 +484,8 @@ impl WindowTabData {
                 scroll_to_line: cx.create_rw_signal(None),
             },
             about_data,
+            recent_files,
+            recent_files_data,
             alert_data,
             layout_rect: cx.create_rw_signal(Rect::ZERO),
             title_height,
@@ -596,6 +609,14 @@ impl WindowTabData {
                 }
             }
         }
+    }
+
+    pub fn track_recent_file(&self, path: PathBuf) {
+        self.recent_files.update(|files| {
+            files.retain(|p| p != &path);
+            files.insert(0, path);
+            files.truncate(100);
+        });
     }
 
     pub fn run_lapce_command(&self, cmd: LapceCommand) {
@@ -1091,6 +1112,9 @@ impl WindowTabData {
             }
 
             // ==== UI ====
+            RecentFiles => {
+                self.recent_files_data.open();
+            }
             ShowAbout => {
                 self.about_data.open();
             }
@@ -1651,6 +1675,9 @@ impl WindowTabData {
             InternalCommand::CallHierarchyIncoming { item_id } => {
                 self.call_hierarchy_incoming(item_id);
             }
+            InternalCommand::TrackRecentFile { path } => {
+                self.track_recent_file(path);
+            }
         }
     }
 
@@ -1804,6 +1831,9 @@ impl WindowTabData {
             }
             Focus::Rename => Some(keypress.key_down(event, &self.rename)),
             Focus::AboutPopup => Some(keypress.key_down(event, &self.about_data)),
+            Focus::RecentFiles => {
+                Some(keypress.key_down(event, &self.recent_files_data))
+            }
             Focus::Panel(PanelKind::Search) => {
                 Some(keypress.key_down(event, &self.global_search))
             }

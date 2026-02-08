@@ -16,8 +16,7 @@ command = "palette.command"
 
 [[keymaps]]
 key = "meta+e"
-command = "toggle_code_glance"
-mode = "i"
+command = "recent_files"
 
 [[keymaps]]
 key = "meta+,"

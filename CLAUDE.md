@@ -77,6 +77,7 @@ All state uses **Floem reactive signals** (`RwSignal<T>`, `ReadSignal<T>`, `Memo
 | `proxy.rs` | Proxy process spawning and RPC bridge |
 | `panel/` | Panel system: `kind.rs` (types), `data.rs` (state/order), `view.rs` (rendering) |
 | `palette/` | Command palette: `kind.rs` (modes with prefix symbols like `/`, `@`, `:`) |
+| `recent_files.rs` | Recent files popup: data, KeyPressFocus impl, view (uses `exclusive_popup`) |
 | `keypress/` | Keybinding resolution and condition evaluation |
 
 ## Command System
@@ -109,6 +110,43 @@ Plugins can be bundled into the binary at compile time via the `defaults/plugins
 On every app launch, `install_bundled_plugins()` (in `app.rs`) checks each bundled plugin against the user's plugins directory (`Directory::plugins_directory()`). If a plugin directory doesn't already exist at the destination, it is extracted. Existing plugins are not overwritten, preserving user customizations.
 
 The embedding uses `include_dir!` (same mechanism as SVG icons in `config/svg.rs`), so adding a new default plugin is as simple as placing its directory under `defaults/plugins/` — no code changes needed.
+
+## Floating Popups / Modal System
+
+Floating modals (popups that appear centered over the editor with a dimmed backdrop) use the reusable `exclusive_popup()` function in `about.rs`:
+
+```rust
+pub fn exclusive_popup(config, visibility, on_close, content) -> impl View
+```
+
+It provides: dimmed overlay (`Position::Absolute`, full-screen), click-outside-to-close (outer container captures `PointerDown`), inner content prevents propagation, centered with flex.
+
+### Adding a new floating popup
+
+1. **Create data struct** in a new module (e.g., `recent_files.rs`). Hold `visible: RwSignal<bool>` and any state. Implement `KeyPressFocus` trait for keyboard handling (ESC via `FocusCommand::ModalClose`, list navigation via `ListNext`/`ListPrevious`/`ListSelect`).
+
+2. **Add `Focus::YourPopup`** variant to the `Focus` enum in `window_tab.rs`.
+
+3. **Add a `LapceWorkbenchCommand`** variant in `command.rs` with `#[strum(serialize = "...")]` and `#[strum(message = "...")]`.
+
+4. **Wire in `WindowTabData`** (`window_tab.rs`):
+   - Add the data field to the struct and initialize in `new()`.
+   - Add `Focus::YourPopup => Some(keypress.key_down(event, &self.your_data))` in `key_down()`.
+   - Add the command handler in `run_workbench_command()`.
+
+5. **Create the view** using `exclusive_popup()` from `about.rs`, and add it to the floating layers stack in `window_tab()` in `app.rs`. Order in the stack = z-order (later items render on top).
+
+6. **Add keybinding** in `defaults/keymaps-{macos,nonmacos,common}.toml`.
+
+Existing popups using this pattern: About dialog (`about.rs`), Recent Files (`recent_files.rs`). The alert dialog (`alert.rs`) uses a similar but separate pattern.
+
+### Text input in popups
+
+Use `TextInputBuilder::new().is_focused(is_focused_fn).build_editor(editor_data)` (from `text_input.rs`). Create the `EditorData` via `main_split.editors.make_local(cx, common)`. The `is_focused` function should check `focus.get() == Focus::YourPopup`.
+
+### Fuzzy filtering
+
+The `nucleo` crate is available as a dependency. For small lists (< ~1000 items), use it directly in a `Memo`. For large lists (like the file palette), the palette uses a separate thread — see `palette.rs` for that pattern.
 
 ## Layout Structure (app.rs → workbench())
 

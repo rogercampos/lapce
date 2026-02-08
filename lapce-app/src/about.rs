@@ -1,10 +1,10 @@
-use std::rc::Rc;
+use std::{rc::Rc, sync::Arc};
 
 use floem::{
     View,
     event::EventListener,
     keyboard::Modifiers,
-    reactive::{RwSignal, Scope, SignalGet, SignalUpdate},
+    reactive::{ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate},
     style::{CursorStyle, Display, Position},
     views::{Decorators, container, label, stack, svg},
 };
@@ -12,7 +12,7 @@ use lapce_core::{command::FocusCommand, meta::VERSION, mode::Mode};
 
 use crate::{
     command::{CommandExecuted, CommandKind},
-    config::color::LapceColor,
+    config::{LapceConfig, color::LapceColor},
     keypress::KeyPressFocus,
     web_link::web_link,
     window_tab::{Focus, WindowTabData},
@@ -99,7 +99,8 @@ pub fn about_popup(window_tab_data: Rc<WindowTabData>) -> impl View {
     let internal_command = window_tab_data.common.internal_command;
     let logo_size = 100.0;
 
-    exclusive_popup(window_tab_data, about_data.visible, move || {
+    let close_data = about_data.clone();
+    exclusive_popup(config, about_data.visible, move || close_data.close(), move || {
         stack((
             svg(move || (config.get()).logo_svg()).style(move |s| {
                 s.size(logo_size, logo_size)
@@ -155,30 +156,30 @@ pub fn about_popup(window_tab_data: Rc<WindowTabData>) -> impl View {
             )
             .style(|s| s.margin_top(10.0)),
         ))
-        .style(|s| s.flex_col().items_center())
+        .style(move |s| {
+            let config = config.get();
+            s.flex_col()
+                .items_center()
+                .padding_vert(25.0)
+                .padding_horiz(100.0)
+                .border(1.0)
+                .border_radius(6.0)
+                .border_color(config.color(LapceColor::LAPCE_BORDER))
+                .background(config.color(LapceColor::PANEL_BACKGROUND))
+        })
     })
     .debug_name("About Popup")
 }
 
-fn exclusive_popup<V: View + 'static>(
-    window_tab_data: Rc<WindowTabData>,
+pub fn exclusive_popup<V: View + 'static>(
+    config: ReadSignal<Arc<LapceConfig>>,
     visibility: RwSignal<bool>,
+    on_close: impl Fn() + 'static,
     content: impl FnOnce() -> V,
 ) -> impl View {
-    let config = window_tab_data.common.config;
-
     container(
         container(
             container(content())
-                .style(move |s| {
-                    let config = config.get();
-                    s.padding_vert(25.0)
-                        .padding_horiz(100.0)
-                        .border(1.0)
-                        .border_radius(6.0)
-                        .border_color(config.color(LapceColor::LAPCE_BORDER))
-                        .background(config.color(LapceColor::PANEL_BACKGROUND))
-                })
                 .on_event_stop(EventListener::PointerDown, move |_| {}),
         )
         .style(move |s| {
@@ -189,7 +190,7 @@ fn exclusive_popup<V: View + 'static>(
         }),
     )
     .on_event_stop(EventListener::PointerDown, move |_| {
-        window_tab_data.about_data.close();
+        on_close();
     })
     // Prevent things behind the grayed out area from being hovered.
     .on_event_stop(EventListener::PointerMove, move |_| {})
