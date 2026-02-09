@@ -172,6 +172,7 @@ impl EditorInfo {
 #[derive(Clone)]
 pub enum EditorViewKind {
     Normal,
+    Preview,
 }
 
 impl EditorViewKind {
@@ -2312,10 +2313,11 @@ impl EditorData {
                 .internal_command
                 .send(InternalCommand::FocusEditorTab { editor_tab_id });
         }
-        if self
-            .doc()
-            .content
-            .with_untracked(|content| !content.is_local())
+        if self.kind.get_untracked().is_normal()
+            && self
+                .doc()
+                .content
+                .with_untracked(|content| !content.is_local())
         {
             self.common.focus.set(Focus::Workbench);
             self.find_focus.set(false);
@@ -2967,7 +2969,7 @@ pub(crate) fn compute_screen_lines(
     });
 
     match view_kind.get() {
-        EditorViewKind::Normal => {
+        EditorViewKind::Normal | EditorViewKind::Preview => {
             let mut rvlines = Vec::new();
             let mut info = HashMap::new();
 

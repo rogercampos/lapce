@@ -43,7 +43,7 @@ use crate::{
     },
     db::LapceDb,
     editor::{
-        EditorData,
+        EditorData, EditorViewKind,
         location::{EditorLocation, EditorPosition},
     },
     keypress::{KeyPressData, KeyPressFocus, condition::Condition},
@@ -127,6 +127,7 @@ impl PaletteData {
         let kind = cx.create_rw_signal(PaletteKind::File);
         let input_editor = main_split.editors.make_local(cx, common.clone());
         let preview_editor = main_split.editors.make_local(cx, common.clone());
+        preview_editor.kind.set(EditorViewKind::Preview);
         let has_preview = cx.create_rw_signal(false);
         let run_id = cx.create_rw_signal(0);
         let run_id_counter = Arc::new(AtomicU64::new(0));

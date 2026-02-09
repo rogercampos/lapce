@@ -78,6 +78,7 @@ use crate::{
     proxy::{ProxyData, new_proxy},
     recent_files::RecentFilesData,
     rename::RenameData,
+    search_modal::SearchModalData,
     tracing::*,
     window::WindowCommonData,
     workspace::{LapceWorkspace, LapceWorkspaceType, WorkspaceInfo},
@@ -92,6 +93,7 @@ pub enum Focus {
     Rename,
     AboutPopup,
     RecentFiles,
+    SearchModal,
     Panel(PanelKind),
 }
 
@@ -164,6 +166,7 @@ pub struct WindowTabData {
     pub code_lens: RwSignal<Option<ViewId>>,
     pub rename: RenameData,
     pub global_search: GlobalSearchData,
+    pub search_modal_data: SearchModalData,
     pub call_hierarchy_data: CallHierarchyData,
     pub about_data: AboutData,
     pub recent_files: RwSignal<Vec<PathBuf>>,
@@ -442,6 +445,12 @@ impl WindowTabData {
 
         let rename = RenameData::new(cx, main_split.editors, common.clone());
         let global_search = GlobalSearchData::new(cx, main_split.clone());
+        let search_modal_data = SearchModalData::new(
+            cx,
+            main_split.clone(),
+            global_search.clone(),
+            common.clone(),
+        );
 
         let plugin = PluginData::new(
             cx,
@@ -475,6 +484,7 @@ impl WindowTabData {
             plugin,
             rename,
             global_search,
+            search_modal_data,
             call_hierarchy_data: CallHierarchyData {
                 root: cx.create_rw_signal(None),
                 common: common.clone(),
@@ -1082,7 +1092,10 @@ impl WindowTabData {
                 self.toggle_panel_focus(PanelKind::Problem);
             }
             ToggleSearchFocus => {
-                self.toggle_panel_focus(PanelKind::Search);
+                self.search_modal_data.open();
+            }
+            SearchModalOpenFullResults => {
+                self.search_modal_data.open_full_results();
             }
             TogglePluginVisual => {
                 self.toggle_panel_visual(PanelKind::Plugin);
@@ -1469,6 +1482,10 @@ impl WindowTabData {
             InternalCommand::JumpToLocation { location } => {
                 self.main_split.jump_to_location(location, None);
             }
+            InternalCommand::OpenSearchPanel => {
+                self.panel.show_panel(&PanelKind::Search);
+                self.common.focus.set(Focus::Panel(PanelKind::Search));
+            }
             InternalCommand::PaletteReferences { references } => {
                 self.palette.references.set(references);
                 self.palette.run(PaletteKind::Reference);
@@ -1821,6 +1838,9 @@ impl WindowTabData {
             Focus::AboutPopup => Some(keypress.key_down(event, &self.about_data)),
             Focus::RecentFiles => {
                 Some(keypress.key_down(event, &self.recent_files_data))
+            }
+            Focus::SearchModal => {
+                Some(keypress.key_down(event, &self.search_modal_data))
             }
             Focus::Panel(PanelKind::Search) => {
                 Some(keypress.key_down(event, &self.global_search))

@@ -3,23 +3,23 @@ use std::{path::PathBuf, rc::Rc, sync::Arc};
 use floem::{
     View,
     event::EventListener,
-    reactive::{ReadSignal, SignalGet, SignalUpdate},
-    style::CursorStyle,
+    reactive::{
+        ReadSignal, RwSignal, SignalGet, SignalUpdate, create_rw_signal,
+    },
+    style::{CursorStyle, Display},
     views::{Decorators, container, scroll, stack, svg, virtual_stack},
 };
-use lapce_xi_rope::find::CaseMatching;
 
-use super::{kind::PanelKind, position::PanelPosition};
+use super::position::PanelPosition;
 use crate::{
-    app::clickable_icon,
     command::InternalCommand,
     config::{LapceConfig, color::LapceColor, icon::LapceIcons},
     editor::location::{EditorLocation, EditorPosition},
+    editor::view::editor_container_view,
     focus_text::focus_text,
     global_search::{GlobalSearchData, SearchMatchData},
     listener::Listener,
-    text_input::TextInputBuilder,
-    window_tab::{Focus, WindowTabData},
+    window_tab::WindowTabData,
     workspace::LapceWorkspace,
 };
 
@@ -28,82 +28,21 @@ pub fn global_search_panel(
     _position: PanelPosition,
 ) -> impl View {
     let global_search = window_tab_data.global_search.clone();
-    let editor = global_search.editor.clone();
     let config = global_search.common.config;
     let workspace = global_search.common.workspace.clone();
     let internal_command = global_search.common.internal_command;
-    let case_matching = global_search.common.find.case_matching;
-    let whole_word = global_search.common.find.whole_words;
-    let is_regex = global_search.common.find.is_regex;
-
-    let focus = global_search.common.focus;
-    let is_focused = move || focus.get() == Focus::Panel(PanelKind::Search);
+    let has_preview = global_search.has_preview;
+    let preview_focused = global_search.preview_focused;
 
     stack((
-        container(
-            stack((
-                TextInputBuilder::new()
-                    .is_focused(is_focused)
-                    .build_editor(editor.clone())
-                    .style(|s| s.width_pct(100.0)),
-                clickable_icon(
-                    || LapceIcons::SEARCH_CASE_SENSITIVE,
-                    move || {
-                        let new = match case_matching.get_untracked() {
-                            CaseMatching::Exact => CaseMatching::CaseInsensitive,
-                            CaseMatching::CaseInsensitive => CaseMatching::Exact,
-                        };
-                        case_matching.set(new);
-                    },
-                    move || case_matching.get() == CaseMatching::Exact,
-                    || false,
-                    || "Case Sensitive",
-                    config,
-                )
-                .style(|s| s.padding_vert(4.0)),
-                clickable_icon(
-                    || LapceIcons::SEARCH_WHOLE_WORD,
-                    move || {
-                        whole_word.update(|whole_word| {
-                            *whole_word = !*whole_word;
-                        });
-                    },
-                    move || whole_word.get(),
-                    || false,
-                    || "Whole Word",
-                    config,
-                )
-                .style(|s| s.padding_left(6.0)),
-                clickable_icon(
-                    || LapceIcons::SEARCH_REGEX,
-                    move || {
-                        is_regex.update(|is_regex| {
-                            *is_regex = !*is_regex;
-                        });
-                    },
-                    move || is_regex.get(),
-                    || false,
-                    || "Use Regex",
-                    config,
-                )
-                .style(|s| s.padding_left(6.0)),
-            ))
-            .on_event_cont(EventListener::PointerDown, move |_| {
-                focus.set(Focus::Panel(PanelKind::Search));
-            })
+        search_result(workspace, global_search, internal_command, config)
             .style(move |s| {
-                s.width_pct(100.0)
-                    .padding_right(6.0)
-                    .items_center()
-                    .border(1.0)
-                    .border_radius(6.0)
-                    .border_color(config.get().color(LapceColor::LAPCE_BORDER))
+                let w = if has_preview.get() { 50.0 } else { 100.0 };
+                s.width_pct(w).height_pct(100.0)
             }),
-        )
-        .style(|s| s.width_pct(100.0).padding(10.0)),
-        search_result(workspace, global_search, internal_command, config),
+        search_preview_editor(window_tab_data, config, has_preview, preview_focused),
     ))
-    .style(|s| s.absolute().size_pct(100.0, 100.0).flex_col())
+    .style(|s| s.absolute().size_pct(100.0, 100.0).flex_row())
     .debug_name("Global Search Panel")
 }
 
@@ -114,12 +53,15 @@ fn search_result(
     config: ReadSignal<Arc<LapceConfig>>,
 ) -> impl View {
     let ui_line_height = global_search_data.common.ui_line_height;
+    let selected_match = global_search_data.selected_match;
+    let item_search_data = global_search_data.clone();
     container({
         scroll({
             virtual_stack(
                 move || global_search_data.clone(),
                 move |(path, _)| path.to_owned(),
                 move |(path, match_data)| {
+                    let item_search_data = item_search_data.clone();
                     let full_path = path.clone();
                     let path = if let Some(workspace_path) = workspace.path.as_ref()
                     {
@@ -195,11 +137,14 @@ fn search_result(
                             },
                             |m| (m.line, m.start, m.end),
                             move |m| {
-                                let path = full_path.clone();
+                                let click_path = full_path.clone();
+                                let double_click_path = full_path.clone();
+                                let selected_path = full_path.clone();
                                 let line_number = m.line;
                                 let start = m.start;
                                 let end = m.end;
                                 let line_content = m.line_content.clone();
+                                let click_search = item_search_data.clone();
 
                                 focus_text(
                                     move || {
@@ -239,35 +184,54 @@ fn search_result(
                                 .style(move |s| {
                                     let config = config.get();
                                     let icon_size = config.ui.icon_size() as f32;
-                                    s.margin_left(10.0 + icon_size + 6.0).hover(
-                                        |s| {
+                                    let is_selected = selected_match.get()
+                                        == Some((
+                                            selected_path.clone(),
+                                            line_number,
+                                            start,
+                                            end,
+                                        ));
+                                    s.margin_left(10.0 + icon_size + 6.0)
+                                        .apply_if(is_selected, |s| {
+                                            s.background(config.color(
+                                                LapceColor::PALETTE_CURRENT_BACKGROUND,
+                                            ))
+                                        })
+                                        .hover(|s| {
                                             s.cursor(CursorStyle::Pointer)
                                                 .background(config.color(
                                                 LapceColor::PANEL_HOVERED_BACKGROUND,
                                             ))
-                                        },
-                                    )
+                                        })
                                 })
-                                .on_click_stop(
-                                    move |_| {
-                                        internal_command.send(
-                                            InternalCommand::JumpToLocation {
-                                                location: EditorLocation {
-                                                    path: path.clone(),
-                                                    position: Some(
-                                                        EditorPosition::Line(
-                                                            line_number
-                                                                .saturating_sub(1),
-                                                        ),
+                                .on_click_stop(move |_| {
+                                    click_search.preview_focused.set(false);
+                                    click_search.selected_match.set(Some((
+                                        click_path.clone(),
+                                        line_number,
+                                        start,
+                                        end,
+                                    )));
+                                    click_search
+                                        .preview_match(click_path.clone(), line_number);
+                                })
+                                .on_double_click_stop(move |_| {
+                                    internal_command.send(
+                                        InternalCommand::JumpToLocation {
+                                            location: EditorLocation {
+                                                path: double_click_path.clone(),
+                                                position: Some(
+                                                    EditorPosition::Line(
+                                                        line_number
+                                                            .saturating_sub(1),
                                                     ),
-                                                    scroll_offset: None,
-
-                                                    same_editor_tab: false,
-                                                },
+                                                ),
+                                                scroll_offset: None,
+                                                same_editor_tab: false,
                                             },
-                                        );
-                                    },
-                                )
+                                        },
+                                    );
+                                })
                             },
                         )
                         .item_size_fixed(move || ui_line_height.get())
@@ -284,4 +248,45 @@ fn search_result(
         .style(|s| s.absolute().size_pct(100.0, 100.0))
     })
     .style(|s| s.size_pct(100.0, 100.0))
+}
+
+fn search_preview_editor(
+    window_tab_data: Rc<WindowTabData>,
+    config: ReadSignal<Arc<LapceConfig>>,
+    has_preview: RwSignal<bool>,
+    preview_focused: RwSignal<bool>,
+) -> impl View {
+    let global_search = window_tab_data.global_search.clone();
+    let workspace = window_tab_data.workspace.clone();
+    let preview_editor = create_rw_signal(global_search.preview_editor.clone());
+
+    container(
+        container(editor_container_view(
+            window_tab_data,
+            workspace,
+            |_tracked: bool| true,
+            preview_editor,
+        ))
+        .on_event_cont(EventListener::PointerDown, move |_| {
+            preview_focused.set(true);
+        })
+        .style(move |s| {
+            let config = config.get();
+            s.position(floem::style::Position::Absolute)
+                .border_left(1.0)
+                .border_color(config.color(LapceColor::LAPCE_BORDER))
+                .size_full()
+                .background(config.color(LapceColor::EDITOR_BACKGROUND))
+        }),
+    )
+    .style(move |s| {
+        s.width_pct(50.0)
+            .height_pct(100.0)
+            .min_width(0.0)
+            .display(if has_preview.get() {
+                Display::Flex
+            } else {
+                Display::None
+            })
+    })
 }
