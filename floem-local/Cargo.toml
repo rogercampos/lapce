@@ -26,37 +26,37 @@ rust-version = "1.86"
 license.workspace = true
 
 [workspace.dependencies]
-peniko = { version = "0.4.0" }
+peniko = { version = "0.6.0" }
 serde = { version = "1.0" }
-lapce-xi-rope = { version = "0.3.2" }
+lapce-xi-rope = { version = "0.4.0" }
 strum = { version = "0.27", features = ["derive"] }
 strum_macros = { version = "0.27" }
 # Image format features are defined via new features
 image = { version = "0.25", default-features = false }
 im = { version = "15.1.0" }
-resvg = { version = "0.45.1" }
-raw-window-handle = "0.6.0"
+resvg = { version = "0.47.0" }
+raw-window-handle = "0.6.2"
 wgpu = { version = "24.0.5" }
 parking_lot = { version = "0.12" }
-swash = { version = "0.2.5" }
+swash = { version = "0.2.6" }
 muda = { git = "https://github.com/tauri-apps/muda", rev = "8e986af3cea96a729413abc75c3702dec3990bd2", default-features = false }
 winit = { git = "https://github.com/rust-windowing/winit", rev = "ee245c569d65fdeacf705ee5eedb564508d10ebe" }
 
 [dependencies]
-slotmap = "1.0"
+slotmap = "1.1"
 sha2 = "0.10"
-bitflags = "2.9"
+bitflags = "2.10"
 indexmap = "2"
 rustc-hash = "2.1"
 smallvec = "1.15"
 educe = "0.6"
-taffy = { version = "0.8", features = ["grid"] }
-rfd = { version = "0.15", default-features = false, features = [
+taffy = { version = "0.9", features = ["grid"] }
+rfd = { version = "0.16", default-features = false, features = [
   "xdg-portal",
 ], optional = true }
 tokio = { version = "1", features = ["sync", "rt"], optional = true }
 raw-window-handle = { workspace = true }
-unicode-segmentation = "1.10"
+unicode-segmentation = "1.12"
 peniko = { workspace = true }
 im-rc = "15.1.0"
 serde = { workspace = true, optional = true }
@@ -90,7 +90,7 @@ web-time = "1"
 wgpu = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-clipboard-win = "3.1.1"
+clipboard-win = "5.4.1"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = { version = "0.6", default-features = false }
