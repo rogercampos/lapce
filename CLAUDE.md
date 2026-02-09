@@ -78,6 +78,9 @@ All state uses **Floem reactive signals** (`RwSignal<T>`, `ReadSignal<T>`, `Memo
 | `panel/` | Panel system: `kind.rs` (types), `data.rs` (state/order), `view.rs` (rendering) |
 | `palette/` | Command palette: `kind.rs` (modes with prefix symbols like `/`, `@`, `:`) |
 | `recent_files.rs` | Recent files popup: data, KeyPressFocus impl, view (uses `exclusive_popup`) |
+| `search_modal.rs` | Search modal popup: text input + flat results + preview, syncs with GlobalSearchData |
+| `global_search.rs` | Global search data: hierarchical results, preview state, keyboard navigation |
+| `panel/global_search_view.rs` | Global search panel view: horizontal split (results + preview editor) |
 | `file_icon.rs` | Reusable file icon + filename view helpers (`file_icon_svg`, `file_icon_with_name`) |
 | `keypress/` | Keybinding resolution and condition evaluation |
 
@@ -139,7 +142,7 @@ It provides: dimmed overlay (`Position::Absolute`, full-screen), click-outside-t
 
 6. **Add keybinding** in `defaults/keymaps-{macos,nonmacos,common}.toml`.
 
-Existing popups using this pattern: About dialog (`about.rs`), Recent Files (`recent_files.rs`). The alert dialog (`alert.rs`) uses a similar but separate pattern.
+Existing popups using this pattern: About dialog (`about.rs`), Recent Files (`recent_files.rs`), Search Modal (`search_modal.rs`). The alert dialog (`alert.rs`) uses a similar but separate pattern.
 
 ### Text input in popups
 
@@ -191,6 +194,70 @@ User config stored at `Directory::config_directory()` (macOS: `~/Library/Applica
 
 **Important:** When changing panel defaults, you must delete `db/workspaces/` AND `db/panel_orders` to see changes, because the app loads persisted state over defaults.
 
+## Focus System & Keyboard Routing
+
+The app has a two-level focus system:
+
+1. **App-level focus** (`Focus` enum in `window_tab.rs`): Determines which component receives keyboard events. Set via `common.focus.set(Focus::Variant)`. The `key_down()` method in `WindowTabData` dispatches to the appropriate `KeyPressFocus` implementor based on the current `Focus` value.
+
+2. **Floem-level focus**: Widget-level active state managed by `id.request_active()`. This controls cursor blinking, text selection, etc. Independent from app-level focus.
+
+### KeyPressFocus trait
+
+Every component that handles keyboard input implements `KeyPressFocus`:
+
+- `check_condition(Condition)` — Reports which conditions are true for keybinding matching. Key conditions: `ListFocus` (enables up/down/enter for list navigation), `EditorFocus` (enables editor keybindings), `ModalFocus` (enables ESC to close), `PanelFocus`.
+- `run_command(command, count, mods)` — Handles matched commands. Return `CommandExecuted::Yes` to consume.
+- `receive_char(c)` — Handles typed characters that don't match any keybinding.
+- `focus_only()` — Return `true` for modals to prevent background key handling.
+
+### Keybinding conditions
+
+Keybindings in TOML files have `when` clauses (e.g., `when = "list_focus"`). The condition is checked against the focused component's `check_condition()`. If a component doesn't report `ListFocus`, then `list.next`/`list.previous`/`list.select` bindings (bound to up/down/enter) won't fire for that component.
+
+### EditorData::pointer_down() and Focus
+
+**Critical gotcha:** `EditorData::pointer_down()` (`editor.rs`) forcefully sets `common.focus.set(Focus::Workbench)` when the editor's document is non-local (a file). This is correct for main workbench editors but **breaks preview editors** in modals and panels by stealing focus. The guard `self.kind.get_untracked().is_normal()` ensures only normal editors (not `EditorViewKind::Preview`) change focus.
+
+### Preview Editors
+
+Preview editors are created with `main_split.editors.make_local(cx, common)` and have `editor_tab_id = None`. They are used in the search modal, global search panel, and palette.
+
+Key properties:
+- `EditorViewKind::Preview` — disables sticky headers (via `is_normal()` checks in `view.rs`), prevents focus stealing in `pointer_down()`
+- No `editor_tab_id` — `FocusEditorTab` internal command is not sent on click
+- Keyboard events must be routed through the parent component's `KeyPressFocus` implementation
+
+### Making preview editors editable (the `preview_focused` pattern)
+
+When a component has both a text input and a preview editor, use a `preview_focused: RwSignal<bool>` signal to track which sub-component should receive keyboard input:
+
+1. **`check_condition`**: When `preview_focused`, report `EditorFocus` (not `ListFocus`) so editor keybindings work and list navigation doesn't intercept arrows.
+2. **`run_command`**: When `preview_focused`, forward commands to `preview_editor.run_command()`.
+3. **`receive_char`**: When `preview_focused`, forward to `preview_editor.receive_char()`.
+4. **View**: Add `on_event_cont(EventListener::PointerDown)` on the preview container to set `preview_focused = true`.
+5. **Reset**: Set `preview_focused = false` when clicking results, clicking the input, or using list navigation (next/previous).
+
+### Floem Event Propagation
+
+- `on_event_cont` — Handler fires, event continues bubbling (propagation NOT stopped)
+- `on_event_stop` — Handler fires, event propagation STOPPED
+- `on_click_stop` — Convenience for PointerUp with stop
+- Events bubble from child to parent. The editor content view uses `on_event_cont` for PointerDown, so clicks bubble to parent containers.
+- In `exclusive_popup`, the content wrapper uses `on_event_stop(PointerDown)` to prevent clicks from reaching the outer close handler.
+
+## Search System
+
+### Search Modal (`search_modal.rs`)
+
+A floating popup (`exclusive_popup`) with text input, flat results list, and preview editor. Uses `Focus::SearchModal`. The input editor syncs its text to `GlobalSearchData::set_pattern()`, sharing the search backend. Results are a `Memo<Vec<FlatSearchMatch>>` derived from `GlobalSearchData::search_result`.
+
+### Global Search Panel (`global_search.rs` + `panel/global_search_view.rs`)
+
+A bottom panel (`PanelKind::Search`) with hierarchical results grouped by file (`IndexMap<PathBuf, SearchMatchData>`). Each file group has `expanded: RwSignal<bool>`. The panel shows a 50/50 horizontal split: results on the left, preview editor on the right. Uses `Focus::Panel(PanelKind::Search)`.
+
+Navigation through hierarchical results requires building a flat list of visible matches from expanded files (the `visible_matches()` helper).
+
 ## Quirks & Gotchas
 
 - **floem_editor_core re-export:** `lapce-core` does `pub use floem_editor_core::*`. Types like `MultiSelectionCommand`, `EditCommand`, `MoveCommand` originate in floem but are imported via `lapce_core::command`. You cannot import them directly from floem (they're private there).
@@ -218,6 +285,10 @@ User config stored at `Directory::config_directory()` (macOS: `~/Library/Applica
 - **Active editor file path:** `window_tab_data.main_split.active_editor` is a `Memo<Option<EditorData>>`. Get file path: `editor_data.doc().content.get_untracked()` then match `DocContent::File { path, .. }`. Use `get_untracked()` in handlers, not view code.
 
 - **File explorer reveal:** `FileExplorerData::reveal_in_file_tree(path)` in `file_explorer/data.rs` opens ancestor dirs, reads unread dirs async, scrolls to file, and selects it. The `RevealInPanel` workbench command wraps this with panel show/open logic.
+
+- **Keybinding conflicts with `when` conditions:** When adding a new keybinding, check for conflicts with existing bindings on the same key. A binding with a broader `when` condition (e.g., `!source_control_focus`) will match before a more specific one (e.g., `modal_focus`) if both conditions are true. The first matching binding wins. Use narrow conditions to avoid conflicts (e.g., `editor_focus && !modal_focus`).
+
+- **`make_local` editors have no `editor_tab_id`:** Editors created via `main_split.editors.make_local()` get `editor_tab_id = None`. This means `pointer_down()` won't send `FocusEditorTab`, and many focus commands that require `editor_tab_id` (split, close tab, etc.) will return `CommandExecuted::No`. This is by design for preview/local editors.
 
 ## Reusable View Helpers
 

@@ -40,6 +40,11 @@ command = "zoom_out"
 
 [[keymaps]]
 key = "meta+enter"
+command = "search_modal_open_full_results"
+when = "modal_focus"
+
+[[keymaps]]
+key = "meta+enter"
 command = "source_control_commit"
 when = "source_control_focus"
 
@@ -136,7 +141,7 @@ command = "select_all"
 [[keymaps]]
 key = "meta+enter"
 command = "new_line_below"
-when = "!source_control_focus"
+when = "editor_focus && !modal_focus"
 
 [[keymaps]]
 key = "meta+shift+enter"
@@ -172,7 +177,7 @@ command = "close_folder"
 
 [[keymaps]]
 key = "meta+shift+d"
-command = "split_vertical"
+command = "split_horizontal"
 
 # --------------------------------- Rich Language Editing ----------------------------
 
@@ -262,7 +267,7 @@ command = "goto_definition"
 
 [[keymaps]]
 key = "meta+d"
-command = "split_horizontal"
+command = "split_vertical"
 
 [[keymaps]]
 key = "alt+up"

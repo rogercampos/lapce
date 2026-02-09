@@ -376,6 +376,9 @@ pub enum LapceWorkbenchCommand {
     #[strum(serialize = "toggle_search_focus")]
     ToggleSearchFocus,
 
+    #[strum(serialize = "search_modal_open_full_results")]
+    SearchModalOpenFullResults,
+
     #[strum(serialize = "toggle_plugin_visual")]
     TogglePluginVisual,
 
@@ -477,6 +480,7 @@ pub enum LapceWorkbenchCommand {
 #[derive(Clone, Debug)]
 pub enum InternalCommand {
     ReloadConfig,
+    OpenSearchPanel,
     OpenFile {
         path: PathBuf,
     },

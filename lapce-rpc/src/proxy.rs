@@ -38,7 +38,7 @@ pub enum ProxyRpc {
     Shutdown,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SearchMatch {
     pub line: usize,
     pub start: usize,
