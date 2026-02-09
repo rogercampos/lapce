@@ -315,21 +315,9 @@ pub enum LapceWorkbenchCommand {
     #[strum(serialize = "palette.workspace_symbol")]
     PaletteWorkspaceSymbol,
 
-    #[strum(message = "Command Palette")]
-    #[strum(serialize = "palette.command")]
-    PaletteCommand,
-
     #[strum(message = "Open Recent Workspace")]
     #[strum(serialize = "palette.workspace")]
     PaletteWorkspace,
-
-    #[strum(message = "List Palette Types")]
-    #[strum(serialize = "palette.palette_help")]
-    PaletteHelp,
-
-    #[strum(message = "List Palette Types and Files")]
-    #[strum(serialize = "palette.palette_help_and_file")]
-    PaletteHelpAndFile,
 
     #[strum(serialize = "toggle_maximized_panel")]
     ToggleMaximizedPanel,

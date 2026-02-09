@@ -70,7 +70,7 @@ use crate::{
     about, alert,
     code_action::CodeActionStatus,
     command::{
-        CommandKind, InternalCommand, LapceCommand, LapceWorkbenchCommand,
+        InternalCommand, LapceCommand, LapceWorkbenchCommand,
         WindowCommand,
     },
     config::{
@@ -86,7 +86,6 @@ use crate::{
     focus_text::focus_text,
     id::{EditorTabId, SplitId},
     keymap::keymap_view,
-    keypress::keymap::KeyMap,
     listener::Listener,
     main_split::{
         SplitContent, SplitData, SplitDirection, SplitMoveDirection, TabCloseKind,
@@ -2096,7 +2095,6 @@ fn palette_item(
     index: ReadSignal<usize>,
     palette_item_height: f64,
     config: ReadSignal<Arc<LapceConfig>>,
-    keymap: Option<&KeyMap>,
 ) -> impl View + use<> {
     match &item.content {
         PaletteItemContent::File { path, .. }
@@ -2314,53 +2312,6 @@ fn palette_item(
                 .style(|s| s.align_items(Some(AlignItems::Center)).max_width_full()),
             )
         }
-        PaletteItemContent::PaletteHelp { .. }
-        | PaletteItemContent::Command { .. } => {
-            let text = item.filter_text;
-            let indices = item.indices;
-            let keys = if let Some(keymap) = keymap {
-                keymap
-                    .key
-                    .iter()
-                    .map(|key| key.label().trim().to_string())
-                    .filter(|l| !l.is_empty())
-                    .collect()
-            } else {
-                vec![]
-            };
-            container(
-                stack((
-                    focus_text(
-                        move || text.clone(),
-                        move || indices.clone(),
-                        move || config.get().color(LapceColor::EDITOR_FOCUS),
-                    )
-                    .style(|s| {
-                        s.flex_row()
-                            .flex_grow(1.0)
-                            .align_items(Some(AlignItems::Center))
-                    }),
-                    stack((dyn_stack(
-                        move || keys.clone(),
-                        |k| k.clone(),
-                        move |key| {
-                            label(move || key.clone()).style(move |s| {
-                                s.padding_horiz(5.0)
-                                    .padding_vert(1.0)
-                                    .margin_right(5.0)
-                                    .border(1.0)
-                                    .border_radius(3.0)
-                                    .border_color(
-                                        config.get().color(LapceColor::LAPCE_BORDER),
-                                    )
-                                    .selectable(false)
-                            })
-                        },
-                    ),)),
-                ))
-                .style(|s| s.width_full().items_center()),
-            )
-        }
         PaletteItemContent::Line { .. }
         | PaletteItemContent::Workspace { .. }
         | PaletteItemContent::Language { .. }
@@ -2442,11 +2393,6 @@ fn palette_content(
     layout_rect: ReadSignal<Rect>,
 ) -> impl View {
     let items = window_tab_data.palette.filtered_items;
-    let keymaps = window_tab_data
-        .palette
-        .keypress
-        .get_untracked()
-        .command_keymaps;
     let index = window_tab_data.palette.index.read_only();
     let clicked_index = window_tab_data.palette.clicked_index.write_only();
     let config = window_tab_data.common.config;
@@ -2464,21 +2410,6 @@ fn palette_content(
                 },
                 move |(i, item)| {
                     let workspace = workspace.clone();
-                    let keymap = {
-                        let cmd_kind = match &item.content {
-                            PaletteItemContent::PaletteHelp { cmd } => {
-                                Some(CommandKind::Workbench(cmd.clone()))
-                            }
-                            PaletteItemContent::Command {
-                                cmd: LapceCommand { kind, .. },
-                            } => Some(kind.clone()),
-                            _ => None,
-                        };
-
-                        cmd_kind
-                            .and_then(|kind| keymaps.get(kind.str()))
-                            .and_then(|maps| maps.first())
-                    };
                     container(palette_item(
                         workspace,
                         i,
@@ -2486,7 +2417,6 @@ fn palette_content(
                         index,
                         palette_item_height,
                         config,
-                        keymap,
                     ))
                     .on_click_stop(move |_| {
                         clicked_index.set(Some(i));
@@ -3956,14 +3886,165 @@ pub fn window_menu(
     workbench_command: Listener<LapceWorkbenchCommand>,
     has_folder: bool,
 ) -> Menu {
-    let file_menu = if has_folder {
-        Menu::new("File").entry(MenuItem::new("Close Folder").action(move || {
-            workbench_command.send(LapceWorkbenchCommand::CloseFolder);
+    let file_menu = {
+        let mut menu = if has_folder {
+            Menu::new("File").entry(MenuItem::new("Close Folder").action(move || {
+                workbench_command.send(LapceWorkbenchCommand::CloseFolder);
+            }))
+        } else {
+            Menu::new("File").entry(MenuItem::new("Open Folder").action(move || {
+                workbench_command.send(LapceWorkbenchCommand::OpenFolder);
+            }))
+        };
+        menu = menu
+            .entry(MenuItem::new("Open Recent Workspace").action(move || {
+                workbench_command.send(LapceWorkbenchCommand::PaletteWorkspace);
+            }))
+            .separator()
+            .entry(MenuItem::new("Save All").action(move || {
+                workbench_command.send(LapceWorkbenchCommand::SaveAll);
+            }));
+        menu
+    };
+
+    let view_menu = Menu::new("View")
+        .entry(MenuItem::new("Toggle File Explorer").action(move || {
+            workbench_command.send(LapceWorkbenchCommand::ToggleFileExplorerVisual);
         }))
-    } else {
-        Menu::new("File").entry(MenuItem::new("Open Folder").action(move || {
-            workbench_command.send(LapceWorkbenchCommand::OpenFolder);
+        .entry(MenuItem::new("Toggle Search Panel").action(move || {
+            workbench_command.send(LapceWorkbenchCommand::ToggleSearchVisual);
         }))
+        .entry(MenuItem::new("Toggle Problem Panel").action(move || {
+            workbench_command.send(LapceWorkbenchCommand::ToggleProblemVisual);
+        }))
+        .entry(MenuItem::new("Toggle Plugin Panel").action(move || {
+            workbench_command.send(LapceWorkbenchCommand::TogglePluginVisual);
+        }))
+        .separator()
+        .entry(MenuItem::new("Toggle Left Panel").action(move || {
+            workbench_command.send(LapceWorkbenchCommand::TogglePanelLeftVisual);
+        }))
+        .entry(MenuItem::new("Toggle Bottom Panel").action(move || {
+            workbench_command.send(LapceWorkbenchCommand::TogglePanelBottomVisual);
+        }))
+        .entry(MenuItem::new("Toggle Right Panel").action(move || {
+            workbench_command.send(LapceWorkbenchCommand::TogglePanelRightVisual);
+        }))
+        .separator()
+        .entry(MenuItem::new("Toggle Inlay Hints").action(move || {
+            workbench_command.send(LapceWorkbenchCommand::ToggleInlayHints);
+        }))
+        .entry(MenuItem::new("Reset Zoom").action(move || {
+            workbench_command.send(LapceWorkbenchCommand::ZoomReset);
+        }))
+        .separator()
+        .entry(MenuItem::new("Reveal Active File in File Explorer").action(
+            move || {
+                workbench_command
+                    .send(LapceWorkbenchCommand::RevealActiveFileInFileExplorer);
+            },
+        ));
+
+    let window_menu = Menu::new("Window")
+        .entry(MenuItem::new("New Window").action(move || {
+            workbench_command.send(LapceWorkbenchCommand::NewWindow);
+        }))
+        .entry(MenuItem::new("New Window Tab").action(move || {
+            workbench_command.send(LapceWorkbenchCommand::NewWindowTab);
+        }))
+        .entry(MenuItem::new("Close Window Tab").action(move || {
+            workbench_command.send(LapceWorkbenchCommand::CloseWindowTab);
+        }))
+        .separator()
+        .entry(MenuItem::new("Next Window Tab").action(move || {
+            workbench_command.send(LapceWorkbenchCommand::NextWindowTab);
+        }))
+        .entry(MenuItem::new("Previous Window Tab").action(move || {
+            workbench_command.send(LapceWorkbenchCommand::PreviousWindowTab);
+        }))
+        .separator()
+        .entry(MenuItem::new("Reload Window").action(move || {
+            workbench_command.send(LapceWorkbenchCommand::ReloadWindow);
+        }));
+
+    let settings_menu = Menu::new("Settings")
+        .entry(MenuItem::new("Open Settings").action(move || {
+            workbench_command.send(LapceWorkbenchCommand::OpenSettings);
+        }))
+        .entry(MenuItem::new("Open Keyboard Shortcuts").action(move || {
+            workbench_command.send(LapceWorkbenchCommand::OpenKeyboardShortcuts);
+        }))
+        .separator()
+        .entry(MenuItem::new("Change Color Theme").action(move || {
+            workbench_command.send(LapceWorkbenchCommand::ChangeColorTheme);
+        }))
+        .entry(MenuItem::new("Change Icon Theme").action(move || {
+            workbench_command.send(LapceWorkbenchCommand::ChangeIconTheme);
+        }))
+        .entry(MenuItem::new("Open Theme Color Settings").action(move || {
+            workbench_command.send(LapceWorkbenchCommand::OpenThemeColorSettings);
+        }))
+        .separator()
+        .entry(MenuItem::new("Export Theme Settings").action(move || {
+            workbench_command.send(LapceWorkbenchCommand::ExportCurrentThemeSettings);
+        }))
+        .entry(MenuItem::new("Install Theme").action(move || {
+            workbench_command.send(LapceWorkbenchCommand::InstallTheme);
+        }));
+
+    let help_menu = {
+        let mut menu = Menu::new("Help")
+            .entry(MenuItem::new("Open Log File").action(move || {
+                workbench_command.send(LapceWorkbenchCommand::OpenLogFile);
+            }))
+            .entry(MenuItem::new("Open Logs Directory").action(move || {
+                workbench_command.send(LapceWorkbenchCommand::OpenLogsDirectory);
+            }))
+            .separator()
+            .entry(MenuItem::new("Open Settings Directory").action(move || {
+                workbench_command.send(LapceWorkbenchCommand::OpenSettingsDirectory);
+            }))
+            .entry(MenuItem::new("Open Settings File").action(move || {
+                workbench_command.send(LapceWorkbenchCommand::OpenSettingsFile);
+            }))
+            .entry(MenuItem::new("Open Keyboard Shortcuts File").action(move || {
+                workbench_command
+                    .send(LapceWorkbenchCommand::OpenKeyboardShortcutsFile);
+            }))
+            .separator()
+            .entry(MenuItem::new("Open Plugins Directory").action(move || {
+                workbench_command.send(LapceWorkbenchCommand::OpenPluginsDirectory);
+            }))
+            .entry(MenuItem::new("Open Themes Directory").action(move || {
+                workbench_command.send(LapceWorkbenchCommand::OpenThemesDirectory);
+            }))
+            .entry(MenuItem::new("Open Grammars Directory").action(move || {
+                workbench_command.send(LapceWorkbenchCommand::OpenGrammarsDirectory);
+            }))
+            .entry(MenuItem::new("Open Queries Directory").action(move || {
+                workbench_command.send(LapceWorkbenchCommand::OpenQueriesDirectory);
+            }))
+            .entry(MenuItem::new("Open Proxy Directory").action(move || {
+                workbench_command.send(LapceWorkbenchCommand::OpenProxyDirectory);
+            }));
+        #[cfg(target_os = "macos")]
+        {
+            menu = menu
+                .separator()
+                .entry(MenuItem::new("Install to PATH").action(move || {
+                    workbench_command.send(LapceWorkbenchCommand::InstallToPATH);
+                }))
+                .entry(MenuItem::new("Uninstall from PATH").action(move || {
+                    workbench_command.send(LapceWorkbenchCommand::UninstallFromPATH);
+                }));
+        }
+        menu.separator()
+            .entry(MenuItem::new("Show Environment").action(move || {
+                workbench_command.send(LapceWorkbenchCommand::ShowEnvironment);
+            }))
+            .entry(MenuItem::new("Open UI Inspector").action(move || {
+                workbench_command.send(LapceWorkbenchCommand::OpenUIInspector);
+            }))
     };
 
     Menu::new("Lapce")
@@ -3987,6 +4068,10 @@ pub fn window_menu(
         })
         .separator()
         .entry(file_menu)
+        .entry(view_menu)
+        .entry(window_menu)
+        .entry(settings_menu)
+        .entry(help_menu)
 }
 fn tab_secondary_click(
     internal_command: Listener<InternalCommand>,

@@ -2,12 +2,11 @@ use std::{rc::Rc, sync::Arc};
 
 use floem::{
     View,
-    event::EventListener,
     menu::{Menu, MenuItem},
     reactive::{
         Memo, ReadSignal, RwSignal, SignalGet, SignalUpdate, SignalWith, create_memo,
     },
-    style::{AlignItems, JustifyContent},
+    style::JustifyContent,
     views::{Decorators, container, drag_window_area, empty, label, stack, svg},
 };
 use lapce_core::meta;
@@ -75,95 +74,6 @@ fn left(
     .debug_name("Left Side of Top Bar")
 }
 
-fn middle(
-    workspace: Arc<LapceWorkspace>,
-    workbench_command: Listener<LapceWorkbenchCommand>,
-    config: ReadSignal<Arc<LapceConfig>>,
-) -> impl View {
-    let local_workspace = workspace.clone();
-    let open_folder = move || {
-        not_clickable_icon(
-            || LapceIcons::PALETTE_MENU,
-            || false,
-            || false,
-            || "Open Folder / Recent Workspace",
-            config,
-        )
-        .popout_menu(move || {
-            Menu::new("")
-                .entry(MenuItem::new("Open Folder").action(move || {
-                    workbench_command.send(LapceWorkbenchCommand::OpenFolder);
-                }))
-                .entry(MenuItem::new("Open Recent Workspace").action(move || {
-                    workbench_command.send(LapceWorkbenchCommand::PaletteWorkspace);
-                }))
-        })
-    };
-
-    stack((
-        stack((drag_window_area(empty())
-            .style(|s| s.height_pct(100.0).flex_basis(0.0).flex_grow(1.0)),))
-        .style(|s| {
-            s.flex_basis(0)
-                .flex_grow(1.0)
-                .justify_content(Some(JustifyContent::FlexEnd))
-        }),
-        container(
-            stack((
-                svg(move || config.get().ui_svg(LapceIcons::SEARCH)).style(
-                    move |s| {
-                        let config = config.get();
-                        let icon_size = config.ui.icon_size() as f32;
-                        s.size(icon_size, icon_size)
-                            .color(config.color(LapceColor::LAPCE_ICON_ACTIVE))
-                    },
-                ),
-                label(move || {
-                    if let Some(s) = local_workspace.display() {
-                        s
-                    } else {
-                        "Open Folder".to_string()
-                    }
-                })
-                .style(|s| s.padding_left(10).padding_right(5).selectable(false)),
-                open_folder(),
-            ))
-            .style(|s| s.align_items(Some(AlignItems::Center))),
-        )
-        .on_event_stop(EventListener::PointerDown, |_| {})
-        .on_click_stop(move |_| {
-            if workspace.clone().path.is_some() {
-                workbench_command.send(LapceWorkbenchCommand::PaletteHelpAndFile);
-            } else {
-                workbench_command.send(LapceWorkbenchCommand::PaletteWorkspace);
-            }
-        })
-        .style(move |s| {
-            let config = config.get();
-            s.flex_basis(0)
-                .flex_grow(10.0)
-                .min_width(200.0)
-                .max_width(500.0)
-                .height(26.0)
-                .justify_content(Some(JustifyContent::Center))
-                .align_items(Some(AlignItems::Center))
-                .border(1.0)
-                .border_color(config.color(LapceColor::LAPCE_BORDER))
-                .border_radius(6.0)
-                .background(config.color(LapceColor::EDITOR_BACKGROUND))
-        }),
-        drag_window_area(empty())
-            .style(|s| s.height_pct(100.0).flex_basis(0.0).flex_grow(1.0)),
-    ))
-    .style(|s| {
-        s.flex_basis(0)
-            .flex_grow(2.0)
-            .align_items(Some(AlignItems::Center))
-            .justify_content(Some(JustifyContent::Center))
-    })
-    .debug_name("Middle of Top Bar")
-}
-
 fn right(
     window_command: Listener<WindowCommand>,
     workbench_command: Listener<LapceWorkbenchCommand>,
@@ -201,10 +111,6 @@ fn right(
             )
             .popout_menu(move || {
                 Menu::new("")
-                    .entry(MenuItem::new("Command Palette").action(move || {
-                        workbench_command.send(LapceWorkbenchCommand::PaletteCommand)
-                    }))
-                    .separator()
                     .entry(MenuItem::new("Open Settings").action(move || {
                         workbench_command.send(LapceWorkbenchCommand::OpenSettings)
                     }))
@@ -290,13 +196,14 @@ pub fn title(window_tab_data: Rc<WindowTabData>) -> impl View {
     let config = window_tab_data.common.config;
     stack((
         left(
-            workspace.clone(),
+            workspace,
             lapce_command,
             workbench_command,
             config,
             num_window_tabs,
         ),
-        middle(workspace, workbench_command, config),
+        drag_window_area(empty())
+            .style(|s| s.height_pct(100.0).flex_basis(0.0).flex_grow(1.0)),
         right(
             window_command,
             workbench_command,

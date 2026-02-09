@@ -1,6 +1,4 @@
 use std::{
-    cell::RefCell,
-    collections::HashMap,
     path::PathBuf,
     rc::Rc,
     sync::{
@@ -8,7 +6,6 @@ use std::{
         atomic::{AtomicU64, Ordering},
         mpsc::{Receiver, Sender, TryRecvError, channel},
     },
-    time::Instant,
 };
 
 use anyhow::Result;
@@ -20,7 +17,6 @@ use floem::{
         use_context,
     },
 };
-use im::Vector;
 use itertools::Itertools;
 use lapce_core::{
     buffer::rope_text::RopeText, command::FocusCommand, language::LapceLanguage,
@@ -31,7 +27,6 @@ use lapce_rpc::proxy::ProxyResponse;
 use lapce_xi_rope::Rope;
 use lsp_types::{DocumentSymbol, DocumentSymbolResponse};
 use nucleo::Utf32Str;
-use strum::{EnumMessage, IntoEnumIterator};
 
 use self::{
     item::{PaletteItem, PaletteItemContent},
@@ -39,14 +34,14 @@ use self::{
 };
 use crate::{
     command::{
-        CommandExecuted, CommandKind, InternalCommand, LapceCommand, WindowCommand,
+        CommandExecuted, CommandKind, InternalCommand, WindowCommand,
     },
     db::LapceDb,
     editor::{
         EditorData, EditorViewKind,
         location::{EditorLocation, EditorPosition},
     },
-    keypress::{KeyPressData, KeyPressFocus, condition::Condition},
+    keypress::{KeyPressFocus, condition::Condition},
     lsp::path_from_url,
     main_split::MainSplitData,
     window_tab::{CommonData, Focus},
@@ -70,10 +65,10 @@ pub struct PaletteInput {
 }
 
 impl PaletteInput {
-    /// Update the current input in the palette, and the kind of palette it is
+    /// Update the current input in the palette
     pub fn update_input(&mut self, input: String, kind: PaletteKind) {
-        self.kind = kind.get_palette_kind(&input);
-        self.input = self.kind.get_input(&input).to_string();
+        self.kind = kind;
+        self.input = input;
     }
 }
 
@@ -92,10 +87,8 @@ pub struct PaletteData {
     pub input_editor: EditorData,
     pub preview_editor: EditorData,
     pub has_preview: RwSignal<bool>,
-    pub keypress: ReadSignal<KeyPressData>,
     /// Listened on for which entry in the palette has been clicked
     pub clicked_index: RwSignal<Option<usize>>,
-    pub executed_commands: Rc<RefCell<HashMap<String, Instant>>>,
     pub main_split: MainSplitData,
     pub references: RwSignal<Vec<EditorLocation>>,
     pub common: Rc<CommonData>,
@@ -112,7 +105,6 @@ impl PaletteData {
         cx: Scope,
         workspace: Arc<LapceWorkspace>,
         main_split: MainSplitData,
-        keypress: ReadSignal<KeyPressData>,
         common: Rc<CommonData>,
     ) -> Self {
         let status = cx.create_rw_signal(PaletteStatus::Inactive);
@@ -221,9 +213,7 @@ impl PaletteData {
             has_preview,
             input,
             kind,
-            keypress,
             clicked_index,
-            executed_commands: Rc::new(RefCell::new(HashMap::new())),
             references,
             common,
         };
@@ -320,13 +310,11 @@ impl PaletteData {
     pub fn run(&self, kind: PaletteKind) {
         self.common.focus.set(Focus::Palette);
         self.status.set(PaletteStatus::Started);
-        let symbol = kind.symbol();
         self.kind.set(kind);
-        // Refresh the palette input with only the symbol prefix, losing old content.
-        self.input_editor.doc().reload(Rope::from(symbol), true);
+        self.input_editor.doc().reload(Rope::from(""), true);
         self.input_editor
             .cursor()
-            .update(|cursor| cursor.set_insert(Selection::caret(symbol.len())));
+            .update(|cursor| cursor.set_insert(Selection::caret(0)));
     }
 
     /// Get the placeholder text to use in the palette input field.
@@ -343,16 +331,11 @@ impl PaletteData {
         self.run_id.set(run_id);
 
         match kind {
-            PaletteKind::PaletteHelp => self.get_palette_help(),
             PaletteKind::File => {
                 self.get_files();
             }
-            PaletteKind::HelpAndFile => self.get_palette_help_and_file(),
             PaletteKind::Line => {
                 self.get_lines();
-            }
-            PaletteKind::Command => {
-                self.get_commands();
             }
             PaletteKind::Workspace => {
                 self.get_workspaces();
@@ -381,52 +364,8 @@ impl PaletteData {
         }
     }
 
-    /// Initialize the palette with a list of the available palette kinds.
-    fn get_palette_help(&self) {
-        let items = self.get_palette_help_items();
-        self.items.set(items);
-    }
-
-    fn get_palette_help_items(&self) -> Vector<PaletteItem> {
-        PaletteKind::iter()
-            .filter_map(|kind| {
-                // Don't include PaletteHelp as the user is already here.
-                (kind != PaletteKind::PaletteHelp)
-                    .then(|| {
-                        let symbol = kind.symbol();
-
-                        // Only include palette kinds accessible by typing a prefix into the
-                        // palette.
-                        (kind == PaletteKind::File || !symbol.is_empty())
-                            .then_some(kind)
-                    })
-                    .flatten()
-            })
-            .filter_map(|kind| kind.command().map(|cmd| (kind, cmd)))
-            .map(|(kind, cmd)| {
-                let description = kind.symbol().to_string()
-                    + " "
-                    + cmd.get_message().unwrap_or("");
-
-                PaletteItem {
-                    content: PaletteItemContent::PaletteHelp { cmd },
-                    filter_text: description,
-                    score: 0,
-                    indices: vec![],
-                }
-            })
-            .collect()
-    }
-
-    fn get_palette_help_and_file(&self) {
-        let help_items: Vector<PaletteItem> = self.get_palette_help_items();
-        self.get_files_and_prepend(Some(help_items));
-    }
-
-    // get the files in the current workspace
-    // and prepend items if prepend is some
-    // e.g. help_and_file
-    fn get_files_and_prepend(&self, prepend: Option<im::Vector<PaletteItem>>) {
+    /// Initialize the palette with the files in the current workspace.
+    fn get_files(&self) {
         let workspace = self.workspace.clone();
         let set_items = self.items.write_only();
         let send =
@@ -434,7 +373,6 @@ impl PaletteData {
                 let items = items
                     .into_iter()
                     .map(|full_path| {
-                        // Strip the workspace prefix off the path, to avoid clutter
                         let path =
                             if let Some(workspace_path) = workspace.path.as_ref() {
                                 full_path
@@ -453,23 +391,13 @@ impl PaletteData {
                         }
                     })
                     .collect::<im::Vector<_>>();
-                let mut new_items = im::Vector::new();
-                if let Some(prepend) = prepend {
-                    new_items.append(prepend);
-                }
-                new_items.append(items);
-                set_items.set(new_items);
+                set_items.set(items);
             });
         self.common.proxy.get_files(move |result| {
             if let Ok(ProxyResponse::GetFilesResponse { items }) = result {
                 send(items);
             }
         });
-    }
-
-    /// Initialize the palette with the files in the current workspace.
-    fn get_files(&self) {
-        self.get_files_and_prepend(None);
     }
 
     /// Initialize the palette with the lines in the current document.
@@ -509,54 +437,6 @@ impl PaletteData {
                 }
             })
             .collect();
-        self.items.set(items);
-    }
-
-    fn get_commands(&self) {
-        const EXCLUDED_ITEMS: &[&str] = &["palette.command"];
-
-        let items = self.keypress.with_untracked(|keypress| {
-            // Get all the commands we've executed, and sort them by how recently they were
-            // executed. Ignore commands without descriptions.
-            let mut items: im::Vector<PaletteItem> = self
-                .executed_commands
-                .borrow()
-                .iter()
-                .sorted_by_key(|(_, i)| *i)
-                .rev()
-                .filter_map(|(key, _)| {
-                    keypress.commands.get(key).and_then(|c| {
-                        c.kind.desc().as_ref().map(|m| PaletteItem {
-                            content: PaletteItemContent::Command { cmd: c.clone() },
-                            filter_text: m.to_string(),
-                            score: 0,
-                            indices: vec![],
-                        })
-                    })
-                })
-                .collect();
-            // Add all the rest of the commands, ignoring palette commands (because we're in it)
-            // and commands that are sorted earlier due to being executed.
-            items.extend(keypress.commands.iter().filter_map(|(_, c)| {
-                if EXCLUDED_ITEMS.contains(&c.kind.str()) {
-                    return None;
-                }
-
-                if self.executed_commands.borrow().contains_key(c.kind.str()) {
-                    return None;
-                }
-
-                c.kind.desc().as_ref().map(|m| PaletteItem {
-                    content: PaletteItemContent::Command { cmd: c.clone() },
-                    filter_text: m.to_string(),
-                    score: 0,
-                    indices: vec![],
-                })
-            }));
-
-            items
-        });
-
         self.items.set(items);
     }
 
@@ -845,14 +725,6 @@ impl PaletteData {
         self.close();
         if let Some(item) = items.get(index) {
             match &item.content {
-                PaletteItemContent::PaletteHelp { cmd } => {
-                    let cmd = LapceCommand {
-                        kind: CommandKind::Workbench(cmd.clone()),
-                        data: None,
-                    };
-
-                    self.common.lapce_command.send(cmd);
-                }
                 PaletteItemContent::File { full_path, .. } => {
                     self.common
                         .internal_command
@@ -886,9 +758,6 @@ impl PaletteData {
                             },
                         },
                     );
-                }
-                PaletteItemContent::Command { cmd } => {
-                    self.common.lapce_command.send(cmd.clone());
                 }
                 PaletteItemContent::Workspace { workspace } => {
                     self.common.window_common.window_command.send(
@@ -998,7 +867,6 @@ impl PaletteData {
         let items = self.filtered_items.get_untracked();
         if let Some(item) = items.get(index) {
             match &item.content {
-                PaletteItemContent::PaletteHelp { .. } => {}
                 PaletteItemContent::File { .. } => {}
                 PaletteItemContent::Line { line, .. } => {
                     self.has_preview.set(true);
@@ -1029,7 +897,6 @@ impl PaletteData {
                         None,
                     );
                 }
-                PaletteItemContent::Command { .. } => {}
                 PaletteItemContent::Workspace { .. } => {}
                 PaletteItemContent::Language { .. } => {}
                 PaletteItemContent::LineEnding { .. } => {}

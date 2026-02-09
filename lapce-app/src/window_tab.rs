@@ -388,7 +388,6 @@ impl WindowTabData {
             cx,
             workspace.clone(),
             main_split.clone(),
-            keypress.read_only(),
             common.clone(),
         );
 
@@ -967,8 +966,6 @@ impl WindowTabData {
             }
 
             // ==== Palette Commands ====
-            PaletteHelp => self.palette.run(PaletteKind::PaletteHelp),
-            PaletteHelpAndFile => self.palette.run(PaletteKind::HelpAndFile),
             PaletteLine => {
                 self.palette.run(PaletteKind::Line);
             }
@@ -979,9 +976,6 @@ impl WindowTabData {
                 self.palette.run(PaletteKind::DocumentSymbol);
             }
             PaletteWorkspaceSymbol => {}
-            PaletteCommand => {
-                self.palette.run(PaletteKind::Command);
-            }
             PaletteWorkspace => {
                 self.palette.run(PaletteKind::Workspace);
             }
