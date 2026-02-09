@@ -4,7 +4,6 @@ use lapce_core::line_ending::LineEnding;
 use lsp_types::{Range, SymbolKind};
 
 use crate::{
-    command::LapceCommand,
     editor::location::EditorLocation,
     workspace::LapceWorkspace,
 };
@@ -26,9 +25,6 @@ pub enum PaletteItemContent {
     Line {
         line: usize,
         content: String,
-    },
-    Command {
-        cmd: LapceCommand,
     },
     Workspace {
         workspace: LapceWorkspace,

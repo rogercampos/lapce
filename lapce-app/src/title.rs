@@ -111,10 +111,6 @@ fn right(
             )
             .popout_menu(move || {
                 Menu::new("")
-                    .entry(MenuItem::new("Command Palette").action(move || {
-                        workbench_command.send(LapceWorkbenchCommand::PaletteCommand)
-                    }))
-                    .separator()
                     .entry(MenuItem::new("Open Settings").action(move || {
                         workbench_command.send(LapceWorkbenchCommand::OpenSettings)
                     }))

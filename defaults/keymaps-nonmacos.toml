@@ -11,8 +11,8 @@ key = "ctrl+shift+n"
 command = "palette"
 
 [[keymaps]]
-key = "ctrl+shift+a"
-command = "palette.command"
+key = "ctrl+shift+s"
+command = "save_all"
 
 [[keymaps]]
 key = "ctrl+e"

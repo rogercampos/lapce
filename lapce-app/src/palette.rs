@@ -1,6 +1,4 @@
 use std::{
-    cell::RefCell,
-    collections::HashMap,
     path::PathBuf,
     rc::Rc,
     sync::{
@@ -8,7 +6,6 @@ use std::{
         atomic::{AtomicU64, Ordering},
         mpsc::{Receiver, Sender, TryRecvError, channel},
     },
-    time::Instant,
 };
 
 use anyhow::Result;
@@ -44,7 +41,7 @@ use crate::{
         EditorData, EditorViewKind,
         location::{EditorLocation, EditorPosition},
     },
-    keypress::{KeyPressData, KeyPressFocus, condition::Condition},
+    keypress::{KeyPressFocus, condition::Condition},
     lsp::path_from_url,
     main_split::MainSplitData,
     window_tab::{CommonData, Focus},
@@ -90,10 +87,8 @@ pub struct PaletteData {
     pub input_editor: EditorData,
     pub preview_editor: EditorData,
     pub has_preview: RwSignal<bool>,
-    pub keypress: ReadSignal<KeyPressData>,
     /// Listened on for which entry in the palette has been clicked
     pub clicked_index: RwSignal<Option<usize>>,
-    pub executed_commands: Rc<RefCell<HashMap<String, Instant>>>,
     pub main_split: MainSplitData,
     pub references: RwSignal<Vec<EditorLocation>>,
     pub common: Rc<CommonData>,
@@ -110,7 +105,6 @@ impl PaletteData {
         cx: Scope,
         workspace: Arc<LapceWorkspace>,
         main_split: MainSplitData,
-        keypress: ReadSignal<KeyPressData>,
         common: Rc<CommonData>,
     ) -> Self {
         let status = cx.create_rw_signal(PaletteStatus::Inactive);
@@ -219,9 +213,7 @@ impl PaletteData {
             has_preview,
             input,
             kind,
-            keypress,
             clicked_index,
-            executed_commands: Rc::new(RefCell::new(HashMap::new())),
             references,
             common,
         };
@@ -345,9 +337,6 @@ impl PaletteData {
             PaletteKind::Line => {
                 self.get_lines();
             }
-            PaletteKind::Command => {
-                self.get_commands();
-            }
             PaletteKind::Workspace => {
                 self.get_workspaces();
             }
@@ -448,54 +437,6 @@ impl PaletteData {
                 }
             })
             .collect();
-        self.items.set(items);
-    }
-
-    fn get_commands(&self) {
-        const EXCLUDED_ITEMS: &[&str] = &["palette.command"];
-
-        let items = self.keypress.with_untracked(|keypress| {
-            // Get all the commands we've executed, and sort them by how recently they were
-            // executed. Ignore commands without descriptions.
-            let mut items: im::Vector<PaletteItem> = self
-                .executed_commands
-                .borrow()
-                .iter()
-                .sorted_by_key(|(_, i)| *i)
-                .rev()
-                .filter_map(|(key, _)| {
-                    keypress.commands.get(key).and_then(|c| {
-                        c.kind.desc().as_ref().map(|m| PaletteItem {
-                            content: PaletteItemContent::Command { cmd: c.clone() },
-                            filter_text: m.to_string(),
-                            score: 0,
-                            indices: vec![],
-                        })
-                    })
-                })
-                .collect();
-            // Add all the rest of the commands, ignoring palette commands (because we're in it)
-            // and commands that are sorted earlier due to being executed.
-            items.extend(keypress.commands.iter().filter_map(|(_, c)| {
-                if EXCLUDED_ITEMS.contains(&c.kind.str()) {
-                    return None;
-                }
-
-                if self.executed_commands.borrow().contains_key(c.kind.str()) {
-                    return None;
-                }
-
-                c.kind.desc().as_ref().map(|m| PaletteItem {
-                    content: PaletteItemContent::Command { cmd: c.clone() },
-                    filter_text: m.to_string(),
-                    score: 0,
-                    indices: vec![],
-                })
-            }));
-
-            items
-        });
-
         self.items.set(items);
     }
 
@@ -818,9 +759,6 @@ impl PaletteData {
                         },
                     );
                 }
-                PaletteItemContent::Command { cmd } => {
-                    self.common.lapce_command.send(cmd.clone());
-                }
                 PaletteItemContent::Workspace { workspace } => {
                     self.common.window_common.window_command.send(
                         WindowCommand::SetWorkspace {
@@ -959,7 +897,6 @@ impl PaletteData {
                         None,
                     );
                 }
-                PaletteItemContent::Command { .. } => {}
                 PaletteItemContent::Workspace { .. } => {}
                 PaletteItemContent::Language { .. } => {}
                 PaletteItemContent::LineEnding { .. } => {}

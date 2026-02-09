@@ -11,8 +11,8 @@ key = "meta+shift+o"
 command = "palette"
 
 [[keymaps]]
-key = "meta+shift+a"
-command = "palette.command"
+key = "meta+alt+s"
+command = "save_all"
 
 [[keymaps]]
 key = "meta+e"

@@ -2551,10 +2551,6 @@ impl EditorData {
                     Some(CommandKind::Edit(EditCommand::ClipboardCut)),
                     Some(CommandKind::Edit(EditCommand::ClipboardCopy)),
                     Some(CommandKind::Edit(EditCommand::ClipboardPaste)),
-                    None,
-                    Some(CommandKind::Workbench(
-                        LapceWorkbenchCommand::PaletteCommand,
-                    )),
                 ]
             } else {
                 vec![
@@ -2581,10 +2577,6 @@ impl EditorData {
                     Some(CommandKind::Edit(EditCommand::ClipboardCut)),
                     Some(CommandKind::Edit(EditCommand::ClipboardCopy)),
                     Some(CommandKind::Edit(EditCommand::ClipboardPaste)),
-                    None,
-                    Some(CommandKind::Workbench(
-                        LapceWorkbenchCommand::PaletteCommand,
-                    )),
                 ]
             }
         } else {
@@ -2592,10 +2584,6 @@ impl EditorData {
                 Some(CommandKind::Edit(EditCommand::ClipboardCut)),
                 Some(CommandKind::Edit(EditCommand::ClipboardCopy)),
                 Some(CommandKind::Edit(EditCommand::ClipboardPaste)),
-                None,
-                Some(CommandKind::Workbench(
-                    LapceWorkbenchCommand::PaletteCommand,
-                )),
             ]
         };
         let lapce_command = self.common.lapce_command;

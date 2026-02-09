@@ -2,7 +2,6 @@
 pub enum PaletteKind {
     File,
     Line,
-    Command,
     Workspace,
     Reference,
     DocumentSymbol,
