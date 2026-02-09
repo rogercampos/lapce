@@ -226,7 +226,6 @@ impl LapceDb {
 
         self.save_tx
             .send(SaveEvent::Workspace(workspace, workspace_info))?;
-        // self.insert_unsaved_buffer(main_split)?;
 
         Ok(())
     }
@@ -360,7 +359,6 @@ impl LapceDb {
         let workspace_info = data.workspace_info();
 
         self.insert_workspace(&workspace, &workspace_info)?;
-        // self.insert_unsaved_buffer(main_split)?;
 
         Ok(())
     }
