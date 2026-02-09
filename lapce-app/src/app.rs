@@ -70,7 +70,7 @@ use crate::{
     about, alert,
     code_action::CodeActionStatus,
     command::{
-        CommandKind, InternalCommand, LapceCommand, LapceWorkbenchCommand,
+        InternalCommand, LapceCommand, LapceWorkbenchCommand,
         WindowCommand,
     },
     config::{
@@ -2314,8 +2314,7 @@ fn palette_item(
                 .style(|s| s.align_items(Some(AlignItems::Center)).max_width_full()),
             )
         }
-        PaletteItemContent::PaletteHelp { .. }
-        | PaletteItemContent::Command { .. } => {
+        PaletteItemContent::Command { .. } => {
             let text = item.filter_text;
             let indices = item.indices;
             let keys = if let Some(keymap) = keymap {
@@ -2466,9 +2465,6 @@ fn palette_content(
                     let workspace = workspace.clone();
                     let keymap = {
                         let cmd_kind = match &item.content {
-                            PaletteItemContent::PaletteHelp { cmd } => {
-                                Some(CommandKind::Workbench(cmd.clone()))
-                            }
                             PaletteItemContent::Command {
                                 cmd: LapceCommand { kind, .. },
                             } => Some(kind.clone()),

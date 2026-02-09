@@ -4,7 +4,7 @@ use lapce_core::line_ending::LineEnding;
 use lsp_types::{Range, SymbolKind};
 
 use crate::{
-    command::{LapceCommand, LapceWorkbenchCommand},
+    command::LapceCommand,
     editor::location::EditorLocation,
     workspace::LapceWorkspace,
 };
@@ -19,9 +19,6 @@ pub struct PaletteItem {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum PaletteItemContent {
-    PaletteHelp {
-        cmd: LapceWorkbenchCommand,
-    },
     File {
         path: PathBuf,
         full_path: PathBuf,
