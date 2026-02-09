@@ -113,7 +113,11 @@ impl TextDocument {
         });
     }
 
-    fn on_update(&self, ed: Option<&Editor>, deltas: &[(Rope, RopeDelta, InvalLines)]) {
+    fn on_update(
+        &self,
+        ed: Option<&Editor>,
+        deltas: &[(Rope, RopeDelta, InvalLines)],
+    ) {
         let on_updates = self.on_updates.borrow();
         let data = OnUpdate { editor: ed, deltas };
         for on_update in on_updates.iter() {
@@ -212,7 +216,8 @@ impl Document for TextDocument {
                             buffer,
                             c,
                             &|_, c, offset| {
-                                WordCursor::new(&self.text(), offset).previous_unmatched(c)
+                                WordCursor::new(&self.text(), offset)
+                                    .previous_unmatched(c)
                             },
                             // TODO: ?
                             false,
@@ -232,7 +237,11 @@ impl Document for TextDocument {
         }
     }
 
-    fn edit(&self, iter: &mut dyn Iterator<Item = (Selection, &str)>, edit_type: EditType) {
+    fn edit(
+        &self,
+        iter: &mut dyn Iterator<Item = (Selection, &str)>,
+        edit_type: EditType,
+    ) {
         let deltas = self
             .buffer
             .try_update(|buffer| buffer.edit(iter, edit_type));
@@ -244,7 +253,12 @@ impl Document for TextDocument {
     }
 }
 impl DocumentPhantom for TextDocument {
-    fn phantom_text(&self, edid: EditorId, styling: &EditorStyle, line: usize) -> PhantomTextLine {
+    fn phantom_text(
+        &self,
+        edid: EditorId,
+        styling: &EditorStyle,
+        line: usize,
+    ) -> PhantomTextLine {
         let mut text = SmallVec::new();
 
         if self.buffer.with_untracked(Buffer::is_empty) {
@@ -262,7 +276,9 @@ impl DocumentPhantom for TextDocument {
             }
         }
 
-        if let Some(preedit) = self.preedit_phantom(Some(styling.preedit_underline_color()), line) {
+        if let Some(preedit) =
+            self.preedit_phantom(Some(styling.preedit_underline_color()), line)
+        {
             text.push(preedit);
         }
 
@@ -306,7 +322,14 @@ impl CommonAction for TextDocument {
         register: &mut Register,
     ) {
         self.buffer.try_update(move |buffer| {
-            Action::execute_motion_mode(cursor, buffer, motion_mode, range, is_vertical, register)
+            Action::execute_motion_mode(
+                cursor,
+                buffer,
+                motion_mode,
+                range,
+                is_vertical,
+                register,
+            )
         });
     }
 

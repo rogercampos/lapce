@@ -149,10 +149,16 @@ impl Renderer {
         let size = Size::new(size.width.max(1.0), size.height.max(1.0));
         match self {
             #[cfg(feature = "vello")]
-            Renderer::Vello(r) => r.resize(size.width as u32, size.height as u32, scale),
+            Renderer::Vello(r) => {
+                r.resize(size.width as u32, size.height as u32, scale)
+            }
             #[cfg(not(feature = "vello"))]
-            Renderer::Vger(r) => r.resize(size.width as u32, size.height as u32, scale),
-            Renderer::TinySkia(r) => r.resize(size.width as u32, size.height as u32, scale),
+            Renderer::Vger(r) => {
+                r.resize(size.width as u32, size.height as u32, scale)
+            }
+            Renderer::TinySkia(r) => {
+                r.resize(size.width as u32, size.height as u32, scale)
+            }
             Renderer::Uninitialized { .. } => {}
         }
     }

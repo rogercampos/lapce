@@ -78,7 +78,11 @@ where
 /// );
 /// ```
 ///
-pub fn dyn_stack<IF, I, T, KF, K, VF, V>(each_fn: IF, key_fn: KF, view_fn: VF) -> DynStack<T>
+pub fn dyn_stack<IF, I, T, KF, K, VF, V>(
+    each_fn: IF,
+    key_fn: KF,
+    view_fn: VF,
+) -> DynStack<T>
 where
     IF: Fn() -> I + 'static,
     I: IntoIterator<Item = T>,
@@ -116,7 +120,8 @@ where
         id.update_state(diff);
         HashRun(hashed_items)
     });
-    let view_fn = Box::new(as_child_of_current_scope(move |e| view_fn(e).into_any()));
+    let view_fn =
+        Box::new(as_child_of_current_scope(move |e| view_fn(e).into_any()));
     DynStack {
         id,
         children: Vec::new(),
@@ -169,7 +174,10 @@ impl<V> Default for Diff<V> {
 
 impl<V> Diff<V> {
     pub fn is_empty(&self) -> bool {
-        self.removed.is_empty() && self.moved.is_empty() && self.added.is_empty() && !self.clear
+        self.removed.is_empty()
+            && self.moved.is_empty()
+            && self.added.is_empty()
+            && !self.clear
     }
 }
 
@@ -191,7 +199,10 @@ pub(crate) struct DiffOpRemove {
 }
 
 /// Calculates the operations need to get from `a` to `b`.
-pub(crate) fn diff<K: Eq + Hash, V>(from: &FxIndexSet<K>, to: &FxIndexSet<K>) -> Diff<V> {
+pub(crate) fn diff<K: Eq + Hash, V>(
+    from: &FxIndexSet<K>,
+    to: &FxIndexSet<K>,
+) -> Diff<V> {
     if from.is_empty() && to.is_empty() {
         return Diff::default();
     } else if to.is_empty() {
@@ -212,13 +223,14 @@ pub(crate) fn diff<K: Eq + Hash, V>(from: &FxIndexSet<K>, to: &FxIndexSet<K>) ->
     // Get added items
     let mut added = to.difference(from);
 
-    let added_cmds = added
-        .clone()
-        .map(|k| to.get_full(k).unwrap().0)
-        .map(|idx| DiffOpAdd {
-            at: idx,
-            view: None,
-        });
+    let added_cmds =
+        added
+            .clone()
+            .map(|k| to.get_full(k).unwrap().0)
+            .map(|idx| DiffOpAdd {
+                at: idx,
+                view: None,
+            });
 
     // Get moved items
     let mut normalized_idx = 0;
@@ -228,7 +240,8 @@ pub(crate) fn diff<K: Eq + Hash, V>(from: &FxIndexSet<K>, to: &FxIndexSet<K>) ->
 
     for (idx, k) in to.iter().enumerate() {
         if let Some(added_idx) = added_idx.as_mut().filter(|r_i| **r_i == idx) {
-            if let Some(next_added) = added.next().map(|k| to.get_full(k).unwrap().0) {
+            if let Some(next_added) = added.next().map(|k| to.get_full(k).unwrap().0)
+            {
                 *added_idx = next_added;
 
                 normalized_idx = usize::wrapping_sub(normalized_idx, 1);
@@ -238,7 +251,9 @@ pub(crate) fn diff<K: Eq + Hash, V>(from: &FxIndexSet<K>, to: &FxIndexSet<K>) ->
         if let Some(removed_idx) = removed_idx.as_mut().filter(|r_i| **r_i == idx) {
             normalized_idx = normalized_idx.wrapping_add(1);
 
-            if let Some(next_removed) = removed.next().map(|k| from.get_full(k).unwrap().0) {
+            if let Some(next_removed) =
+                removed.next().map(|k| from.get_full(k).unwrap().0)
+            {
                 *removed_idx = next_removed;
             }
         }
@@ -295,8 +310,8 @@ pub(super) fn apply_diff<T, VF>(
 {
     // Resize children if needed
     if diff.added.len().checked_sub(diff.removed.len()).is_some() {
-        let target_size =
-            children.len() + (diff.added.len() as isize - diff.removed.len() as isize) as usize;
+        let target_size = children.len()
+            + (diff.added.len() as isize - diff.removed.len() as isize) as usize;
 
         children.resize_with(target_size, || None);
     }

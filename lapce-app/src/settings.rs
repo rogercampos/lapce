@@ -30,8 +30,7 @@ use crate::{
     command::CommandExecuted,
     config::{
         DropdownInfo, LapceConfig, color::LapceColor, core::CoreConfig,
-        editor::EditorConfig, icon::LapceIcons,
-        ui::UIConfig,
+        editor::EditorConfig, icon::LapceIcons, ui::UIConfig,
     },
     keypress::KeyPressFocus,
     main_split::Editors,

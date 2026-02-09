@@ -101,12 +101,15 @@ pub fn tab_navigation_view() -> impl IntoView {
             .width_full()
     });
 
-    let settings_view = v_stack((tabs_bar, main_content)).style(|s| s.width_full().height_full());
+    let settings_view =
+        v_stack((tabs_bar, main_content)).style(|s| s.width_full().height_full());
 
     let id = settings_view.id();
     settings_view.on_event_stop(EventListener::KeyUp, move |e| {
         if let floem::event::Event::KeyUp(e) = e {
-            if e.key.logical_key == floem::keyboard::Key::Named(floem::keyboard::NamedKey::F11) {
+            if e.key.logical_key
+                == floem::keyboard::Key::Named(floem::keyboard::NamedKey::F11)
+            {
                 id.inspect();
             }
         }

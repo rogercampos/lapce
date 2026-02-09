@@ -14,10 +14,14 @@ pub mod left_sidebar;
 pub mod right_sidebar;
 pub mod tab_navigation;
 
-fn list_item<V: IntoView + 'static>(name: String, view_fn: impl Fn() -> V) -> impl IntoView {
+fn list_item<V: IntoView + 'static>(
+    name: String,
+    view_fn: impl Fn() -> V,
+) -> impl IntoView {
     h_stack((
         label(move || name.clone()).style(|s| s),
-        container(view_fn()).style(|s| s.width_full().justify_content(AlignContent::End)),
+        container(view_fn())
+            .style(|s| s.width_full().justify_content(AlignContent::End)),
     ))
     .style(|s| s.width(200))
 }

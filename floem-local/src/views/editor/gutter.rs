@@ -79,7 +79,10 @@ impl View for EditorGutterView {
         }
     }
 
-    fn layout(&mut self, cx: &mut crate::context::LayoutCx) -> taffy::prelude::NodeId {
+    fn layout(
+        &mut self,
+        cx: &mut crate::context::LayoutCx,
+    ) -> taffy::prelude::NodeId {
         cx.layout_node(self.id(), true, |_cx| {
             let (width, height) = (self.text_width, 10.0);
             let layout_node = self
@@ -90,7 +93,11 @@ impl View for EditorGutterView {
                 .unwrap();
 
             let style = Style::new()
-                .width(self.gutter_style.left_padding() + width + self.gutter_style.right_padding())
+                .width(
+                    self.gutter_style.left_padding()
+                        + width
+                        + self.gutter_style.right_padding(),
+                )
                 .height(height)
                 .to_taffy_style();
             let _ = self.id.taffy().borrow_mut().set_style(layout_node, style);
@@ -98,7 +105,10 @@ impl View for EditorGutterView {
         })
     }
 
-    fn compute_layout(&mut self, _cx: &mut crate::context::ComputeLayoutCx) -> Option<Rect> {
+    fn compute_layout(
+        &mut self,
+        _cx: &mut crate::context::ComputeLayoutCx,
+    ) -> Option<Rect> {
         if let Some(width) = self.id.get_layout().map(|l| l.size.width as f64) {
             self.full_width = width;
         }
@@ -178,8 +188,14 @@ impl View for EditorGutterView {
 
                 let mut text_layout = TextLayout::new();
                 if line == current_line {
-                    text_layout.set_text(&text, current_line_attrs_list.clone(), None);
-                    if let Some(current_line_color) = self.gutter_style.current_line_color() {
+                    text_layout.set_text(
+                        &text,
+                        current_line_attrs_list.clone(),
+                        None,
+                    );
+                    if let Some(current_line_color) =
+                        self.gutter_style.current_line_color()
+                    {
                         cursor.with_untracked(|cursor| {
                             let highlight_current_line = match cursor.mode {
                                 // TODO: check if shis should be 0 or 1
@@ -192,15 +208,23 @@ impl View for EditorGutterView {
                             if highlight_current_line {
                                 for (_, end) in cursor.regions_iter() {
                                     // TODO: unsure if this is correct for wrapping lines
-                                    let rvline = editor.rvline_of_offset(end, cursor.affinity);
+                                    let rvline = editor
+                                        .rvline_of_offset(end, cursor.affinity);
 
                                     if let Some(info) = screen_lines.info(rvline) {
-                                        let line_height =
-                                            editor.line_height(info.vline_info.rvline.line);
+                                        let line_height = editor.line_height(
+                                            info.vline_info.rvline.line,
+                                        );
                                         // the extra 1px is for a small line that appears between
                                         let rect = Rect::from_origin_size(
-                                            (viewport.x0, info.vline_y - viewport.y0),
-                                            (self.full_width + 1.1, f64::from(line_height)),
+                                            (
+                                                viewport.x0,
+                                                info.vline_y - viewport.y0,
+                                            ),
+                                            (
+                                                self.full_width + 1.1,
+                                                f64::from(line_height),
+                                            ),
                                         );
 
                                         cx.fill(&rect, current_line_color, 0.0);
@@ -216,7 +240,10 @@ impl View for EditorGutterView {
                 let height = size.height;
 
                 let pos = Point::new(
-                    (self.full_width - (size.width) - self.gutter_style.right_padding()).max(0.0),
+                    (self.full_width
+                        - (size.width)
+                        - self.gutter_style.right_padding())
+                    .max(0.0),
                     y + (line_height - height) / 2.0 - viewport.y0,
                 );
 

@@ -17,10 +17,7 @@ impl KeyMapLoader {
         }
     }
 
-    pub fn load_from_str<'a>(
-        &'a mut self,
-        s: &str,
-    ) -> Result<&'a mut Self> {
+    pub fn load_from_str<'a>(&'a mut self, s: &str) -> Result<&'a mut Self> {
         let toml_keymaps: toml_edit::Document = s.parse()?;
         let toml_keymaps = toml_keymaps
             .get("keymaps")
@@ -54,8 +51,7 @@ impl KeyMapLoader {
                 }
             } else {
                 let is_keymap = |k: &KeyMap| -> bool {
-                    k.when == keymap.when
-                        && k.key == keymap.key
+                    k.when == keymap.when && k.key == keymap.key
                 };
                 if let Some(index) = current_keymaps.iter().position(is_keymap) {
                     current_keymaps.remove(index);
@@ -88,9 +84,7 @@ impl KeyMapLoader {
         (map, command_map)
     }
 
-    fn get_keymap(
-        toml_keymap: &toml_edit::Table,
-    ) -> Result<Option<KeyMap>> {
+    fn get_keymap(toml_keymap: &toml_edit::Table) -> Result<Option<KeyMap>> {
         let key = toml_keymap
             .get("key")
             .and_then(|v| v.as_str())

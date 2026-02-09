@@ -45,8 +45,10 @@ pub fn left_sidebar_view() -> impl IntoView {
     });
 
     let main_window = scroll(
-        container(label(move || String::from("Hello world")).style(|s| s.padding(10.0)))
-            .style(|s| s.flex_col().items_start().padding_bottom(10.0)),
+        container(
+            label(move || String::from("Hello world")).style(|s| s.padding(10.0)),
+        )
+        .style(|s| s.flex_col().items_start().padding_bottom(10.0)),
     )
     .style(|s| {
         s.flex_col()
@@ -69,7 +71,9 @@ pub fn left_sidebar_view() -> impl IntoView {
     let id = view.id();
     view.on_event_stop(EventListener::KeyUp, move |e| {
         if let floem::event::Event::KeyUp(e) = e {
-            if e.key.logical_key == floem::keyboard::Key::Named(floem::keyboard::NamedKey::F11) {
+            if e.key.logical_key
+                == floem::keyboard::Key::Named(floem::keyboard::NamedKey::F11)
+            {
                 id.inspect();
             }
         }

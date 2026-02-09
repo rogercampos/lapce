@@ -31,8 +31,10 @@ pub fn draggable_sidebar_view() -> impl IntoView {
 
     let main_window = scroll(
         container(
-            label(move || String::from("<-- drag me!\n \n(double click to return to default)"))
-                .style(|s| s.padding(10.0)),
+            label(move || {
+                String::from("<-- drag me!\n \n(double click to return to default)")
+            })
+            .style(|s| s.padding(10.0)),
         )
         .style(|s| s.flex_col().items_start().padding_bottom(10.0)),
     )
@@ -58,7 +60,9 @@ pub fn draggable_sidebar_view() -> impl IntoView {
     let id = view.id();
     view.on_event_stop(EventListener::KeyUp, move |e| {
         if let floem::event::Event::KeyUp(e) = e {
-            if e.key.logical_key == floem::keyboard::Key::Named(floem::keyboard::NamedKey::F11) {
+            if e.key.logical_key
+                == floem::keyboard::Key::Named(floem::keyboard::NamedKey::F11)
+            {
                 id.inspect();
             }
         }

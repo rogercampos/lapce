@@ -165,7 +165,11 @@ impl PropCache {
     /// Find the pair of frames for a given prop at some given target index.
     /// This will find the pair of frames with one lower than the target and one higher than the target.
     /// If it cannot find both, it returns none.
-    fn get_prop_frames(&self, prop: StylePropRef, target_idx: u16) -> Option<PropFrames> {
+    fn get_prop_frames(
+        &self,
+        prop: StylePropRef,
+        target_idx: u16,
+    ) -> Option<PropFrames> {
         self.prop_map.get(&prop).map(|frames| {
             match frames.binary_search(&PropFrameKind::Normal(target_idx)) {
                 Ok(exact_idx) => {
@@ -348,7 +352,8 @@ pub enum AnimStateCommand {
     Reverse,
 }
 
-type EffectStateVec = SmallVec<[RwSignal<SmallVec<[(ViewId, StackOffset<Animation>); 1]>>; 1]>;
+type EffectStateVec =
+    SmallVec<[RwSignal<SmallVec<[(ViewId, StackOffset<Animation>); 1]>>; 1]>;
 
 /// The main animation struct
 ///
@@ -373,7 +378,8 @@ pub struct Animation {
     pub(crate) folded_style: Style,
     pub(crate) key_frames: im_rc::HashMap<u16, KeyFrame>,
     // frames should be added to this if when they are the lower frame, they return not done. check/run them before other frames
-    pub(crate) props_in_ext_progress: im_rc::HashMap<StylePropRef, (KeyFrameProp, KeyFrameProp)>,
+    pub(crate) props_in_ext_progress:
+        im_rc::HashMap<StylePropRef, (KeyFrameProp, KeyFrameProp)>,
     pub(crate) cache: PropCache,
     /// This will fire at the start of each cycle of an animation.
     pub(crate) on_start: Trigger,
@@ -431,7 +437,10 @@ impl Animation {
     }
 
     /// Quickly set an animation to be a view transition and override the default easing function on keyframes 0 and 100.
-    pub fn view_transition_with_ease(self, ease: impl Easing + 'static + Clone) -> Self {
+    pub fn view_transition_with_ease(
+        self,
+        ease: impl Easing + 'static + Clone,
+    ) -> Self {
         self.view_transition()
             .keyframe(0, |f| f.computed_style().ease(ease.clone()))
             .keyframe(100, |f| f.computed_style().ease(ease.clone()))
@@ -458,7 +467,11 @@ impl Animation {
     ///
     /// If there is a matching keyframe id, the style in this keyframe will only override the style values in the new style.
     /// If you want the style to completely override style see [`Animation::keyframe_override`].
-    pub fn keyframe(mut self, frame_id: u16, key_frame: impl Fn(KeyFrame) -> KeyFrame) -> Self {
+    pub fn keyframe(
+        mut self,
+        frame_id: u16,
+        key_frame: impl Fn(KeyFrame) -> KeyFrame,
+    ) -> Self {
         let frame = key_frame(KeyFrame::new(frame_id));
         if let KeyFrameStyle::Style(ref style) = frame.style {
             // this frame id now contains a style, so remove this frame id from being marked as computed (if it was).
@@ -537,7 +550,10 @@ impl Animation {
     }
 
     /// Set properties on the animation while having access to the current duration.
-    pub fn with_duration(self, duration: impl FnOnce(Self, Duration) -> Self) -> Self {
+    pub fn with_duration(
+        self,
+        duration: impl FnOnce(Self, Duration) -> Self,
+    ) -> Self {
         let d = self.duration;
         duration(self, d)
     }
@@ -558,7 +574,10 @@ impl Animation {
     }
 
     /// Provides access to the on visual complete trigger by calling the closure once and then returning self.
-    pub fn on_visual_complete(self, on_visual_complete: impl FnOnce(Trigger) + 'static) -> Self {
+    pub fn on_visual_complete(
+        self,
+        on_visual_complete: impl FnOnce(Trigger) + 'static,
+    ) -> Self {
         on_visual_complete(self.on_visual_complete);
         self
     }
@@ -1005,10 +1024,9 @@ impl Animation {
 
         let upper = {
             let upper = upper_idx?;
-            let frame = self
-                .key_frames
-                .get(&upper.inner())
-                .expect("If the value is in the cache, it should also be in the key frames");
+            let frame = self.key_frames.get(&upper.inner()).expect(
+                "If the value is in the cache, it should also be in the key frames",
+            );
 
             let prop = match &frame.style {
                 KeyFrameStyle::Computed => {
@@ -1023,7 +1041,9 @@ impl Animation {
                         .expect("was in the cache as a computed frame")
                         .clone()
                 }
-                KeyFrameStyle::Style(s) => s.map.get(&prop.key).expect("same as above").clone(),
+                KeyFrameStyle::Style(s) => {
+                    s.map.get(&prop.key).expect("same as above").clone()
+                }
             };
 
             KeyFrameProp {
@@ -1035,10 +1055,9 @@ impl Animation {
 
         let lower = {
             let lower = lower_idx?;
-            let frame = self
-                .key_frames
-                .get(&lower.inner())
-                .expect("If the value is in the cache, it should also be in the key frames");
+            let frame = self.key_frames.get(&lower.inner()).expect(
+                "If the value is in the cache, it should also be in the key frames",
+            );
 
             let prop = match &frame.style {
                 KeyFrameStyle::Computed => {
@@ -1056,7 +1075,9 @@ impl Animation {
                         .expect("was in the cache as a computed frame")
                         .clone()
                 }
-                KeyFrameStyle::Style(s) => s.map.get(&prop.key).expect("same as above").clone(),
+                KeyFrameStyle::Style(s) => {
+                    s.map.get(&prop.key).expect("same as above").clone()
+                }
             };
 
             KeyFrameProp {
@@ -1086,8 +1107,10 @@ impl Animation {
         for computed_idx in &computed_idxs {
             // we add all of the props from the computed style to the cache because the computed style could change inbetween every frame.
             for prop in computed_style.style_props() {
-                self.cache
-                    .insert_computed_prop(prop, PropFrameKind::Computed(*computed_idx));
+                self.cache.insert_computed_prop(
+                    prop,
+                    PropFrameKind::Computed(*computed_idx),
+                );
             }
         }
         let local_percents: Vec<_> = self
@@ -1112,9 +1135,11 @@ impl Animation {
                 .unwrap_or_default();
 
             let eased_time = u.easing.eval(local_percent);
-            if let Some(interpolated) =
-                (ext_prop.info().interpolate)(&*l.val.clone(), &*u.val.clone(), eased_time)
-            {
+            if let Some(interpolated) = (ext_prop.info().interpolate)(
+                &*l.val.clone(),
+                &*u.val.clone(),
+                eased_time,
+            ) {
                 self.folded_style.map.insert(ext_prop.key, interpolated);
             }
         }
@@ -1144,9 +1169,11 @@ impl Animation {
                 self.props_in_ext_progress.remove(prop);
             }
             let eased_time = easing.eval(local_percent);
-            if let Some(interpolated) =
-                (prop.info().interpolate)(&*prev.val.clone(), &*target.val.clone(), eased_time)
-            {
+            if let Some(interpolated) = (prop.info().interpolate)(
+                &*prev.val.clone(),
+                &*target.val.clone(),
+                eased_time,
+            ) {
                 self.folded_style.map.insert(prop.key, interpolated);
             }
         }
@@ -1162,7 +1189,11 @@ impl Animation {
     }
 
     /// For a given pair of frame ids, find where the full animation progress is within the subrange of the frame id pair.
-    pub(crate) fn get_local_percent(&self, prev_frame: u16, target_frame: u16) -> f64 {
+    pub(crate) fn get_local_percent(
+        &self,
+        prev_frame: u16,
+        target_frame: u16,
+    ) -> f64 {
         // undo the frame change that get current key_frame props does so that low is actually lower
         let (low_frame, high_frame) = if self.is_reversing() {
             (target_frame as f64, prev_frame as f64)
@@ -1172,7 +1203,8 @@ impl Animation {
         let total_num_frames = self.max_key_frame_num as f64;
         let low_frame_percent = low_frame / total_num_frames;
         let high_frame_percent = high_frame / total_num_frames;
-        let keyframe_range = (high_frame_percent.max(0.001) - low_frame_percent.max(0.001)).abs();
+        let keyframe_range =
+            (high_frame_percent.max(0.001) - low_frame_percent.max(0.001)).abs();
         let total_time_percent = self.total_time_percent();
         let local = (total_time_percent - low_frame_percent) / keyframe_range;
 

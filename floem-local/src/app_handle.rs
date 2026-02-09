@@ -51,7 +51,11 @@ impl ApplicationHandle {
         }
     }
 
-    pub(crate) fn handle_user_event(&mut self, event_loop: &dyn ActiveEventLoop, event: UserEvent) {
+    pub(crate) fn handle_user_event(
+        &mut self,
+        event_loop: &dyn ActiveEventLoop,
+        event: UserEvent,
+    ) {
         match event {
             UserEvent::AppUpdate => {
                 self.handle_update_event(event_loop);
@@ -210,7 +214,8 @@ impl ApplicationHandle {
                 window_handle.size(size);
             }
             WindowEvent::Moved(position) => {
-                let position: LogicalPosition<f64> = position.to_logical(window_handle.scale);
+                let position: LogicalPosition<f64> =
+                    position.to_logical(window_handle.scale);
                 let point = Point::new(position.x, position.y);
                 window_handle.position(point);
             }
@@ -244,7 +249,8 @@ impl ApplicationHandle {
                 window_handle.ime(ime);
             }
             WindowEvent::PointerMoved { position, .. } => {
-                let position: LogicalPosition<f64> = position.to_logical(window_handle.scale);
+                let position: LogicalPosition<f64> =
+                    position.to_logical(window_handle.scale);
                 let point = Point::new(position.x, position.y);
                 window_handle.pointer_move(point);
             }
@@ -323,9 +329,12 @@ impl ApplicationHandle {
             font_embolden,
         }: WindowConfig,
     ) {
-        let logical_size = size.map(|size| LogicalSize::new(size.width, size.height));
-        let logical_min_size = min_size.map(|size| LogicalSize::new(size.width, size.height));
-        let logical_max_size = max_size.map(|size| LogicalSize::new(size.width, size.height));
+        let logical_size =
+            size.map(|size| LogicalSize::new(size.width, size.height));
+        let logical_min_size =
+            min_size.map(|size| LogicalSize::new(size.width, size.height));
+        let logical_max_size =
+            max_size.map(|size| LogicalSize::new(size.width, size.height));
 
         let mut window_attributes = winit::window::WindowAttributes::default()
             .with_visible(false)
@@ -343,7 +352,8 @@ impl ApplicationHandle {
             use wgpu::web_sys::wasm_bindgen::JsCast;
             use winit::platform::web::WindowAttributesExtWeb;
 
-            let parent_id = web_config.expect("Specify an id for the canvas.").canvas_id;
+            let parent_id =
+                web_config.expect("Specify an id for the canvas.").canvas_id;
             let doc = web_sys::window()
                 .and_then(|win| win.document())
                 .expect("Couldn't get document.");
@@ -363,17 +373,20 @@ impl ApplicationHandle {
         };
 
         if let Some(Point { x, y }) = position {
-            window_attributes = window_attributes.with_position(LogicalPosition::new(x, y));
+            window_attributes =
+                window_attributes.with_position(LogicalPosition::new(x, y));
         }
 
         if let Some(logical_size) = logical_size {
             window_attributes = window_attributes.with_surface_size(logical_size);
         }
         if let Some(logical_min_size) = logical_min_size {
-            window_attributes = window_attributes.with_min_surface_size(logical_min_size);
+            window_attributes =
+                window_attributes.with_min_surface_size(logical_min_size);
         }
         if let Some(logical_max_size) = logical_max_size {
-            window_attributes = window_attributes.with_max_surface_size(logical_max_size);
+            window_attributes =
+                window_attributes.with_max_surface_size(logical_max_size);
         }
 
         #[cfg(not(target_os = "macos"))]
@@ -384,7 +397,8 @@ impl ApplicationHandle {
         #[cfg(target_os = "windows")]
         {
             use winit::platform::windows::WindowAttributesExtWindows;
-            window_attributes = window_attributes.with_undecorated_shadow(undecorated_shadow);
+            window_attributes =
+                window_attributes.with_undecorated_shadow(undecorated_shadow);
         }
 
         #[cfg(target_os = "macos")]
@@ -413,7 +427,8 @@ impl ApplicationHandle {
         if let Some(mac) = mac_os_config {
             use winit::platform::macos::WindowAttributesExtMacOS;
             if let Some(val) = mac.movable_by_window_background {
-                window_attributes = window_attributes.with_movable_by_window_background(val);
+                window_attributes =
+                    window_attributes.with_movable_by_window_background(val);
             }
             if let Some(val) = mac.titlebar_transparent {
                 window_attributes = window_attributes.with_titlebar_transparent(val);
@@ -425,13 +440,15 @@ impl ApplicationHandle {
                 window_attributes = window_attributes.with_title_hidden(val);
             }
             if let Some(val) = mac.full_size_content_view {
-                window_attributes = window_attributes.with_fullsize_content_view(val);
+                window_attributes =
+                    window_attributes.with_fullsize_content_view(val);
             }
             if let Some(val) = mac.unified_titlebar {
                 window_attributes = window_attributes.with_unified_titlebar(val);
             }
             if let Some(val) = mac.movable {
-                window_attributes = window_attributes.with_movable_by_window_background(val);
+                window_attributes =
+                    window_attributes.with_movable_by_window_background(val);
             }
             // if let Some((x, y)) = mac.traffic_lights_offset {
             // TODO
@@ -444,16 +461,19 @@ impl ApplicationHandle {
                 window_attributes = window_attributes.with_option_as_alt(val.into());
             }
             if let Some(title) = mac.tabbing_identifier {
-                window_attributes = window_attributes.with_tabbing_identifier(title.as_str());
+                window_attributes =
+                    window_attributes.with_tabbing_identifier(title.as_str());
             }
             if let Some(disallow_hidpi) = mac.disallow_high_dpi {
-                window_attributes = window_attributes.with_disallow_hidpi(disallow_hidpi);
+                window_attributes =
+                    window_attributes.with_disallow_hidpi(disallow_hidpi);
             }
             if let Some(shadow) = mac.has_shadow {
                 window_attributes = window_attributes.with_has_shadow(shadow);
             }
             if let Some(hide) = mac.titlebar_buttons_hidden {
-                window_attributes = window_attributes.with_titlebar_buttons_hidden(hide)
+                window_attributes =
+                    window_attributes.with_titlebar_buttons_hidden(hide)
             }
             if let Some(panel) = mac.panel {
                 window_attributes = window_attributes.with_panel(panel)
@@ -476,7 +496,11 @@ impl ApplicationHandle {
         self.window_handles.insert(window_id, window_handle);
     }
 
-    fn close_window(&mut self, window_id: WindowId, event_loop: &dyn ActiveEventLoop) {
+    fn close_window(
+        &mut self,
+        window_id: WindowId,
+        event_loop: &dyn ActiveEventLoop,
+    ) {
         if let Some(handle) = self.window_handles.get_mut(&window_id) {
             handle.window = None;
             handle.destroy();
@@ -515,7 +539,11 @@ impl ApplicationHandle {
         self.fire_timer(event_loop);
     }
 
-    fn remove_timer(&mut self, timer: &TimerToken, event_loop: &dyn ActiveEventLoop) {
+    fn remove_timer(
+        &mut self,
+        timer: &TimerToken,
+        event_loop: &dyn ActiveEventLoop,
+    ) {
         self.timers.remove(timer);
         if self.timers.is_empty() {
             event_loop.set_control_flow(ControlFlow::Wait);

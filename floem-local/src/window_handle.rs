@@ -27,7 +27,8 @@ use crate::{
     app::UserEvent,
     app_state::AppState,
     context::{
-        ComputeLayoutCx, EventCx, FrameUpdate, LayoutCx, PaintCx, PaintState, StyleCx, UpdateCx,
+        ComputeLayoutCx, EventCx, FrameUpdate, LayoutCx, PaintCx, PaintState,
+        StyleCx, UpdateCx,
     },
     dropped_file::DroppedFileEvent,
     event::{Event, EventListener},
@@ -35,7 +36,9 @@ use crate::{
     inspector::{self, Capture, CaptureState, CapturedView},
     keyboard::{KeyEvent, Modifiers},
     nav::view_arrow_navigation,
-    pointer::{PointerButton, PointerInputEvent, PointerMoveEvent, PointerWheelEvent},
+    pointer::{
+        PointerButton, PointerInputEvent, PointerMoveEvent, PointerWheelEvent,
+    },
     profiler::Profile,
     style::{CursorStyle, Style, StyleSelector},
     theme::{default_theme, Theme},
@@ -156,7 +159,9 @@ impl WindowHandle {
         } else {
             let gpu_resources_rx = GpuResources::request(
                 move |window_id| {
-                    Application::send_proxy_event(UserEvent::GpuResourcesUpdate { window_id });
+                    Application::send_proxy_event(UserEvent::GpuResourcesUpdate {
+                        window_id,
+                    });
                 },
                 required_features,
                 window.clone(),
@@ -170,7 +175,8 @@ impl WindowHandle {
             )
         };
 
-        let paint_state_initialized = matches!(paint_state, PaintState::Initialized { .. });
+        let paint_state_initialized =
+            matches!(paint_state, PaintState::Initialized { .. });
 
         let mut window_handle = Self {
             window: Some(window),
@@ -290,7 +296,8 @@ impl WindowHandle {
                 if !processed {
                     if let Event::KeyDown(KeyEvent { key, modifiers }) = &event {
                         if key.logical_key == Key::Named(NamedKey::Tab)
-                            && (modifiers.is_empty() || *modifiers == Modifiers::SHIFT)
+                            && (modifiers.is_empty()
+                                || *modifiers == Modifiers::SHIFT)
                         {
                             let backwards = modifiers.contains(Modifiers::SHIFT);
                             view_tab_navigation(self.id, cx.app_state, backwards);
@@ -319,7 +326,10 @@ impl WindowHandle {
                     if keyboard_trigger_end {
                         if let Some(id) = cx.app_state.active {
                             // To remove the styles applied by the Active selector
-                            if cx.app_state.has_style_for_sel(id, StyleSelector::Active) {
+                            if cx
+                                .app_state
+                                .has_style_for_sel(id, StyleSelector::Active)
+                            {
                                 id.request_style_recursive();
                             }
 
@@ -343,7 +353,11 @@ impl WindowHandle {
                     window_origin.x - layout.location.x as f64 + viewport.x0,
                     window_origin.y - layout.location.y as f64 + viewport.y0,
                 ));
-                cx.unconditional_view_event(id, event.clone().transform(transform), true);
+                cx.unconditional_view_event(
+                    id,
+                    event.clone().transform(transform),
+                    true,
+                );
             }
 
             if let Event::PointerUp(_) = &event {
@@ -486,7 +500,8 @@ impl WindowHandle {
             key: key_event,
             modifiers: self.modifiers,
         };
-        let is_altgr = matches!(event.key.logical_key, Key::Named(NamedKey::AltGraph));
+        let is_altgr =
+            matches!(event.key.logical_key, Key::Named(NamedKey::AltGraph));
         if event.key.state.is_pressed() {
             self.event(Event::KeyDown(event));
             if is_altgr {
@@ -545,7 +560,9 @@ impl WindowHandle {
 
     pub(crate) fn mouse_wheel(&mut self, delta: MouseScrollDelta) {
         let delta = match delta {
-            MouseScrollDelta::LineDelta(x, y) => Vec2::new(-x as f64 * 60.0, -y as f64 * 60.0),
+            MouseScrollDelta::LineDelta(x, y) => {
+                Vec2::new(-x as f64 * 60.0, -y as f64 * 60.0)
+            }
             MouseScrollDelta::PixelDelta(delta) => {
                 let position: LogicalPosition<f64> = delta.to_logical(self.scale);
                 Vec2::new(-position.x, -position.y)
@@ -559,10 +576,15 @@ impl WindowHandle {
         self.event(Event::PointerWheel(event));
     }
 
-    pub(crate) fn pointer_button(&mut self, button: ButtonSource, state: ElementState) {
+    pub(crate) fn pointer_button(
+        &mut self,
+        button: ButtonSource,
+        state: ElementState,
+    ) {
         let button: PointerButton = button.into();
         let count = if state.is_pressed() && button.is_primary() {
-            if let Some((count, last_pos, instant)) = self.last_pointer_down.as_mut() {
+            if let Some((count, last_pos, instant)) = self.last_pointer_down.as_mut()
+            {
                 if *count == 4 {
                     *count = 1;
                 } else if instant.elapsed().as_millis() < 500
@@ -576,7 +598,8 @@ impl WindowHandle {
                 *last_pos = self.cursor_position;
                 *count
             } else {
-                self.last_pointer_down = Some((1, self.cursor_position, Instant::now()));
+                self.last_pointer_down =
+                    Some((1, self.cursor_position, Instant::now()));
                 1
             }
         } else {
@@ -663,7 +686,10 @@ impl WindowHandle {
         }
     }
 
-    pub fn paint(&mut self, gpu_resources: Option<GpuResources>) -> Option<peniko::Image> {
+    pub fn paint(
+        &mut self,
+        gpu_resources: Option<GpuResources>,
+    ) -> Option<peniko::Image> {
         let mut cx = PaintCx {
             app_state: &mut self.app_state,
             paint_state: &mut self.paint_state,
@@ -707,7 +733,10 @@ impl WindowHandle {
         cx.paint_state.renderer_mut().finish()
     }
 
-    pub(crate) fn capture(&mut self, gpu_resources: Option<GpuResources>) -> Capture {
+    pub(crate) fn capture(
+        &mut self,
+        gpu_resources: Option<GpuResources>,
+    ) -> Capture {
         // Capture the view before we run `style` and `layout` to catch missing `request_style`` or
         // `request_layout` flags.
         let root_layout = self.id.layout_rect();
@@ -830,8 +859,10 @@ impl WindowHandle {
                 UPDATE_MESSAGES.with_borrow_mut(|msgs| {
                     // We need to retain any messages which are for a view that either belongs
                     // to a different window, or which does not yet have a root
-                    let removed_central_msgs =
-                        std::mem::replace(central_msgs, Vec::with_capacity(central_msgs.len()));
+                    let removed_central_msgs = std::mem::replace(
+                        central_msgs,
+                        Vec::with_capacity(central_msgs.len()),
+                    );
                     for (id, msg) in removed_central_msgs {
                         if let Some(root) = id.root() {
                             let msgs = msgs.entry(root).or_default();
@@ -881,8 +912,8 @@ impl WindowHandle {
     fn process_update_messages(&mut self) {
         loop {
             self.process_central_messages();
-            let msgs =
-                UPDATE_MESSAGES.with(|msgs| msgs.borrow_mut().remove(&self.id).unwrap_or_default());
+            let msgs = UPDATE_MESSAGES
+                .with(|msgs| msgs.borrow_mut().remove(&self.id).unwrap_or_default());
             if msgs.is_empty() {
                 break;
             }
@@ -928,7 +959,8 @@ impl WindowHandle {
                             }
                         }
 
-                        if cx.app_state.has_style_for_sel(id, StyleSelector::Active) {
+                        if cx.app_state.has_style_for_sel(id, StyleSelector::Active)
+                        {
                             id.request_style_recursive();
                         }
                     }
@@ -938,10 +970,11 @@ impl WindowHandle {
                         }
                     }
                     UpdateMessage::ScrollTo { id, rect } => {
-                        self.id
-                            .view()
-                            .borrow_mut()
-                            .scroll_to(cx.app_state, id, rect);
+                        self.id.view().borrow_mut().scroll_to(
+                            cx.app_state,
+                            id,
+                            rect,
+                        );
                     }
                     UpdateMessage::Disabled { id, is_disabled } => {
                         if is_disabled {
@@ -951,7 +984,11 @@ impl WindowHandle {
                             while let Some(current) = stack.pop() {
                                 for child in current.children() {
                                     // Skip this subtree if the child is already a root
-                                    if !cx.app_state.disabled.contains(&(child, true)) {
+                                    if !cx
+                                        .app_state
+                                        .disabled
+                                        .contains(&(child, true))
+                                    {
                                         cx.app_state.disabled.insert((child, false));
                                         cx.app_state.hovered.remove(&child);
                                         stack.push(child);
@@ -966,8 +1003,14 @@ impl WindowHandle {
                                 while let Some(current) = stack.pop() {
                                     for child in current.children() {
                                         // Skip this subtree if the child is a root
-                                        if !cx.app_state.disabled.contains(&(child, true)) {
-                                            cx.app_state.disabled.remove(&(child, false));
+                                        if !cx
+                                            .app_state
+                                            .disabled
+                                            .contains(&(child, true))
+                                        {
+                                            cx.app_state
+                                                .disabled
+                                                .remove(&(child, false));
                                             stack.push(child);
                                         }
                                     }
@@ -1022,9 +1065,11 @@ impl WindowHandle {
                     UpdateMessage::SetWindowDelta(delta) => {
                         if let Some(window) = self.window.as_ref() {
                             let pos = self.window_position + delta;
-                            window.set_outer_position(winit::dpi::Position::Logical(
-                                winit::dpi::LogicalPosition::new(pos.x, pos.y),
-                            ));
+                            window.set_outer_position(
+                                winit::dpi::Position::Logical(
+                                    winit::dpi::LogicalPosition::new(pos.x, pos.y),
+                                ),
+                            );
                         }
                     }
                     UpdateMessage::WindowScale(scale) => {
@@ -1069,14 +1114,18 @@ impl WindowHandle {
                     UpdateMessage::SetImeCursorArea { position, size } => {
                         if let Some(window) = self.window.as_ref() {
                             window.set_ime_cursor_area(
-                                winit::dpi::Position::Logical(winit::dpi::LogicalPosition::new(
-                                    position.x * self.app_state.scale,
-                                    position.y * self.app_state.scale,
-                                )),
-                                winit::dpi::Size::Logical(winit::dpi::LogicalSize::new(
-                                    size.width * self.app_state.scale,
-                                    size.height * self.app_state.scale,
-                                )),
+                                winit::dpi::Position::Logical(
+                                    winit::dpi::LogicalPosition::new(
+                                        position.x * self.app_state.scale,
+                                        position.y * self.app_state.scale,
+                                    ),
+                                ),
+                                winit::dpi::Size::Logical(
+                                    winit::dpi::LogicalSize::new(
+                                        size.width * self.app_state.scale,
+                                        size.height * self.app_state.scale,
+                                    ),
+                                ),
                             );
                         }
                     }
@@ -1116,8 +1165,11 @@ impl WindowHandle {
                         }
                     }
                     UpdateMessage::ViewTransitionAnimComplete(id) => {
-                        let num_waiting =
-                            id.state().borrow().num_waiting_animations.saturating_sub(1);
+                        let num_waiting = id
+                            .state()
+                            .borrow()
+                            .num_waiting_animations
+                            .saturating_sub(1);
                         id.state().borrow_mut().num_waiting_animations = num_waiting;
                     }
                 }
@@ -1162,7 +1214,6 @@ impl WindowHandle {
                 .unwrap_or(false)
         })
     }
-
 
     fn set_cursor(&mut self) {
         let cursor = match self.app_state.cursor {
@@ -1219,14 +1270,17 @@ impl WindowHandle {
         use raw_window_handle::RawWindowHandle;
 
         if let Some(window) = self.window.as_ref() {
-            if let RawWindowHandle::AppKit(handle) = window.window_handle().unwrap().as_raw() {
+            if let RawWindowHandle::AppKit(handle) =
+                window.window_handle().unwrap().as_raw()
+            {
                 unsafe {
                     menu.show_context_menu_for_nsview(
                         handle.ns_view.as_ptr() as _,
                         pos.map(|pos| {
                             Position::Logical(LogicalPosition::new(
                                 pos.x * self.app_state.scale,
-                                (self.size.get_untracked().height - pos.y) * self.app_state.scale,
+                                (self.size.get_untracked().height - pos.y)
+                                    * self.app_state.scale,
                             ))
                         }),
                     )
@@ -1245,7 +1299,9 @@ impl WindowHandle {
         use raw_window_handle::RawWindowHandle;
 
         if let Some(window) = self.window.as_ref() {
-            if let RawWindowHandle::Win32(handle) = window.window_handle().unwrap().as_raw() {
+            if let RawWindowHandle::Win32(handle) =
+                window.window_handle().unwrap().as_raw()
+            {
                 unsafe {
                     menu.show_context_menu_for_hwnd(
                         isize::from(handle.hwnd),
@@ -1264,7 +1320,8 @@ impl WindowHandle {
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
     fn show_context_menu(&self, menu: Menu, pos: Option<Point>) {
         let pos = pos.unwrap_or(self.cursor_position);
-        let pos = Point::new(pos.x / self.app_state.scale, pos.y / self.app_state.scale);
+        let pos =
+            Point::new(pos.x / self.app_state.scale, pos.y / self.app_state.scale);
         self.context_menu.set(Some((menu, pos, false)));
     }
 
@@ -1426,7 +1483,9 @@ fn context_menu_view(
                         })
                         .on_event_stop(EventListener::PointerDown, move |_| {
                             context_menu.update(|context_menu| {
-                                if let Some((_, _, had_pointer_down)) = context_menu.as_mut() {
+                                if let Some((_, _, had_pointer_down)) =
+                                    context_menu.as_mut()
+                                {
                                     *had_pointer_down = true;
                                 }
                             });
@@ -1438,7 +1497,9 @@ fn context_menu_view(
                             }
                             context_menu.set(None);
                             if let Some(id) = id.clone() {
-                                add_app_update_event(AppUpdateEvent::MenuAction { action_id: id });
+                                add_app_update_event(AppUpdateEvent::MenuAction {
+                                    action_id: id,
+                                });
                             }
                         })
                         .disabled(move || !enabled)
@@ -1461,12 +1522,16 @@ fn context_menu_view(
                         dyn_stack(
                             move || children.clone().unwrap_or_default(),
                             move |s| s.clone(),
-                            move |menu| view_fn(menu, context_menu, on_child_submenu),
+                            move |menu| {
+                                view_fn(menu, context_menu, on_child_submenu)
+                            },
                         )
                         .keyboard_navigable()
                         .on_event_stop(EventListener::KeyDown, move |event| {
                             if let Event::KeyDown(event) = event {
-                                if event.key.logical_key == Key::Named(NamedKey::Escape) {
+                                if event.key.logical_key
+                                    == Key::Named(NamedKey::Escape)
+                                {
                                     context_menu.set(None);
                                 }
                             }
@@ -1556,7 +1621,8 @@ fn context_menu_view(
         let window_size = window_size.get();
         let menu_size = context_menu_size.get();
         let is_active = context_menu.with(|m| m.is_some());
-        let mut pos = context_menu.with(|m| m.as_ref().map(|(_, pos, _)| *pos).unwrap_or_default());
+        let mut pos = context_menu
+            .with(|m| m.as_ref().map(|(_, pos, _)| *pos).unwrap_or_default());
         if pos.x + menu_size.width > window_size.width {
             pos.x = window_size.width - menu_size.width;
         }
@@ -1624,20 +1690,26 @@ impl View for OverlayView {
             self.parent_size = parent_size;
         }
         if let Some(layout) = self.id.get_layout() {
-            self.size = Size::new(layout.size.width as f64, layout.size.height as f64);
+            self.size =
+                Size::new(layout.size.width as f64, layout.size.height as f64);
         }
         default_compute_layout(self.id, cx)
     }
 
     fn paint(&mut self, cx: &mut PaintCx) {
         cx.save();
-        let x = if (self.window_origin.x + self.size.width) > self.parent_size.width - 5.0 {
+        let x = if (self.window_origin.x + self.size.width)
+            > self.parent_size.width - 5.0
+        {
             (self.window_origin.x + self.size.width) - (self.parent_size.width - 5.0)
         } else {
             0.0
         };
-        let y = if (self.window_origin.y + self.size.height) > self.parent_size.height - 5.0 {
-            (self.window_origin.y + self.size.height) - (self.parent_size.height - 5.0)
+        let y = if (self.window_origin.y + self.size.height)
+            > self.parent_size.height - 5.0
+        {
+            (self.window_origin.y + self.size.height)
+                - (self.parent_size.height - 5.0)
         } else {
             0.0
         };

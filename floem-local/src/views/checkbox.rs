@@ -5,8 +5,8 @@ use crate::{
     style_class,
     view::IntoView,
     views::{
-        self, create_value_container_signals, h_stack, svg, value_container, Decorators,
-        ValueContainer,
+        self, create_value_container_signals, h_stack, svg, value_container,
+        Decorators, ValueContainer,
     },
 };
 use floem_reactive::{SignalGet, SignalUpdate};
@@ -77,13 +77,16 @@ impl Checkbox {
         checked: impl Fn() -> bool + 'static,
         custom_check: impl Into<String> + Clone + 'static,
     ) -> ValueContainer<bool> {
-        let (inbound_signal, outbound_signal) = create_value_container_signals(checked);
+        let (inbound_signal, outbound_signal) =
+            create_value_container_signals(checked);
 
         value_container(
-            checkbox_svg(inbound_signal.read_only(), custom_check).on_click_stop(move |_| {
-                let checked = inbound_signal.get_untracked();
-                outbound_signal.set(!checked);
-            }),
+            checkbox_svg(inbound_signal.read_only(), custom_check).on_click_stop(
+                move |_| {
+                    let checked = inbound_signal.get_untracked();
+                    outbound_signal.set(!checked);
+                },
+            ),
             move || outbound_signal.get(),
         )
     }
@@ -131,14 +134,16 @@ impl Checkbox {
         label: impl Fn() -> S + 'static,
         custom_check: impl Into<String> + Clone + 'static,
     ) -> ValueContainer<bool> {
-        let (inbound_signal, outbound_signal) = create_value_container_signals(checked);
+        let (inbound_signal, outbound_signal) =
+            create_value_container_signals(checked);
 
         value_container(
             h_stack((
-                checkbox_svg(inbound_signal.read_only(), custom_check).on_click_stop(move |_| {
-                    let checked = inbound_signal.get_untracked();
-                    outbound_signal.set(!checked);
-                }),
+                checkbox_svg(inbound_signal.read_only(), custom_check)
+                    .on_click_stop(move |_| {
+                        let checked = inbound_signal.get_untracked();
+                        outbound_signal.set(!checked);
+                    }),
                 views::label(label),
             ))
             .class(LabeledCheckboxClass)

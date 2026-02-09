@@ -30,8 +30,7 @@ use lapce_rpc::{
 };
 use lapce_xi_rope::Rope;
 use lsp_types::{
-    CancelParams, NumberOrString, Position, Range,
-    TextDocumentItem, Url,
+    CancelParams, NumberOrString, Position, Range, TextDocumentItem, Url,
     notification::{Cancel, Notification},
 };
 use parking_lot::Mutex;
@@ -218,10 +217,13 @@ impl ProxyHandler for Dispatcher {
                 );
             }
             BufferHead { .. } => {
-                self.respond_rpc(id, Err(RpcError {
-                    code: 0,
-                    message: "git support removed".to_string(),
-                }));
+                self.respond_rpc(
+                    id,
+                    Err(RpcError {
+                        code: 0,
+                        message: "git support removed".to_string(),
+                    }),
+                );
             }
             GlobalSearch {
                 pattern,
@@ -996,10 +998,7 @@ impl Notify for FileWatchNotifier {
 }
 
 impl FileWatchNotifier {
-    fn new(
-        core_rpc: CoreRpcHandler,
-        proxy_rpc: ProxyRpcHandler,
-    ) -> Self {
+    fn new(core_rpc: CoreRpcHandler, proxy_rpc: ProxyRpcHandler) -> Self {
         Self {
             core_rpc,
             proxy_rpc,

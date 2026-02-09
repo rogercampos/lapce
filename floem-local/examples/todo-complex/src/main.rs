@@ -153,7 +153,8 @@ enum AppCommand<'a> {
 }
 impl AppCommand<'_> {
     fn execute(self) {
-        let (active, selected, todos) = TODOS_STATE.with(|s| (s.active, s.selected, s.todos));
+        let (active, selected, todos) =
+            TODOS_STATE.with(|s| (s.active, s.selected, s.todos));
         TODOS_STATE.with(|s| {
             match self {
                 AppCommand::Delete(vec) => {
@@ -206,12 +207,16 @@ impl AppCommand<'_> {
                     // handle if we add more control over what is allowed to steal focus per view
                     let active_todo = active.get();
                     // handle the case where it was just set, don't clear anything
-                    if Instant::now().duration_since(active_todo.time_set) < 50.millis() {
+                    if Instant::now().duration_since(active_todo.time_set)
+                        < 50.millis()
+                    {
                         return;
                     }
                     // else handle the case where some time goes by without it being set
                     exec_after(50.millis(), move |_| {
-                        if Instant::now().duration_since(active.get().time_set) < 50.millis() {
+                        if Instant::now().duration_since(active.get().time_set)
+                            < 50.millis()
+                        {
                             return;
                         }
                         let old_active = active.get();
@@ -225,7 +230,9 @@ impl AppCommand<'_> {
                 }
                 AppCommand::Escape => {
                     let active_todo = active.get();
-                    if Instant::now().duration_since(active_todo.time_set) < 200.millis() {
+                    if Instant::now().duration_since(active_todo.time_set)
+                        < 200.millis()
+                    {
                         return;
                     }
                     selected.update(|s| s.clear());
@@ -244,22 +251,29 @@ impl AppCommand<'_> {
                     s.new_todo();
                 }
                 AppCommand::UpdateDone(todo) => {
-                    if let Some(db_id) = todo.db_id.with_untracked(|opt_id| *opt_id) {
+                    if let Some(db_id) = todo.db_id.with_untracked(|opt_id| *opt_id)
+                    {
                         s.update_done(db_id, todo.done.get_untracked());
                     } else {
                         AppCommand::CommitTodo(todo).execute();
                     }
                 }
                 AppCommand::UpdateDescription(todo) => {
-                    if let Some(db_id) = todo.db_id.with_untracked(|opt_id| *opt_id) {
-                        s.update_description(db_id, &todo.description.get_untracked());
+                    if let Some(db_id) = todo.db_id.with_untracked(|opt_id| *opt_id)
+                    {
+                        s.update_description(
+                            db_id,
+                            &todo.description.get_untracked(),
+                        );
                     } else {
                         AppCommand::CommitTodo(todo).execute();
                     }
                 }
                 AppCommand::CommitTodo(todo) => {
-                    let new_db_id =
-                        s.create(&todo.description.get_untracked(), todo.done.get_untracked());
+                    let new_db_id = s.create(
+                        &todo.description.get_untracked(),
+                        todo.done.get_untracked(),
+                    );
                     todo.db_id.set(Some(new_db_id));
                 }
                 AppCommand::InsertSelected(todo) => {

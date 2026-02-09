@@ -20,7 +20,9 @@ fn app_view() -> impl IntoView {
                         .padding(10.0)
                         .background(palette::css::WHITE)
                         .box_shadow_blur(5.0)
-                        .focus_visible(|s| s.outline(2.).outline_color(palette::css::BLUE))
+                        .focus_visible(|s| {
+                            s.outline(2.).outline_color(palette::css::BLUE)
+                        })
                         .hover(|s| s.background(palette::css::LIGHT_GREEN))
                         .active(|s| {
                             s.color(palette::css::WHITE)
@@ -45,9 +47,14 @@ fn app_view() -> impl IntoView {
                         .border_radius(10.0)
                         .padding(10.0)
                         .margin_left(10.0)
-                        .focus_visible(|s| s.outline(2.).outline_color(palette::css::BLUE))
+                        .focus_visible(|s| {
+                            s.outline(2.).outline_color(palette::css::BLUE)
+                        })
                         .hover(|s| s.background(Color::from_rgb8(244, 67, 54)))
-                        .active(|s| s.color(palette::css::WHITE).background(palette::css::RED))
+                        .active(|s| {
+                            s.color(palette::css::WHITE)
+                                .background(palette::css::RED)
+                        })
                 })
                 .keyboard_navigable(),
             "Reset to 0"
@@ -62,7 +69,9 @@ fn app_view() -> impl IntoView {
                         .padding(10.0)
                         .margin_left(10.0)
                         .background(palette::css::LIGHT_BLUE)
-                        .focus_visible(|s| s.outline(2.).outline_color(palette::css::BLUE))
+                        .focus_visible(|s| {
+                            s.outline(2.).outline_color(palette::css::BLUE)
+                        })
                         .disabled(|s| s.background(palette::css::LIGHT_GRAY))
                         .hover(|s| s.background(palette::css::LIGHT_YELLOW))
                         .active(|s| {
@@ -72,7 +81,9 @@ fn app_view() -> impl IntoView {
                 })
                 .keyboard_navigable(),
         )
-            .style(|s| s.custom_style_class(|s: LabelCustomStyle| s.selectable(false))),
+            .style(|s| {
+                s.custom_style_class(|s: LabelCustomStyle| s.selectable(false))
+            }),
     )
         .style(|s| {
             s.size(100.pct(), 100.pct())

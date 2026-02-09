@@ -5,7 +5,10 @@ use floem::{
     peniko::color::palette,
     reactive::{create_rw_signal, RwSignal, SignalGet, SignalUpdate},
     unit::UnitExt,
-    views::{button, dyn_container, empty, text, text_input, v_stack, Decorators, RadioButton},
+    views::{
+        button, dyn_container, empty, text, text_input, v_stack, Decorators,
+        RadioButton,
+    },
     IntoView,
 };
 use strum::IntoEnumIterator;
@@ -68,24 +71,35 @@ pub fn app_view() -> impl IntoView {
         .map(move |fm| RadioButton::new_labeled_rw(fm, flight_mode, move || fm))
         .h_stack();
 
-    let start_date_input = text_input(start_text)
-        .placeholder("Start date")
-        .style(move |s| s.apply_if(!start_date_is_valid(), |s| s.background(palette::css::RED)));
+    let start_date_input =
+        text_input(start_text)
+            .placeholder("Start date")
+            .style(move |s| {
+                s.apply_if(!start_date_is_valid(), |s| {
+                    s.background(palette::css::RED)
+                })
+            });
     let return_date_input = text_input(return_text)
         .placeholder("Return date")
-        .style(move |s| s.apply_if(!return_date_is_valid(), |s| s.background(palette::css::RED)))
+        .style(move |s| {
+            s.apply_if(!return_date_is_valid(), |s| s.background(palette::css::RED))
+        })
         .disabled(move || !return_text_is_enabled());
 
     let book_button = button("Book")
         .disabled(move || {
-            !(dates_are_chronological() && start_date_is_valid() && return_date_is_valid())
+            !(dates_are_chronological()
+                && start_date_is_valid()
+                && return_date_is_valid())
         })
         .action(move || did_booking.set(true));
 
     let success_message = dyn_container(
         move || (did_booking.get(), flight_mode.get()),
         move |value| match value {
-            (true, FlightMode::OneWay) => text(oneway_message(start_text.get())).into_any(),
+            (true, FlightMode::OneWay) => {
+                text(oneway_message(start_text.get())).into_any()
+            }
             (true, FlightMode::Return) => {
                 text(return_message(start_text.get(), return_text.get())).into_any()
             }

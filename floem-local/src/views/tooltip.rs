@@ -97,18 +97,23 @@ impl View for Tooltip {
         self.style.read(cx);
         self.scale = cx.app_state.scale;
 
-        self.tip_style =
-            Style::new().apply_classes_from_context(&[TooltipClass::class_ref()], &cx.current);
+        self.tip_style = Style::new()
+            .apply_classes_from_context(&[TooltipClass::class_ref()], &cx.current);
 
         for child in self.id.children() {
             cx.style_view(child);
         }
     }
 
-    fn event_before_children(&mut self, cx: &mut EventCx, event: &Event) -> EventPropagation {
+    fn event_before_children(
+        &mut self,
+        cx: &mut EventCx,
+        event: &Event,
+    ) -> EventPropagation {
         match &event {
             Event::PointerMove(e) => {
-                if self.overlay.borrow().is_none() && cx.app_state.dragging.is_none() {
+                if self.overlay.borrow().is_none() && cx.app_state.dragging.is_none()
+                {
                     let id = self.id();
                     let token = exec_after(self.style.delay(), move |token| {
                         id.update_state(token);
@@ -142,11 +147,17 @@ impl View for Tooltip {
 }
 
 pub trait TooltipExt {
-    fn tooltip<V: IntoView + 'static>(self, tip: impl Fn() -> V + 'static) -> Tooltip;
+    fn tooltip<V: IntoView + 'static>(
+        self,
+        tip: impl Fn() -> V + 'static,
+    ) -> Tooltip;
 }
 
 impl<T: IntoView + 'static> TooltipExt for T {
-    fn tooltip<V: IntoView + 'static>(self, tip: impl Fn() -> V + 'static) -> Tooltip {
+    fn tooltip<V: IntoView + 'static>(
+        self,
+        tip: impl Fn() -> V + 'static,
+    ) -> Tooltip {
         tooltip(self, tip)
     }
 }

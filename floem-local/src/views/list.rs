@@ -11,7 +11,9 @@ use crate::{
     keyboard::{Key, NamedKey},
     view::View,
 };
-use floem_reactive::{create_rw_signal, RwSignal, SignalGet, SignalTrack, SignalUpdate};
+use floem_reactive::{
+    create_rw_signal, RwSignal, SignalGet, SignalTrack, SignalUpdate,
+};
 
 style_class!(pub ListClass);
 style_class!(pub ListItemClass);
@@ -79,25 +81,27 @@ where
         selection.track();
         list_id.update_state(ListUpdate::SelectionChanged);
     });
-    let stack = v_stack_from_iter(iterator.into_iter().enumerate().map(move |(index, v)| {
-        let id = ViewId::new();
-        let v = v.into_view().class(ListItemClass);
-        let child = v.id();
-        id.set_children([v]);
-        Item {
-            id,
-            selection,
-            index,
-            child,
-        }
-        .on_click_stop(move |_| {
-            if selection.get_untracked() != Some(index) {
-                selection.set(Some(index));
-                list_id.update_state(ListUpdate::Accept);
-                list_id.update_state(ListUpdate::ScrollToSelected);
+    let stack = v_stack_from_iter(iterator.into_iter().enumerate().map(
+        move |(index, v)| {
+            let id = ViewId::new();
+            let v = v.into_view().class(ListItemClass);
+            let child = v.id();
+            id.set_children([v]);
+            Item {
+                id,
+                selection,
+                index,
+                child,
             }
-        })
-    }))
+            .on_click_stop(move |_| {
+                if selection.get_untracked() != Some(index) {
+                    selection.set(Some(index));
+                    list_id.update_state(ListUpdate::Accept);
+                    list_id.update_state(ListUpdate::ScrollToSelected);
+                }
+            })
+        },
+    ))
     .style(|s| s.width_full().height_full());
     let length = stack.id().children().len();
     let child = stack.id();
@@ -180,7 +184,11 @@ impl View for List {
         self.id
     }
 
-    fn update(&mut self, _cx: &mut crate::context::UpdateCx, state: Box<dyn std::any::Any>) {
+    fn update(
+        &mut self,
+        _cx: &mut crate::context::UpdateCx,
+        state: Box<dyn std::any::Any>,
+    ) {
         if let Ok(change) = state.downcast::<ListUpdate>() {
             match *change {
                 ListUpdate::SelectionChanged => {

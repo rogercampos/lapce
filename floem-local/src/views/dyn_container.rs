@@ -99,7 +99,8 @@ pub fn dyn_container<CF: Fn(T) -> IV + 'static, T: 'static, IV: IntoView>(
         id.update_state(DynMessage::Val(Box::new(new_state)));
     });
 
-    let child_fn = Box::new(as_child_of_current_scope(move |e| child_fn(e).into_any()));
+    let child_fn =
+        Box::new(as_child_of_current_scope(move |e| child_fn(e).into_any()));
     let (child, child_scope) = child_fn(initial);
     let child_id = child.id();
     id.set_children([child]);
@@ -135,7 +136,8 @@ impl<T: 'static> View for DynamicContainer<T> {
                     }
                 }
                 DynMessage::CompletedAnimation => {
-                    self.num_started_animations = self.num_started_animations.saturating_sub(1);
+                    self.num_started_animations =
+                        self.num_started_animations.saturating_sub(1);
                     if self.num_started_animations == 0 {
                         let next_val_state = self
                             .next_val_state
@@ -191,14 +193,19 @@ impl<T> DynamicContainer<T> {
     }
 }
 
-fn animations_recursive_on_remove(id: ViewId, child_id: ViewId, child_scope: Scope) -> u16 {
+fn animations_recursive_on_remove(
+    id: ViewId,
+    child_id: ViewId,
+    child_scope: Scope,
+) -> u16 {
     let mut wait_for = 0;
     let state = child_id.state();
     let mut state = state.borrow_mut();
     let animations = &mut state.animations.stack;
     let mut request_style = false;
     for anim in animations {
-        if anim.run_on_remove && !matches!(anim.repeat_mode, RepeatMode::LoopForever) {
+        if anim.run_on_remove && !matches!(anim.repeat_mode, RepeatMode::LoopForever)
+        {
             anim.reverse_mut();
             request_style = true;
             wait_for += 1;
@@ -229,7 +236,8 @@ fn animations_recursive_on_create(child_id: ViewId) {
     let animations = &mut state.animations.stack;
     let mut request_style = false;
     for anim in animations {
-        if anim.run_on_create && !matches!(anim.repeat_mode, RepeatMode::LoopForever) {
+        if anim.run_on_create && !matches!(anim.repeat_mode, RepeatMode::LoopForever)
+        {
             anim.start_mut();
             request_style = true;
         }

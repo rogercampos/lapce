@@ -15,7 +15,6 @@ use std::{
 
 use anyhow::{Result, anyhow};
 use clap::Parser;
-use include_dir::{Dir, include_dir};
 use floem::{
     IntoView, View,
     action::show_context_menu,
@@ -51,6 +50,7 @@ use floem::{
     },
     window::{ResizeDirection, WindowConfig, WindowId},
 };
+use include_dir::{Dir, include_dir};
 use lapce_core::{
     directory::Directory,
     meta,
@@ -67,7 +67,7 @@ use serde::{Deserialize, Serialize};
 use tracing_subscriber::{filter::Targets, reload::Handle};
 
 use crate::{
-    about, alert, recent_files,
+    about, alert,
     code_action::CodeActionStatus,
     command::{
         CommandKind, InternalCommand, LapceCommand, LapceWorkbenchCommand,
@@ -98,6 +98,7 @@ use crate::{
     },
     panel::{position::PanelContainerPosition, view::panel_container_view},
     plugin::{PluginData, plugin_info_view},
+    recent_files,
     settings::{settings_view, theme_color_settings_view},
     status::status,
     text_input::TextInputBuilder,
@@ -131,7 +132,11 @@ fn install_bundled_plugins() {
             continue;
         }
         if let Err(err) = extract_dir(entry, &target) {
-            tracing::error!("Failed to install bundled plugin {:?}: {:?}", name, err);
+            tracing::error!(
+                "Failed to install bundled plugin {:?}: {:?}",
+                name,
+                err
+            );
         }
     }
 }
@@ -773,9 +778,8 @@ fn editor_tab_header(
             .style(|s| s.padding(4.));
 
             let tab_content = tooltip(
-                label(move || info.with(|info| info.name.clone())).style(move |s| {
-                    s.selectable(false)
-                }),
+                label(move || info.with(|info| info.name.clone()))
+                    .style(move |s| s.selectable(false)),
                 move || {
                     tooltip_tip(
                         config,
@@ -2010,10 +2014,7 @@ fn workbench(window_tab_data: Rc<WindowTabData>) -> impl View {
                     PanelContainerPosition::Left,
                 ),
                 main_split(window_tab_data.clone()),
-                panel_container_view(
-                    window_tab_data,
-                    PanelContainerPosition::Right,
-                ),
+                panel_container_view(window_tab_data, PanelContainerPosition::Right),
             ))
             .on_resize(move |rect| {
                 let width = rect.size().width;
@@ -2023,7 +2024,10 @@ fn workbench(window_tab_data: Rc<WindowTabData>) -> impl View {
             })
             .style(|s| s.flex_grow(1.0))
         },
-        panel_container_view(window_tab_data.clone(), PanelContainerPosition::Bottom),
+        panel_container_view(
+            window_tab_data.clone(),
+            PanelContainerPosition::Bottom,
+        ),
         window_message_view(window_tab_data.messages, window_tab_data.common.config),
     ))
     .on_resize(move |rect| {
@@ -2045,20 +2049,21 @@ fn empty_workspace_view(window_tab_data: Rc<WindowTabData>) -> impl View {
             label(|| "Open Folder".to_string())
                 .on_event_stop(EventListener::PointerDown, |_| {})
                 .on_click_stop(move |_| {
-                    workbench_command
-                        .send(LapceWorkbenchCommand::OpenFolder);
+                    workbench_command.send(LapceWorkbenchCommand::OpenFolder);
                 })
                 .style(move |s| {
                     let config = config.get();
                     s.padding_horiz(20.0)
                         .padding_vert(10.0)
                         .border_radius(6.0)
-                        .color(config.color(
-                            LapceColor::LAPCE_BUTTON_PRIMARY_FOREGROUND,
-                        ))
-                        .background(config.color(
-                            LapceColor::LAPCE_BUTTON_PRIMARY_BACKGROUND,
-                        ))
+                        .color(
+                            config
+                                .color(LapceColor::LAPCE_BUTTON_PRIMARY_FOREGROUND),
+                        )
+                        .background(
+                            config
+                                .color(LapceColor::LAPCE_BUTTON_PRIMARY_BACKGROUND),
+                        )
                         .font_size((config.ui.font_size() + 2) as f32)
                         .hover(|s| {
                             s.cursor(CursorStyle::Pointer).background(
@@ -3093,11 +3098,7 @@ fn window_tab(window_tab_data: Rc<WindowTabData>) -> impl View {
             stack((
                 title(window_tab_data.clone()),
                 workbench(window_tab_data.clone()),
-                status(
-                    window_tab_data.clone(),
-                    status_height,
-                    config,
-                ),
+                status(window_tab_data.clone(), status_height, config),
             ))
             .on_resize(move |rect| {
                 layout_rect.set(rect);
@@ -3956,17 +3957,13 @@ pub fn window_menu(
     has_folder: bool,
 ) -> Menu {
     let file_menu = if has_folder {
-        Menu::new("File").entry(
-            MenuItem::new("Close Folder").action(move || {
-                workbench_command.send(LapceWorkbenchCommand::CloseFolder);
-            }),
-        )
+        Menu::new("File").entry(MenuItem::new("Close Folder").action(move || {
+            workbench_command.send(LapceWorkbenchCommand::CloseFolder);
+        }))
     } else {
-        Menu::new("File").entry(
-            MenuItem::new("Open Folder").action(move || {
-                workbench_command.send(LapceWorkbenchCommand::OpenFolder);
-            }),
-        )
+        Menu::new("File").entry(MenuItem::new("Open Folder").action(move || {
+            workbench_command.send(LapceWorkbenchCommand::OpenFolder);
+        }))
     };
 
     Menu::new("Lapce")

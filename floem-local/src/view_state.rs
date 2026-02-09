@@ -1,17 +1,18 @@
 use crate::{
     animate::Animation,
     context::{
-        EventCallback, InteractionState, MenuCallback, MoveListener, ResizeCallback, ResizeListener,
+        EventCallback, InteractionState, MenuCallback, MoveListener, ResizeCallback,
+        ResizeListener,
     },
     event::EventListener,
     pointer::PointerInputEvent,
     prop_extractor,
     responsive::ScreenSizeBp,
     style::{
-        Background, BorderBottomColor, BorderBottomLeftRadius, BorderBottomRightRadius,
-        BorderLeftColor, BorderRightColor, BorderTopColor, BorderTopLeftRadius,
-        BorderTopRightRadius, BoxShadowProp, LayoutProps, Outline, OutlineColor, Style,
-        StyleClassRef, StyleSelectors,
+        Background, BorderBottomColor, BorderBottomLeftRadius,
+        BorderBottomRightRadius, BorderLeftColor, BorderRightColor, BorderTopColor,
+        BorderTopLeftRadius, BorderTopRightRadius, BoxShadowProp, LayoutProps,
+        Outline, OutlineColor, Style, StyleClassRef, StyleSelectors,
     },
 };
 use bitflags::bitflags;
@@ -62,7 +63,11 @@ impl<T> Stack<T> {
         self.stack[offset.offset] = value;
     }
 
-    pub fn update(&mut self, offset: StackOffset<T>, update: impl Fn(&mut T) + 'static) {
+    pub fn update(
+        &mut self,
+        offset: StackOffset<T>,
+        update: impl Fn(&mut T) + 'static,
+    ) {
         update(&mut self.stack[offset.offset]);
     }
 }
@@ -196,7 +201,8 @@ pub struct ViewState {
     /// The final style including inherited style from parent
     pub(crate) computed_style: Style,
     pub(crate) taffy_style: taffy::style::Style,
-    pub(crate) event_listeners: HashMap<EventListener, Vec<Rc<RefCell<EventCallback>>>>,
+    pub(crate) event_listeners:
+        HashMap<EventListener, Vec<Rc<RefCell<EventCallback>>>>,
     pub(crate) context_menu: Option<Rc<MenuCallback>>,
     pub(crate) popout_menu: Option<Rc<MenuCallback>>,
     pub(crate) resize_listener: Option<Rc<RefCell<ResizeListener>>>,
@@ -263,9 +269,11 @@ impl ViewState {
         // we will apply the views style to the context so that if a style class is used on a view, that class will be directly applied instead of only applying to children
         let mut context = context.clone();
         if let Some(view_class) = view_class {
-            computed_style = computed_style.apply_classes_from_context(&[view_class], &context);
+            computed_style =
+                computed_style.apply_classes_from_context(&[view_class], &context);
         }
-        computed_style = computed_style.apply_classes_from_context(&self.classes, &context);
+        computed_style =
+            computed_style.apply_classes_from_context(&self.classes, &context);
 
         if let Some(view_style) = view_style {
             context.apply_mut(view_style.clone());

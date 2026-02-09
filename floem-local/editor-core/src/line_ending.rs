@@ -138,7 +138,11 @@ impl LineEndingDetermination {
         let bytes = chunk.as_bytes();
         let newline = memchr2(b'\n', b'\r', bytes);
         match newline {
-            Some(x) if bytes[x] == b'\r' && bytes.len() > x + 1 && bytes[x + 1] == b'\n' => {
+            Some(x)
+                if bytes[x] == b'\r'
+                    && bytes.len() > x + 1
+                    && bytes[x + 1] == b'\n' =>
+            {
                 LineEndingDetermination::CrLf
             }
             Some(x) if bytes[x] == b'\n' => LineEndingDetermination::Lf,
@@ -209,7 +213,11 @@ impl<'a, I: Iterator<Item = &'a str>> Iterator for FullLeChunkSearch<'a, I> {
         let newline = memchr2(b'\n', b'\r', bytes);
         match newline {
             // CrLf
-            Some(x) if bytes[x] == b'\r' && bytes.len() > x + 1 && bytes[x + 1] == b'\n' => {
+            Some(x)
+                if bytes[x] == b'\r'
+                    && bytes.len() > x + 1
+                    && bytes[x + 1] == b'\n' =>
+            {
                 let start = self.offset + self.chunk_pos + x;
                 let end = start + 2;
 
@@ -318,7 +326,9 @@ impl<'a, I: Iterator<Item = &'a str>> Iterator for LoneCrChunkSearch<'a, I> {
 
                     // Check if the next character is '\n' (indicating \r\n)
                     self.chunk_pos += x + 1;
-                    if self.chunk_pos < chunk.len() && chunk.as_bytes()[self.chunk_pos] == b'\n' {
+                    if self.chunk_pos < chunk.len()
+                        && chunk.as_bytes()[self.chunk_pos] == b'\n'
+                    {
                         // Skip \r\n sequences
                         self.chunk_pos += 1;
                     } else if let Some(chunk_b) = self.get_chunk() {

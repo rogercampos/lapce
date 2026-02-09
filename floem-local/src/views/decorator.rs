@@ -117,7 +117,11 @@ pub trait Decorators: IntoView<V = Self::DV> + Sized {
     }
 
     /// Conditionally add a style class to the view
-    fn class_if<C: StyleClass>(self, apply: impl Fn() -> bool + 'static, _class: C) -> Self::DV {
+    fn class_if<C: StyleClass>(
+        self,
+        apply: impl Fn() -> bool + 'static,
+        _class: C,
+    ) -> Self::DV {
         let view = self.into_view();
         let id = view.id();
         create_effect(move |_| {
@@ -244,7 +248,11 @@ pub trait Decorators: IntoView<V = Self::DV> + Sized {
 
     /// Add an event handler for the given [`EventListener`]. This event will be handled with
     /// the given handler and the event will continue propagating.
-    fn on_event_cont(self, listener: EventListener, action: impl Fn(&Event) + 'static) -> Self::DV {
+    fn on_event_cont(
+        self,
+        listener: EventListener,
+        action: impl Fn(&Event) + 'static,
+    ) -> Self::DV {
         self.on_event(listener, move |e| {
             action(e);
             EventPropagation::Continue
@@ -253,7 +261,11 @@ pub trait Decorators: IntoView<V = Self::DV> + Sized {
 
     /// Add an event handler for the given [`EventListener`]. This event will be handled with
     /// the given handler and the event will stop propagating.
-    fn on_event_stop(self, listener: EventListener, action: impl Fn(&Event) + 'static) -> Self::DV {
+    fn on_event_stop(
+        self,
+        listener: EventListener,
+        action: impl Fn(&Event) + 'static,
+    ) -> Self::DV {
         self.on_event(listener, move |e| {
             action(e);
             EventPropagation::Stop
@@ -261,7 +273,10 @@ pub trait Decorators: IntoView<V = Self::DV> + Sized {
     }
 
     /// Add an event handler for [`EventListener::Click`].
-    fn on_click(self, action: impl FnMut(&Event) -> EventPropagation + 'static) -> Self::DV {
+    fn on_click(
+        self,
+        action: impl FnMut(&Event) -> EventPropagation + 'static,
+    ) -> Self::DV {
         self.on_event(EventListener::Click, action)
     }
 
@@ -284,7 +299,10 @@ pub trait Decorators: IntoView<V = Self::DV> + Sized {
     }
 
     /// Add an event handler for [`EventListener::DoubleClick`]
-    fn on_double_click(self, action: impl Fn(&Event) -> EventPropagation + 'static) -> Self::DV {
+    fn on_double_click(
+        self,
+        action: impl Fn(&Event) -> EventPropagation + 'static,
+    ) -> Self::DV {
         self.on_event(EventListener::DoubleClick, action)
     }
 
@@ -307,7 +325,10 @@ pub trait Decorators: IntoView<V = Self::DV> + Sized {
     }
 
     /// Add an event handler for [`EventListener::SecondaryClick`]. This is most often the "Right" click.
-    fn on_secondary_click(self, action: impl Fn(&Event) -> EventPropagation + 'static) -> Self::DV {
+    fn on_secondary_click(
+        self,
+        action: impl Fn(&Event) -> EventPropagation + 'static,
+    ) -> Self::DV {
         self.on_event(EventListener::SecondaryClick, action)
     }
 
@@ -381,7 +402,10 @@ pub trait Decorators: IntoView<V = Self::DV> + Sized {
     ///
     /// # Reactivity
     /// The animation function will be updated in response to signal changes in the function. The behavior is the same as the [`Decorators::style`] method.
-    fn animation(self, animation: impl Fn(Animation) -> Animation + 'static) -> Self::DV {
+    fn animation(
+        self,
+        animation: impl Fn(Animation) -> Animation + 'static,
+    ) -> Self::DV {
         let view = self.into_view();
         let view_id = view.id();
         let state = view_id.state();

@@ -14,7 +14,8 @@ fn main() {
 
     // We must make it so that the main task is under the tokio runtime so that APIs like
     // tokio::spawn work
-    runtime.block_on(async { tokio::task::block_in_place(|| floem::launch(app_view)) })
+    runtime
+        .block_on(async { tokio::task::block_in_place(|| floem::launch(app_view)) })
 }
 
 fn app_view() -> impl IntoView {
@@ -23,11 +24,13 @@ fn app_view() -> impl IntoView {
     let target_duration = create_rw_signal(100.pct());
     let duration_slider = thin_slider(target_duration);
 
-    let stream = IntervalStream::new(tokio::time::interval(Duration::from_millis(100)));
+    let stream =
+        IntervalStream::new(tokio::time::interval(Duration::from_millis(100)));
     let now = Instant::now();
     let started_at = create_rw_signal(now);
     let current_instant = create_signal_from_stream(now, stream);
-    let elapsed_time = move || current_instant.get().duration_since(started_at.get());
+    let elapsed_time =
+        move || current_instant.get().duration_since(started_at.get());
     let is_active = move || elapsed_time().as_secs_f64() < target_duration.get().0;
 
     let elapsed_time_label = label(move || {
@@ -48,10 +51,12 @@ fn app_view() -> impl IntoView {
     );
     let elapsed_time_bar = gauge(progress);
 
-    let reset_button = button("Reset").action(move || started_at.set(Instant::now()));
+    let reset_button =
+        button("Reset").action(move || started_at.set(Instant::now()));
 
     let view = v_stack((
-        stack((text("Elapsed Time: "), elapsed_time_bar)).style(|s| s.justify_between()),
+        stack((text("Elapsed Time: "), elapsed_time_bar))
+            .style(|s| s.justify_between()),
         elapsed_time_label,
         stack((text("Duration: "), duration_slider)).style(|s| s.justify_between()),
         reset_button,

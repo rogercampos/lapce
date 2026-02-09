@@ -319,7 +319,9 @@ impl Event {
             Event::WindowClosed => Some(EventListener::WindowClosed),
             Event::WindowResized(_) => Some(EventListener::WindowResized),
             Event::WindowMoved(_) => Some(EventListener::WindowMoved),
-            Event::WindowMaximizeChanged(_) => Some(EventListener::WindowMaximizeChanged),
+            Event::WindowMaximizeChanged(_) => {
+                Some(EventListener::WindowMaximizeChanged)
+            }
             Event::WindowScaleChanged(_) => Some(EventListener::WindowScaleChanged),
             Event::WindowGotFocus => Some(EventListener::WindowGotFocus),
             Event::WindowLostFocus => Some(EventListener::WindowLostFocus),

@@ -17,9 +17,10 @@ impl KeyPress {
 
     pub fn to_lowercase(&self) -> Self {
         let key = match &self.key {
-            KeyInput::Keyboard(Key::Character(c), key_code) => {
-                KeyInput::Keyboard(Key::Character(c.to_lowercase().into()), *key_code)
-            }
+            KeyInput::Keyboard(Key::Character(c), key_code) => KeyInput::Keyboard(
+                Key::Character(c.to_lowercase().into()),
+                *key_code,
+            ),
             _ => self.key.clone(),
         };
         Self {

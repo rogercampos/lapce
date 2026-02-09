@@ -4,7 +4,9 @@ use floem::{
     keyboard::{Key, NamedKey},
     peniko::{color::palette, Color},
     prelude::ViewTuple,
-    reactive::{create_effect, create_rw_signal, create_signal, SignalGet, SignalUpdate},
+    reactive::{
+        create_effect, create_rw_signal, create_signal, SignalGet, SignalUpdate,
+    },
     style_class,
     unit::UnitExt,
     views::{label, Decorators},
@@ -21,7 +23,8 @@ fn app_view() -> impl IntoView {
         set_window_scale(window_scale);
     });
 
-    let value_label = label(move || format!("Value: {}", counter.get())).style(|s| s.padding(10.0));
+    let value_label = label(move || format!("Value: {}", counter.get()))
+        .style(|s| s.padding(10.0));
 
     let increment_button = "Increment"
         .class(Button)
@@ -55,7 +58,8 @@ fn app_view() -> impl IntoView {
         })
         .keyboard_navigable();
 
-    let counter_buttons = (increment_button, decrement_button, reset_to_zero_button).h_stack();
+    let counter_buttons =
+        (increment_button, decrement_button, reset_to_zero_button).h_stack();
 
     let zoom_in_button = "Zoom In"
         .class(Button)
@@ -91,7 +95,9 @@ fn app_view() -> impl IntoView {
                     s.border(1.0)
                         .border_radius(10.0)
                         .padding(10.0)
-                        .focus_visible(|s| s.border(2.).border_color(palette::css::BLUE))
+                        .focus_visible(|s| {
+                            s.border(2.).border_color(palette::css::BLUE)
+                        })
                         .disabled(|s| s.background(palette::css::LIGHT_GRAY))
                         .hover(|s| s.background(palette::css::LIGHT_GREEN))
                         .active(|s| {

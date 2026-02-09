@@ -1,4 +1,6 @@
-use std::{any::Any, cell::RefCell, collections::HashSet, marker::PhantomData, mem, rc::Rc};
+use std::{
+    any::Any, cell::RefCell, collections::HashSet, marker::PhantomData, mem, rc::Rc,
+};
 
 use crate::{
     id::Id,
@@ -84,7 +86,10 @@ where
 
 /// Create an effect updater that runs `on_change` when any signals `compute` subscribes to
 /// changes. `compute` is immediately run and its return value is returned from `create_updater`.
-pub fn create_updater<R>(compute: impl Fn() -> R + 'static, on_change: impl Fn(R) + 'static) -> R
+pub fn create_updater<R>(
+    compute: impl Fn() -> R + 'static,
+    on_change: impl Fn(R) + 'static,
+) -> R
 where
     R: 'static,
 {
@@ -116,7 +121,8 @@ where
 
 /// Signals that's wrapped this untrack will not subscribe to any effect
 pub fn untrack<T>(f: impl FnOnce() -> T) -> T {
-    let prev_effect = RUNTIME.with(|runtime| runtime.current_effect.borrow_mut().take());
+    let prev_effect =
+        RUNTIME.with(|runtime| runtime.current_effect.borrow_mut().take());
     let result = f();
     RUNTIME.with(|runtime| {
         *runtime.current_effect.borrow_mut() = prev_effect;
@@ -306,7 +312,8 @@ impl SignalTracker {
         // Clear any previous tracking by disposing the old effect
         self.id.dispose();
 
-        let prev_effect = RUNTIME.with(|runtime| runtime.current_effect.borrow_mut().take());
+        let prev_effect =
+            RUNTIME.with(|runtime| runtime.current_effect.borrow_mut().take());
 
         let tracking_effect = Rc::new(TrackingEffect {
             id: self.id,

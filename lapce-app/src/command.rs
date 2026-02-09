@@ -474,7 +474,6 @@ pub enum LapceWorkbenchCommand {
     #[strum(serialize = "go_to_location")]
     #[strum(message = "Go to Location")]
     GoToLocation,
-
 }
 
 #[derive(Clone, Debug)]

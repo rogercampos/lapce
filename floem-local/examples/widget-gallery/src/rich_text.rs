@@ -8,8 +8,10 @@ use floem::{
 };
 
 pub fn rich_text_view() -> impl IntoView {
-    let builder =
-        "This".red().italic() + " is rich text".blue() + "\nTest value: " + 5.to_string().green();
+    let builder = "This".red().italic()
+        + " is rich text".blue()
+        + "\nTest value: "
+        + 5.to_string().green();
 
     let text = "
     // floem is a ui lib, homepage https://github.com/lapce/floem

@@ -7,8 +7,8 @@ use floem::{
     text::Weight,
     unit::{DurationUnitExt, UnitExt},
     views::{
-        container, dyn_container, empty, h_stack, slider, svg, v_stack, ButtonClass, Decorators,
-        Stack, SvgClass,
+        container, dyn_container, empty, h_stack, slider, svg, v_stack, ButtonClass,
+        Decorators, Stack, SvgClass,
     },
     AnyView, IntoView,
 };
@@ -89,7 +89,8 @@ pub fn music_player() -> impl IntoView {
     let play_pause_state = RwSignal::new(PlayPause::Play);
 
     let play_pause_button = container(
-        dyn_container(move || play_pause_state.get(), PlayPause::view).class(ButtonClass),
+        dyn_container(move || play_pause_state.get(), PlayPause::view)
+            .class(ButtonClass),
     )
     .on_click_stop(move |_| play_pause_state.update(PlayPause::toggle));
 

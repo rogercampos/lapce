@@ -109,7 +109,9 @@ impl TodosState {
             let mut matched_new_todos = Vec::new();
             for (i, new_todo) in todos.iter().enumerate() {
                 if let Some(new_db_id) = new_todo.db_id.get_untracked() {
-                    if let Some(old_todo) = old_todos.iter().find(|t| t.db_id == Some(new_db_id)) {
+                    if let Some(old_todo) =
+                        old_todos.iter().find(|t| t.db_id == Some(new_db_id))
+                    {
                         old_todo.done.set(new_todo.done.get_untracked());
                         old_todo
                             .description

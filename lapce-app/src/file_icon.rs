@@ -1,13 +1,13 @@
 use std::{path::PathBuf, sync::Arc};
 
 use floem::{
+    IntoView, View,
     reactive::{ReadSignal, SignalGet},
     style::Style,
-    views::{label, stack, svg, Decorators},
-    IntoView, View,
+    views::{Decorators, label, stack, svg},
 };
 
-use crate::config::{color::LapceColor, LapceConfig};
+use crate::config::{LapceConfig, color::LapceColor};
 
 /// Creates a file type icon SVG view for the given path.
 /// Returns the icon sized to `config.ui.icon_size()` with the correct file-type color.
@@ -37,9 +37,7 @@ pub fn file_icon_with_name(
     stack((
         file_icon_svg(config, path),
         label(name).style(move |s| {
-            s.margin_right(6.0)
-                .max_width_pct(100.0)
-                .text_ellipsis()
+            s.margin_right(6.0).max_width_pct(100.0).text_ellipsis()
         }),
         label(folder).style(move |s| {
             s.color(config.get().color(LapceColor::EDITOR_DIM))

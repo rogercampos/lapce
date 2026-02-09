@@ -2,8 +2,8 @@ use std::{ops::Range, sync::LazyLock};
 
 use crate::text::AttrsList;
 use cosmic_text::{
-    Affinity, Align, Buffer, BufferLine, Cursor, FontSystem, LayoutCursor, LayoutGlyph, LineEnding,
-    LineIter, Metrics, Scroll, Shaping, Wrap,
+    Affinity, Align, Buffer, BufferLine, Cursor, FontSystem, LayoutCursor,
+    LayoutGlyph, LineEnding, LineIter, Metrics, Scroll, Shaping, Wrap,
 };
 use parking_lot::Mutex;
 use peniko::kurbo::{Point, Size};
@@ -49,7 +49,11 @@ impl LayoutRun<'_> {
     /// and `cursor_end` within this run, or None if the cursor range does not intersect this run.
     /// This may return widths of zero if `cursor_start == cursor_end`, if the run is empty, or if the
     /// region's left start boundary is the same as the cursor's end boundary or vice versa.
-    pub fn highlight(&self, cursor_start: Cursor, cursor_end: Cursor) -> Option<(f32, f32)> {
+    pub fn highlight(
+        &self,
+        cursor_start: Cursor,
+        cursor_end: Cursor,
+    ) -> Option<(f32, f32)> {
         let mut x_start = None;
         let mut x_end = None;
         let rtl_factor = if self.rtl { 1. } else { 0. };
@@ -137,7 +141,8 @@ impl<'b> Iterator for LayoutRunIter<'b> {
                     .unwrap_or(self.text_layout.buffer.metrics().line_height);
                 self.total_height += line_height;
 
-                let line_top = self.line_top - self.text_layout.buffer.scroll().vertical;
+                let line_top =
+                    self.line_top - self.text_layout.buffer.scroll().vertical;
                 let glyph_height = layout_line.max_ascent + layout_line.max_descent;
                 let centering_offset = (line_height - glyph_height) / 2.0;
                 let line_y = line_top + centering_offset + layout_line.max_ascent;
@@ -221,13 +226,22 @@ impl TextLayout {
         }
     }
 
-    pub fn new_with_text(text: &str, attrs_list: AttrsList, align: Option<Align>) -> Self {
+    pub fn new_with_text(
+        text: &str,
+        attrs_list: AttrsList,
+        align: Option<Align>,
+    ) -> Self {
         let mut layout = Self::new();
         layout.set_text(text, attrs_list, align);
         layout
     }
 
-    pub fn set_text(&mut self, text: &str, attrs_list: AttrsList, align: Option<Align>) {
+    pub fn set_text(
+        &mut self,
+        text: &str,
+        attrs_list: AttrsList,
+        align: Option<Align>,
+    ) {
         self.buffer.lines.clear();
         self.lines_range.clear();
         let mut attrs_list = attrs_list.0;
@@ -237,15 +251,23 @@ impl TextLayout {
             let new_attrs = attrs_list
                 .clone()
                 .split_off(line_text.len() + ending.as_str().len());
-            let mut line =
-                BufferLine::new(line_text, ending, attrs_list.clone(), Shaping::Advanced);
+            let mut line = BufferLine::new(
+                line_text,
+                ending,
+                attrs_list.clone(),
+                Shaping::Advanced,
+            );
             line.set_align(align);
             self.buffer.lines.push(line);
             attrs_list = new_attrs;
         }
         if self.buffer.lines.is_empty() {
-            let mut line =
-                BufferLine::new("", LineEnding::default(), attrs_list, Shaping::Advanced);
+            let mut line = BufferLine::new(
+                "",
+                LineEnding::default(),
+                attrs_list,
+                Shaping::Advanced,
+            );
             line.set_align(align);
             self.buffer.lines.push(line);
             self.lines_range.push(0..0)
@@ -255,8 +277,9 @@ impl TextLayout {
         let mut font_system = FONT_SYSTEM.lock();
 
         // two-pass layout for alignment to work properly
-        let needs_two_pass =
-            align.is_some() && align != Some(Align::Left) && self.width_opt.is_none();
+        let needs_two_pass = align.is_some()
+            && align != Some(Align::Left)
+            && self.width_opt.is_none();
         if needs_two_pass {
             // first pass: shape and layout without width constraint to measure natural width
             self.buffer.shape_until_scroll(&mut font_system, false);
@@ -269,8 +292,11 @@ impl TextLayout {
 
             // second pass: set the measured width and layout again
             if measured_width > 0.0 {
-                self.buffer
-                    .set_size(&mut font_system, Some(measured_width), self.height_opt);
+                self.buffer.set_size(
+                    &mut font_system,
+                    Some(measured_width),
+                    self.height_opt,
+                );
                 // shape again after size change
                 self.buffer.shape_until_scroll(&mut font_system, false);
             }
@@ -408,7 +434,9 @@ impl TextLayout {
                             return HitPosition {
                                 line: last_line,
                                 point: Point::new(
-                                    last_glyph.map(|g| (g.x + g.w) as f64).unwrap_or(0.0),
+                                    last_glyph
+                                        .map(|g| (g.x + g.w) as f64)
+                                        .unwrap_or(0.0),
                                     last_line_y as f64,
                                 ),
                                 glyph_ascent: last_glyph_ascent as f64,
@@ -428,7 +456,9 @@ impl TextLayout {
                         return HitPosition {
                             line: last_line,
                             point: Point::new(
-                                last_glyph.map(|g| (g.x + g.w) as f64).unwrap_or(0.0),
+                                last_glyph
+                                    .map(|g| (g.x + g.w) as f64)
+                                    .unwrap_or(0.0),
                                 last_line_y as f64,
                             ),
                             glyph_ascent: last_glyph_ascent as f64,

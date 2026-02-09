@@ -21,8 +21,8 @@ use std::time::{Duration, Instant};
 use web_time::{Duration, Instant};
 
 pub use taffy::style::{
-    AlignContent, AlignItems, BoxSizing, Dimension, Display, FlexDirection, FlexWrap,
-    JustifyContent, JustifyItems, Position,
+    AlignContent, AlignItems, BoxSizing, Dimension, Display, FlexDirection,
+    FlexWrap, JustifyContent, JustifyItems, Position,
 };
 use taffy::{
     geometry::{MinMax, Size},
@@ -68,7 +68,9 @@ impl StylePropValue for u16 {
 }
 impl StylePropValue for usize {
     fn interpolate(&self, other: &Self, value: f64) -> Option<Self> {
-        Some((*self as f64 + (*other as f64 - *self as f64) * value).round() as usize)
+        Some(
+            (*self as f64 + (*other as f64 - *self as f64) * value).round() as usize,
+        )
     }
 }
 impl StylePropValue for f64 {
@@ -191,7 +193,9 @@ impl StylePropValue for PxPctAuto {
     fn interpolate(&self, other: &Self, value: f64) -> Option<Self> {
         match (self, other) {
             (Self::Px(v1), Self::Px(v2)) => Some(Self::Px(v1 + (v2 - v1) * value)),
-            (Self::Pct(v1), Self::Pct(v2)) => Some(Self::Pct(v1 + (v2 - v1) * value)),
+            (Self::Pct(v1), Self::Pct(v2)) => {
+                Some(Self::Pct(v1 + (v2 - v1) * value))
+            }
             (Self::Auto, Self::Auto) => Some(Self::Auto),
             // TODO: Figure out some way to get in the relevant layout information in order to interpolate between pixels and percent
             _ => None,
@@ -210,7 +214,9 @@ impl StylePropValue for PxPct {
     fn interpolate(&self, other: &Self, value: f64) -> Option<Self> {
         match (self, other) {
             (Self::Px(v1), Self::Px(v2)) => Some(Self::Px(v1 + (v2 - v1) * value)),
-            (Self::Pct(v1), Self::Pct(v2)) => Some(Self::Pct(v1 + (v2 - v1) * value)),
+            (Self::Pct(v1), Self::Pct(v2)) => {
+                Some(Self::Pct(v1 + (v2 - v1) * value))
+            }
             // TODO: Figure out some way to get in the relevant layout information in order to interpolate between pixels and percent
             _ => None,
         }
@@ -435,11 +441,9 @@ impl StylePropValue for Brush {
 
     fn interpolate(&self, other: &Self, value: f64) -> Option<Self> {
         match (self, other) {
-            (Brush::Solid(color), Brush::Solid(other)) => Some(Self::Solid(color.lerp(
-                *other,
-                value as f32,
-                HueDirection::default(),
-            ))),
+            (Brush::Solid(color), Brush::Solid(other)) => Some(Self::Solid(
+                color.lerp(*other, value as f32, HueDirection::default()),
+            )),
             (Brush::Gradient(gradient), Brush::Solid(solid)) => {
                 let interpolated_stops: Vec<ColorStop> = gradient
                     .stops
@@ -530,7 +534,8 @@ pub struct StyleClassRef {
 macro_rules! style_key_selector {
     ($v:vis $name:ident, $sel:expr) => {
         fn $name() -> $crate::style::StyleKey {
-            static INFO: $crate::style::StyleKeyInfo = $crate::style::StyleKeyInfo::Selector($sel);
+            static INFO: $crate::style::StyleKeyInfo =
+                $crate::style::StyleKeyInfo::Selector($sel);
             $crate::style::StyleKey { info: &INFO }
         }
     };
@@ -591,7 +596,9 @@ impl StylePropInfo {
             debug_any: |val| {
                 if let Some(v) = val.downcast_ref::<StyleMapValue<T>>() {
                     match v {
-                        StyleMapValue::Val(v) | StyleMapValue::Animated(v) => format!("{v:?}"),
+                        StyleMapValue::Val(v) | StyleMapValue::Animated(v) => {
+                            format!("{v:?}")
+                        }
                         StyleMapValue::Unset => "Unset".to_owned(),
                     }
                 } else {
@@ -612,8 +619,9 @@ impl StylePropInfo {
                         StyleMapValue::Val(v2) | StyleMapValue::Animated(v2),
                     ) = (v1, v2)
                     {
-                        v1.interpolate(v2, time)
-                            .map(|val| Rc::new(StyleMapValue::Animated(val)) as Rc<dyn Any>)
+                        v1.interpolate(v2, time).map(|val| {
+                            Rc::new(StyleMapValue::Animated(val)) as Rc<dyn Any>
+                        })
                     } else {
                         None
                     }
@@ -630,7 +638,9 @@ impl StylePropInfo {
             debug_view: |val| {
                 if let Some(v) = val.downcast_ref::<StyleMapValue<T>>() {
                     match v {
-                        StyleMapValue::Val(v) | StyleMapValue::Animated(v) => v.debug_view(),
+                        StyleMapValue::Val(v) | StyleMapValue::Animated(v) => {
+                            v.debug_view()
+                        }
 
                         StyleMapValue::Unset => Some(text("Unset").into_any()),
                     }
@@ -969,8 +979,11 @@ impl<T: StylePropValue> TransitionState<T> {
         if let Some(active) = &mut self.active {
             if let Some(transition) = &self.transition {
                 let time = now.saturating_duration_since(active.start);
-                let time_percent = time.as_secs_f64() / transition.duration.as_secs_f64();
-                if time < transition.duration || !transition.easing.finished(time_percent) {
+                let time_percent =
+                    time.as_secs_f64() / transition.duration.as_secs_f64();
+                if time < transition.duration
+                    || !transition.easing.finished(time_percent)
+                {
                     if let Some(i) = T::interpolate(
                         &active.before,
                         &active.after,
@@ -1208,37 +1221,47 @@ impl Style {
         interact_state: &InteractionState,
         screen_size_bp: ScreenSizeBp,
     ) {
-        if let Some(mut map) = self.get_nested_map(screen_size_bp_to_key(screen_size_bp)) {
+        if let Some(mut map) =
+            self.get_nested_map(screen_size_bp_to_key(screen_size_bp))
+        {
             map.apply_interact_state(interact_state, screen_size_bp);
             self.apply_mut(map);
         }
 
         if interact_state.is_hovered && !interact_state.is_disabled {
-            if let Some(mut map) = self.get_nested_map(StyleSelector::Hover.to_key()) {
+            if let Some(mut map) = self.get_nested_map(StyleSelector::Hover.to_key())
+            {
                 map.apply_interact_state(interact_state, screen_size_bp);
                 self.apply_mut(map);
             }
         }
         if interact_state.is_focused {
-            if let Some(mut map) = self.get_nested_map(StyleSelector::Focus.to_key()) {
+            if let Some(mut map) = self.get_nested_map(StyleSelector::Focus.to_key())
+            {
                 map.apply_interact_state(interact_state, screen_size_bp);
                 self.apply_mut(map);
             }
         }
         if interact_state.is_selected {
-            if let Some(mut map) = self.get_nested_map(StyleSelector::Selected.to_key()) {
+            if let Some(mut map) =
+                self.get_nested_map(StyleSelector::Selected.to_key())
+            {
                 map.apply_interact_state(interact_state, screen_size_bp);
                 self.apply_mut(map);
             }
         }
         if interact_state.is_disabled {
-            if let Some(mut map) = self.get_nested_map(StyleSelector::Disabled.to_key()) {
+            if let Some(mut map) =
+                self.get_nested_map(StyleSelector::Disabled.to_key())
+            {
                 map.apply_interact_state(interact_state, screen_size_bp);
                 self.apply_mut(map);
             }
         }
         if interact_state.is_dark_mode {
-            if let Some(mut map) = self.get_nested_map(StyleSelector::DarkMode.to_key()) {
+            if let Some(mut map) =
+                self.get_nested_map(StyleSelector::DarkMode.to_key())
+            {
                 map.apply_interact_state(interact_state, screen_size_bp);
                 self.apply_mut(map);
             }
@@ -1248,15 +1271,20 @@ impl Style {
             interact_state.using_keyboard_navigation && interact_state.is_focused;
 
         if focused_keyboard {
-            if let Some(mut map) = self.get_nested_map(StyleSelector::FocusVisible.to_key()) {
+            if let Some(mut map) =
+                self.get_nested_map(StyleSelector::FocusVisible.to_key())
+            {
                 map.apply_interact_state(interact_state, screen_size_bp);
                 self.apply_mut(map);
             }
         }
 
-        let active_mouse = interact_state.is_hovered && !interact_state.using_keyboard_navigation;
+        let active_mouse =
+            interact_state.is_hovered && !interact_state.using_keyboard_navigation;
         if interact_state.is_clicking && (active_mouse || focused_keyboard) {
-            if let Some(mut map) = self.get_nested_map(StyleSelector::Active.to_key()) {
+            if let Some(mut map) =
+                self.get_nested_map(StyleSelector::Active.to_key())
+            {
                 map.apply_interact_state(interact_state, screen_size_bp);
                 self.apply_mut(map);
             }
@@ -1287,7 +1315,8 @@ impl Style {
     fn set_map_selector(&mut self, key: StyleKey, map: Style) {
         match self.map.entry(key) {
             Entry::Occupied(mut e) => {
-                let mut current = e.get_mut().downcast_ref::<Style>().unwrap().clone();
+                let mut current =
+                    e.get_mut().downcast_ref::<Style>().unwrap().clone();
                 current.apply_mut(map);
                 *e.get_mut() = Rc::new(current);
             }
@@ -1312,30 +1341,35 @@ impl Style {
     fn apply_iter(&mut self, iter: impl Iterator<Item = (StyleKey, Rc<dyn Any>)>) {
         for (k, v) in iter {
             match k.info {
-                StyleKeyInfo::Class(..) | StyleKeyInfo::Selector(..) => match self.map.entry(k) {
-                    Entry::Occupied(mut e) => {
-                        // We need to merge the new map with the existing map.
+                StyleKeyInfo::Class(..) | StyleKeyInfo::Selector(..) => {
+                    match self.map.entry(k) {
+                        Entry::Occupied(mut e) => {
+                            // We need to merge the new map with the existing map.
 
-                        let v = v.downcast_ref::<Style>().unwrap();
-                        match Rc::get_mut(e.get_mut()) {
-                            Some(current) => {
-                                current
-                                    .downcast_mut::<Style>()
-                                    .unwrap()
-                                    .apply_mut(v.clone());
-                            }
-                            None => {
-                                let mut current =
-                                    e.get_mut().downcast_ref::<Style>().unwrap().clone();
-                                current.apply_mut(v.clone());
-                                *e.get_mut() = Rc::new(current);
+                            let v = v.downcast_ref::<Style>().unwrap();
+                            match Rc::get_mut(e.get_mut()) {
+                                Some(current) => {
+                                    current
+                                        .downcast_mut::<Style>()
+                                        .unwrap()
+                                        .apply_mut(v.clone());
+                                }
+                                None => {
+                                    let mut current = e
+                                        .get_mut()
+                                        .downcast_ref::<Style>()
+                                        .unwrap()
+                                        .clone();
+                                    current.apply_mut(v.clone());
+                                    *e.get_mut() = Rc::new(current);
+                                }
                             }
                         }
+                        Entry::Vacant(e) => {
+                            e.insert(v);
+                        }
                     }
-                    Entry::Vacant(e) => {
-                        e.insert(v);
-                    }
-                },
+                }
                 StyleKeyInfo::Transition | StyleKeyInfo::Prop(..) => {
                     self.map.insert(k, v);
                 }
@@ -1364,7 +1398,10 @@ impl Style {
 
     /// Apply multiple `Style`s to this style, returning a new `Style` with the overrides.
     /// Later styles take precedence over earlier styles.
-    pub fn apply_overriding_styles(self, overrides: impl Iterator<Item = Style>) -> Style {
+    pub fn apply_overriding_styles(
+        self,
+        overrides: impl Iterator<Item = Style>,
+    ) -> Style {
         overrides.fold(self, |acc, x| acc.apply(x))
     }
 
@@ -1845,7 +1882,11 @@ impl Style {
         self.set_style_value(prop, StyleValue::Val(value.into()))
     }
 
-    pub fn set_style_value<P: StyleProp>(mut self, _prop: P, value: StyleValue<P::Type>) -> Self {
+    pub fn set_style_value<P: StyleProp>(
+        mut self,
+        _prop: P,
+        value: StyleValue<P::Type>,
+    ) -> Self {
         let insert = match value {
             StyleValue::Val(value) => StyleMapValue::Val(value),
             StyleValue::Animated(value) => StyleMapValue::Animated(value),
@@ -1859,13 +1900,21 @@ impl Style {
         self
     }
 
-    pub fn transition<P: StyleProp>(mut self, _prop: P, transition: Transition) -> Self {
+    pub fn transition<P: StyleProp>(
+        mut self,
+        _prop: P,
+        transition: Transition,
+    ) -> Self {
         self.map
             .insert(P::prop_ref().info().transition_key, Rc::new(transition));
         self
     }
 
-    fn selector(mut self, selector: StyleSelector, style: impl FnOnce(Style) -> Style) -> Self {
+    fn selector(
+        mut self,
+        selector: StyleSelector,
+        style: impl FnOnce(Style) -> Style,
+    ) -> Self {
         let over = style(Style::default());
         self.set_selector(selector, over);
         self
@@ -1901,7 +1950,11 @@ impl Style {
         self.selector(StyleSelector::Active, style)
     }
 
-    pub fn responsive(mut self, size: ScreenSize, style: impl FnOnce(Style) -> Style) -> Self {
+    pub fn responsive(
+        mut self,
+        size: ScreenSize,
+        style: impl FnOnce(Style) -> Style,
+    ) -> Self {
         let over = style(Style::default());
         for breakpoint in size.breakpoints() {
             self.set_breakpoint(breakpoint, over.clone());
@@ -1909,7 +1962,11 @@ impl Style {
         self
     }
 
-    pub fn class<C: StyleClass>(mut self, _class: C, style: impl FnOnce(Style) -> Style) -> Self {
+    pub fn class<C: StyleClass>(
+        mut self,
+        _class: C,
+        style: impl FnOnce(Style) -> Style,
+    ) -> Self {
         let over = style(Style::default());
         self.set_class(C::class_ref(), over);
         self
@@ -1933,7 +1990,10 @@ impl Style {
     /// ```
     ///
     /// See also: [`Style::custom`](Self::custom) and [`Style::apply_custom`](Self::apply_custom).
-    pub fn custom_style_class<CS: CustomStyle>(mut self, style: impl FnOnce(CS) -> CS) -> Self {
+    pub fn custom_style_class<CS: CustomStyle>(
+        mut self,
+        style: impl FnOnce(CS) -> CS,
+    ) -> Self {
         let over = style(CS::default());
         self.set_class(CS::StyleClass::class_ref(), over.into());
         self
@@ -1963,7 +2023,11 @@ impl Style {
         self.set(RowGap, height.into())
     }
 
-    pub fn row_col_gap(self, width: impl Into<PxPct>, height: impl Into<PxPct>) -> Self {
+    pub fn row_col_gap(
+        self,
+        width: impl Into<PxPct>,
+        height: impl Into<PxPct>,
+    ) -> Self {
         self.col_gap(width).row_gap(height)
     }
 
@@ -1972,7 +2036,11 @@ impl Style {
         self.col_gap(gap).row_gap(gap)
     }
 
-    pub fn size(self, width: impl Into<PxPctAuto>, height: impl Into<PxPctAuto>) -> Self {
+    pub fn size(
+        self,
+        width: impl Into<PxPctAuto>,
+        height: impl Into<PxPctAuto>,
+    ) -> Self {
         self.width(width).height(height)
     }
 
@@ -2305,7 +2373,10 @@ impl Style {
         self.font_weight(Weight::BOLD)
     }
 
-    pub fn font_style(self, style: impl Into<StyleValue<crate::text::Style>>) -> Self {
+    pub fn font_style(
+        self,
+        style: impl Into<StyleValue<crate::text::Style>>,
+    ) -> Self {
         self.set_style_value(FontStyle, style.into().map(Some))
     }
 
@@ -2423,7 +2494,11 @@ impl Style {
     ///     .apply_opt(Some(5.0), |s, v| s.border_right(v * 2.0))
     ///     .border_left(5.0); // ran, obviously
     /// ```
-    pub fn apply_opt<T>(self, opt: Option<T>, f: impl FnOnce(Self, T) -> Self) -> Self {
+    pub fn apply_opt<T>(
+        self,
+        opt: Option<T>,
+        f: impl FnOnce(Self, T) -> Self,
+    ) -> Self {
         if let Some(t) = opt {
             f(self, t)
         } else {
@@ -2532,7 +2607,9 @@ impl Style {
                 left: LengthPercentage::length(style.border_left().0.width as f32),
                 top: LengthPercentage::length(style.border_top().0.width as f32),
                 right: LengthPercentage::length(style.border_right().0.width as f32),
-                bottom: LengthPercentage::length(style.border_bottom().0.width as f32),
+                bottom: LengthPercentage::length(
+                    style.border_bottom().0.width as f32,
+                ),
             },
             padding: Rect {
                 left: style.padding_left().into(),
@@ -2580,13 +2657,15 @@ pub trait CustomStyle: Default + Clone + Into<Style> + From<Style> {
 
     fn hover(self, style: impl FnOnce(Self) -> Self) -> Self {
         let self_style: Style = self.into();
-        let new = self_style.selector(StyleSelector::Hover, |_| style(Self::default()).into());
+        let new = self_style
+            .selector(StyleSelector::Hover, |_| style(Self::default()).into());
         new.into()
     }
 
     fn focus(self, style: impl FnOnce(Self) -> Self) -> Self {
         let self_style: Style = self.into();
-        let new = self_style.selector(StyleSelector::Focus, |_| style(Self::default()).into());
+        let new = self_style
+            .selector(StyleSelector::Focus, |_| style(Self::default()).into());
         new.into()
     }
 
@@ -2601,25 +2680,29 @@ pub trait CustomStyle: Default + Clone + Into<Style> + From<Style> {
 
     fn selected(self, style: impl FnOnce(Self) -> Self) -> Self {
         let self_style: Style = self.into();
-        let new = self_style.selector(StyleSelector::Selected, |_| style(Self::default()).into());
+        let new = self_style
+            .selector(StyleSelector::Selected, |_| style(Self::default()).into());
         new.into()
     }
 
     fn disabled(self, style: impl FnOnce(Self) -> Self) -> Self {
         let self_style: Style = self.into();
-        let new = self_style.selector(StyleSelector::Disabled, |_| style(Self::default()).into());
+        let new = self_style
+            .selector(StyleSelector::Disabled, |_| style(Self::default()).into());
         new.into()
     }
 
     fn dark_mode(self, style: impl FnOnce(Self) -> Self) -> Self {
         let self_style: Style = self.into();
-        let new = self_style.selector(StyleSelector::DarkMode, |_| style(Self::default()).into());
+        let new = self_style
+            .selector(StyleSelector::DarkMode, |_| style(Self::default()).into());
         new.into()
     }
 
     fn active(self, style: impl FnOnce(Self) -> Self) -> Self {
         let self_style: Style = self.into();
-        let new = self_style.selector(StyleSelector::Active, |_| style(Self::default()).into());
+        let new = self_style
+            .selector(StyleSelector::Active, |_| style(Self::default()).into());
         new.into()
     }
 
@@ -2649,7 +2732,9 @@ pub trait CustomStyle: Default + Clone + Into<Style> + From<Style> {
     }
 }
 
-pub trait CustomStylable<S: CustomStyle + 'static>: IntoView<V = Self::DV> + Sized {
+pub trait CustomStylable<S: CustomStyle + 'static>:
+    IntoView<V = Self::DV> + Sized
+{
     type DV: View;
 
     /// #  Add a custom style to the view with access to this view's specialized custom style.

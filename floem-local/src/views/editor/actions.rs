@@ -2,7 +2,9 @@ use std::ops::Range;
 
 use crate::keyboard::Modifiers;
 use floem_editor_core::{
-    command::{EditCommand, MotionModeCommand, MultiSelectionCommand, ScrollCommand},
+    command::{
+        EditCommand, MotionModeCommand, MultiSelectionCommand, ScrollCommand,
+    },
     cursor::Cursor,
     mode::MotionMode,
     movement::Movement,
@@ -28,9 +30,15 @@ pub fn handle_command_default(
             let movement = cmd.to_movement(count);
             handle_move_command_default(ed, action, movement, count, modifiers)
         }
-        Command::Scroll(cmd) => handle_scroll_command_default(ed, cmd, count, modifiers),
-        Command::MotionMode(cmd) => handle_motion_mode_command_default(ed, action, cmd, count),
-        Command::MultiSelection(cmd) => handle_multi_selection_command_default(ed, cmd),
+        Command::Scroll(cmd) => {
+            handle_scroll_command_default(ed, cmd, count, modifiers)
+        }
+        Command::MotionMode(cmd) => {
+            handle_motion_mode_command_default(ed, action, cmd, count)
+        }
+        Command::MultiSelection(cmd) => {
+            handle_multi_selection_command_default(ed, cmd)
+        }
     }
 }
 fn handle_edit_command_default(
@@ -45,17 +53,19 @@ fn handle_edit_command_default(
 
     let text = ed.rope_text();
 
-    let yank_data = if let floem_editor_core::cursor::CursorMode::Visual { .. } = &cursor.mode {
-        Some(cursor.yank(&text))
-    } else {
-        None
-    };
+    let yank_data =
+        if let floem_editor_core::cursor::CursorMode::Visual { .. } = &cursor.mode {
+            Some(cursor.yank(&text))
+        } else {
+            None
+        };
 
     // TODO: Should we instead pass the editor so that it can grab
     // modal + smart-tab (etc) if it wants?
     // That would end up with some duplication of logic, but it would
     // be more flexible.
-    let had_edits = action.do_edit(ed, &mut cursor, cmd, modal, &mut register, smart_tab);
+    let had_edits =
+        action.do_edit(ed, &mut cursor, cmd, modal, &mut register, smart_tab);
 
     if had_edits {
         if let Some(data) = yank_data {

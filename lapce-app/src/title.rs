@@ -101,10 +101,8 @@ fn middle(
     };
 
     stack((
-        stack((
-            drag_window_area(empty())
-                .style(|s| s.height_pct(100.0).flex_basis(0.0).flex_grow(1.0)),
-        ))
+        stack((drag_window_area(empty())
+            .style(|s| s.height_pct(100.0).flex_basis(0.0).flex_grow(1.0)),))
         .style(|s| {
             s.flex_basis(0)
                 .flex_grow(1.0)
@@ -298,11 +296,7 @@ pub fn title(window_tab_data: Rc<WindowTabData>) -> impl View {
             config,
             num_window_tabs,
         ),
-        middle(
-            workspace,
-            workbench_command,
-            config,
-        ),
+        middle(workspace, workbench_command, config),
         right(
             window_command,
             workbench_command,

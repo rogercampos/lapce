@@ -9,8 +9,8 @@ use floem::{
     },
     style::{CursorStyle, Display},
     views::{
-        Decorators, VirtualVector, container, scroll, stack, text,
-        scroll::PropagatePointerWheel, virtual_stack,
+        Decorators, VirtualVector, container, scroll, scroll::PropagatePointerWheel,
+        stack, text, virtual_stack,
     },
 };
 use lapce_core::{command::FocusCommand, mode::Mode, selection::Selection};
@@ -80,8 +80,7 @@ impl RecentFilesData {
                 nucleo::pattern::CaseMatching::Ignore,
                 nucleo::pattern::Normalization::Smart,
             );
-            let mut matcher =
-                nucleo::Matcher::new(nucleo::Config::DEFAULT);
+            let mut matcher = nucleo::Matcher::new(nucleo::Config::DEFAULT);
             let mut buf = Vec::new();
 
             let mut scored: Vec<(PathBuf, u32)> = files
@@ -326,14 +325,12 @@ fn recent_files_content(window_tab_data: Rc<WindowTabData>) -> impl View {
                     let data = data.clone();
                     let icon_path = path.clone();
 
-                    container(
-                        crate::file_icon::file_icon_with_name(
-                            config,
-                            move || icon_path.clone(),
-                            move || filename.clone(),
-                            move || dir_hint.clone(),
-                        ),
-                    )
+                    container(crate::file_icon::file_icon_with_name(
+                        config,
+                        move || icon_path.clone(),
+                        move || filename.clone(),
+                        move || dir_hint.clone(),
+                    ))
                     .on_click_stop(move |_| {
                         data.index.set(i);
                         data.select();
@@ -355,9 +352,8 @@ fn recent_files_content(window_tab_data: Rc<WindowTabData>) -> impl View {
                             })
                             .hover(|s| {
                                 s.background(
-                                    config.color(
-                                        LapceColor::PANEL_HOVERED_BACKGROUND,
-                                    ),
+                                    config
+                                        .color(LapceColor::PANEL_HOVERED_BACKGROUND),
                                 )
                             })
                     })
@@ -378,13 +374,11 @@ fn recent_files_content(window_tab_data: Rc<WindowTabData>) -> impl View {
                 .set(PropagatePointerWheel, false)
         }),
         text("No recent files").style(move |s| {
-            s.display(
-                if filtered_items.with(|items| items.is_empty()) {
-                    Display::Flex
-                } else {
-                    Display::None
-                },
-            )
+            s.display(if filtered_items.with(|items| items.is_empty()) {
+                Display::Flex
+            } else {
+                Display::None
+            })
             .padding(10.0)
             .items_center()
             .height(item_height as f32)

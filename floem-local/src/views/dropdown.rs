@@ -7,7 +7,8 @@
 use std::{any::Any, rc::Rc};
 
 use floem_reactive::{
-    as_child_of_current_scope, create_effect, create_updater, Scope, SignalGet, SignalUpdate,
+    as_child_of_current_scope, create_effect, create_updater, Scope, SignalGet,
+    SignalUpdate,
 };
 use peniko::{
     color::palette,
@@ -211,13 +212,20 @@ impl<T: 'static + Clone> View for Dropdown<T> {
         }
     }
 
-    fn compute_layout(&mut self, cx: &mut crate::context::ComputeLayoutCx) -> Option<Rect> {
+    fn compute_layout(
+        &mut self,
+        cx: &mut crate::context::ComputeLayoutCx,
+    ) -> Option<Rect> {
         self.window_origin = Some(cx.window_origin);
 
         default_compute_layout(self.id, cx)
     }
 
-    fn update(&mut self, cx: &mut crate::context::UpdateCx, state: Box<dyn std::any::Any>) {
+    fn update(
+        &mut self,
+        cx: &mut crate::context::UpdateCx,
+        state: Box<dyn std::any::Any>,
+    ) {
         if let Ok(state) = state.downcast::<Message>() {
             match *state {
                 Message::OpenState(true) => self.open_dropdown(cx),
@@ -305,13 +313,16 @@ impl<T: Clone> Dropdown<T> {
         // TODO: this should be more customizable
         stack((
             text(item),
-            container(svg(CHEVRON_DOWN).style(|s| s.size(12, 12).color(palette::css::BLACK)))
-                .style(|s| {
-                    s.items_center()
-                        .padding(3.)
-                        .border_radius(5)
-                        .hover(move |s| s.background(palette::css::LIGHT_GRAY))
-                }),
+            container(
+                svg(CHEVRON_DOWN)
+                    .style(|s| s.size(12, 12).color(palette::css::BLACK)),
+            )
+            .style(|s| {
+                s.items_center()
+                    .padding(3.)
+                    .border_radius(5)
+                    .hover(move |s| s.background(palette::css::LIGHT_GRAY))
+            }),
         ))
         .style(|s| s.items_center().justify_between().size_full())
         .into_any()
@@ -374,7 +385,9 @@ impl<T: Clone> Dropdown<T> {
                 .on_accept(move |opt_idx| {
                     if let Some(idx) = opt_idx {
                         let val = iter_clone.clone().into_iter().nth(idx).unwrap();
-                        dropdown_id.update_state(Message::ActiveElement(Box::new(val.clone())));
+                        dropdown_id.update_state(Message::ActiveElement(Box::new(
+                            val.clone(),
+                        )));
                         dropdown_id.update_state(Message::ListSelect(Box::new(val)));
                     }
                 })
@@ -489,7 +502,10 @@ impl<T: Clone> Dropdown<T> {
     }
 
     /// Overrides the main view for the dropdown.
-    pub fn main_view(mut self, main_view: impl Fn(T) -> Box<dyn View> + 'static) -> Self {
+    pub fn main_view(
+        mut self,
+        main_view: impl Fn(T) -> Box<dyn View> + 'static,
+    ) -> Self {
         self.main_fn = Box::new(as_child_of_current_scope(main_view));
         let (child, main_view_scope) = (self.main_fn)(self.current_value.clone());
         let main_view = child.id();
@@ -500,7 +516,10 @@ impl<T: Clone> Dropdown<T> {
     }
 
     /// Overrides the list view for each item in the dropdown list.
-    pub fn list_item_view(mut self, list_item_fn: impl Fn(T) -> Box<dyn View> + 'static) -> Self {
+    pub fn list_item_view(
+        mut self,
+        list_item_fn: impl Fn(T) -> Box<dyn View> + 'static,
+    ) -> Self {
         self.list_item_fn = Rc::new(list_item_fn);
         self
     }
@@ -549,8 +568,8 @@ impl<T: Clone> Dropdown<T> {
             cx.app_state.compute_layout();
             if let Some(layout) = self.id.get_layout() {
                 self.update_list_style(layout.size.width as f64);
-                let point =
-                    self.window_origin.unwrap_or_default() + (0., layout.size.height as f64);
+                let point = self.window_origin.unwrap_or_default()
+                    + (0., layout.size.height as f64);
                 self.create_overlay(point);
 
                 if let Some(on_open) = &self.on_open {

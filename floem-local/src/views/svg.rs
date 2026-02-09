@@ -86,7 +86,10 @@ pub enum SvgOrStyle {
 }
 
 impl Svg {
-    pub fn update_value<S: Into<String>>(self, svg_str: impl Fn() -> S + 'static) -> Self {
+    pub fn update_value<S: Into<String>>(
+        self,
+        svg_str: impl Fn() -> S + 'static,
+    ) -> Self {
         let id = self.id;
         create_effect(move |_| {
             let new_svg_str = svg_str();
@@ -95,7 +98,10 @@ impl Svg {
         self
     }
 
-    pub fn set_css_extractor(mut self, css: impl SvgCssPropExtractor + 'static) -> Self {
+    pub fn set_css_extractor(
+        mut self,
+        css: impl SvgCssPropExtractor + 'static,
+    ) -> Self {
         self.css_prop = Some(Box::new(css));
         self
     }
@@ -153,7 +159,11 @@ impl View for Svg {
         }
     }
 
-    fn update(&mut self, _cx: &mut crate::context::UpdateCx, state: Box<dyn std::any::Any>) {
+    fn update(
+        &mut self,
+        _cx: &mut crate::context::UpdateCx,
+        state: Box<dyn std::any::Any>,
+    ) {
         if let Ok(state) = state.downcast::<SvgOrStyle>() {
             let (text, style) = match *state {
                 SvgOrStyle::Svg(text) => {
@@ -188,7 +198,9 @@ impl View for Svg {
         if let Some(tree) = self.svg_tree.as_ref() {
             let hash = self.svg_hash.as_ref().unwrap();
             let layout = self.id.get_layout().unwrap_or_default();
-            let rect = Size::new(layout.size.width as f64, layout.size.height as f64).to_rect();
+            let rect =
+                Size::new(layout.size.width as f64, layout.size.height as f64)
+                    .to_rect();
             let color = if let Some(brush) = self.svg_style.svg_color() {
                 Some(brush)
             } else {
@@ -233,7 +245,11 @@ pub fn brush_to_css_string(brush: &Brush) -> String {
                             format!("#{r:02x}{g:02x}{b:02x}")
                         };
 
-                        css.push_str(&format!("{} {}%", color_str, (stop.offset * 100.0).round()));
+                        css.push_str(&format!(
+                            "{} {}%",
+                            color_str,
+                            (stop.offset * 100.0).round()
+                        ));
 
                         if i < gradient.stops.len() - 1 {
                             css.push_str(", ");

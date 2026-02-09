@@ -7,8 +7,8 @@ use peniko::Brush;
 use winit::keyboard::{Key, NamedKey};
 
 use crate::style::{
-    BorderBottomLeftRadius, BorderBottomRightRadius, BorderTopLeftRadius, BorderTopRightRadius,
-    CustomStyle,
+    BorderBottomLeftRadius, BorderBottomRightRadius, BorderTopLeftRadius,
+    BorderTopRightRadius, CustomStyle,
 };
 use crate::unit::Pct;
 use crate::{
@@ -63,8 +63,14 @@ fn border_radius(style: &BarStyle, size: f64) -> RoundedRectRadii {
     RoundedRectRadii {
         top_left: crate::view::border_radius(style.border_top_left_radius(), size),
         top_right: crate::view::border_radius(style.border_top_right_radius(), size),
-        bottom_left: crate::view::border_radius(style.border_bottom_left_radius(), size),
-        bottom_right: crate::view::border_radius(style.border_bottom_right_radius(), size),
+        bottom_left: crate::view::border_radius(
+            style.border_bottom_left_radius(),
+            size,
+        ),
+        bottom_right: crate::view::border_radius(
+            style.border_bottom_right_radius(),
+            size,
+        ),
     }
 }
 
@@ -122,7 +128,11 @@ impl View for Slider {
         self.id
     }
 
-    fn update(&mut self, _cx: &mut crate::context::UpdateCx, state: Box<dyn std::any::Any>) {
+    fn update(
+        &mut self,
+        _cx: &mut crate::context::UpdateCx,
+        state: Box<dyn std::any::Any>,
+    ) {
         if let Ok(update) = state.downcast::<SliderUpdate>() {
             match *update {
                 SliderUpdate::Percent(percent) => self.percent = percent,
@@ -245,8 +255,10 @@ impl View for Slider {
             PxPctAuto::Auto => self.size.height as f64,
         };
 
-        let base_bar_radii = border_radius(&self.base_bar_style, base_bar_height / 2.);
-        let accent_bar_radii = border_radius(&self.accent_bar_style, accent_bar_height / 2.);
+        let base_bar_radii =
+            border_radius(&self.base_bar_style, base_bar_height / 2.);
+        let accent_bar_radii =
+            border_radius(&self.accent_bar_style, accent_bar_height / 2.);
 
         let mut base_bar_length = self.size.width as f64;
         if !self.style.edge_align() {
@@ -254,7 +266,8 @@ impl View for Slider {
         }
 
         let base_bar_y_start = self.size.height as f64 / 2. - base_bar_height / 2.;
-        let accent_bar_y_start = self.size.height as f64 / 2. - accent_bar_height / 2.;
+        let accent_bar_y_start =
+            self.size.height as f64 / 2. - accent_bar_height / 2.;
 
         let bar_x_start = if self.style.edge_align() {
             0.
@@ -381,7 +394,9 @@ impl Slider {
     ///     })
     ///     .style(|s| s.width(200));
     /// ```
-    pub fn new_rw(percent: impl SignalGet<Pct> + SignalUpdate<Pct> + Copy + 'static) -> Self {
+    pub fn new_rw(
+        percent: impl SignalGet<Pct> + SignalUpdate<Pct> + Copy + 'static,
+    ) -> Self {
         Self::new(move || percent.get()).on_change_pct(move |pct| percent.set(pct))
     }
 
@@ -398,7 +413,9 @@ impl Slider {
     fn calculate_handle_radius(&self) -> f64 {
         match self.style.handle_radius() {
             PxPct::Px(px) => px,
-            PxPct::Pct(pct) => self.size.width.min(self.size.height) as f64 / 2. * (pct / 100.),
+            PxPct::Pct(pct) => {
+                self.size.width.min(self.size.height) as f64 / 2. * (pct / 100.)
+            }
         }
     }
 
@@ -411,7 +428,8 @@ impl Slider {
         let handle_radius = self.calculate_handle_radius();
 
         // Clamp mouse position to handle center bounds
-        let clamped_x = mouse_x.clamp(handle_radius, self.size.width as f64 - handle_radius);
+        let clamped_x =
+            mouse_x.clamp(handle_radius, self.size.width as f64 - handle_radius);
 
         // Convert to percentage within the available range
         let available_width = self.size.width as f64 - handle_radius * 2.;
@@ -529,7 +547,8 @@ impl SliderCustomStyle {
     /// # Arguments
     /// * `radius` - A `PxPct` value that sets the bar's border radius. This can be a pixel value or a percent value relative to the bar's height.
     pub fn bar_radius(mut self, radius: impl Into<PxPct>) -> Self {
-        self = SliderCustomStyle(self.0.class(BarClass, |s| s.border_radius(radius)));
+        self =
+            SliderCustomStyle(self.0.class(BarClass, |s| s.border_radius(radius)));
         self
     }
 
@@ -547,7 +566,8 @@ impl SliderCustomStyle {
     /// # Arguments
     /// * `color` - A `StyleValue<Color>` that sets the accent bar's background color.
     pub fn accent_bar_color(mut self, color: impl Into<Brush>) -> Self {
-        self = SliderCustomStyle(self.0.class(AccentBarClass, |s| s.background(color)));
+        self =
+            SliderCustomStyle(self.0.class(AccentBarClass, |s| s.background(color)));
         self
     }
 
@@ -556,7 +576,9 @@ impl SliderCustomStyle {
     /// # Arguments
     /// * `radius` - A `PxPct` value that sets the accent bar's border radius. This can be a pixel value or a percent value relative to the accent bar's height.
     pub fn accent_bar_radius(mut self, radius: impl Into<PxPct>) -> Self {
-        self = SliderCustomStyle(self.0.class(AccentBarClass, |s| s.border_radius(radius)));
+        self = SliderCustomStyle(
+            self.0.class(AccentBarClass, |s| s.border_radius(radius)),
+        );
         self
     }
 
@@ -656,9 +678,11 @@ mod test {
         // Calculate expected percentage using the same logic as the slider
         let handle_radius = slider.calculate_handle_radius();
         let available_width = slider.size.width as f64 - handle_radius * 2.0;
-        let clamped_x = mouse_x.clamp(handle_radius, slider.size.width as f64 - handle_radius);
+        let clamped_x =
+            mouse_x.clamp(handle_radius, slider.size.width as f64 - handle_radius);
         let relative_pos = clamped_x - handle_radius;
-        let expected_percent = (relative_pos / available_width * 100.0).clamp(0.0, 100.0);
+        let expected_percent =
+            (relative_pos / available_width * 100.0).clamp(0.0, 100.0);
 
         assert_eq!(slider.percent, expected_percent);
         assert!(slider.held);
@@ -699,9 +723,11 @@ mod test {
         // Calculate expected percentage using the same logic as the slider
         let handle_radius = slider.calculate_handle_radius();
         let available_width = slider.size.width as f64 - handle_radius * 2.0;
-        let clamped_x = move_mouse_x.clamp(handle_radius, slider.size.width as f64 - handle_radius);
+        let clamped_x = move_mouse_x
+            .clamp(handle_radius, slider.size.width as f64 - handle_radius);
         let relative_pos = clamped_x - handle_radius;
-        let expected_percent = (relative_pos / available_width * 100.0).clamp(0.0, 100.0);
+        let expected_percent =
+            (relative_pos / available_width * 100.0).clamp(0.0, 100.0);
 
         assert_eq!(slider.percent, expected_percent);
 

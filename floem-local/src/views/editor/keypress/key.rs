@@ -19,7 +19,8 @@ impl KeyInput {
     fn keyboard_from_str(s: &str) -> Option<(Key, PhysicalKey)> {
         // Checks if it is a character key
         fn is_key_string(s: &str) -> bool {
-            s.chars().all(|c| !c.is_control()) && s.chars().skip(1).all(|c| !c.is_ascii())
+            s.chars().all(|c| !c.is_control())
+                && s.chars().skip(1).all(|c| !c.is_ascii())
         }
 
         fn char_to_keycode(char: &str) -> PhysicalKey {
@@ -90,9 +91,15 @@ impl KeyInput {
                 PhysicalKey::Code(KeyCode::Fn),
             ),
             "alt" => (Key::Named(Alt), PhysicalKey::Code(KeyCode::AltLeft)),
-            "altgraph" => (Key::Named(AltGraph), PhysicalKey::Code(KeyCode::AltRight)),
-            "capslock" => (Key::Named(CapsLock), PhysicalKey::Code(KeyCode::CapsLock)),
-            "control" => (Key::Named(Control), PhysicalKey::Code(KeyCode::ControlLeft)),
+            "altgraph" => {
+                (Key::Named(AltGraph), PhysicalKey::Code(KeyCode::AltRight))
+            }
+            "capslock" => {
+                (Key::Named(CapsLock), PhysicalKey::Code(KeyCode::CapsLock))
+            }
+            "control" => {
+                (Key::Named(Control), PhysicalKey::Code(KeyCode::ControlLeft))
+            }
             "fn" => (Key::Named(Fn), PhysicalKey::Code(KeyCode::Fn)),
             "fnlock" => (Key::Named(FnLock), PhysicalKey::Code(KeyCode::FnLock)),
             "meta" => (Key::Named(Meta), PhysicalKey::Code(KeyCode::Meta)),
@@ -108,8 +115,12 @@ impl KeyInput {
             "super" => (Key::Named(Super), PhysicalKey::Code(KeyCode::Meta)),
             "enter" => (Key::Named(Enter), PhysicalKey::Code(KeyCode::Enter)),
             "tab" => (Key::Named(Tab), PhysicalKey::Code(KeyCode::Tab)),
-            "arrowdown" => (Key::Named(ArrowDown), PhysicalKey::Code(KeyCode::ArrowDown)),
-            "arrowleft" => (Key::Named(ArrowLeft), PhysicalKey::Code(KeyCode::ArrowLeft)),
+            "arrowdown" => {
+                (Key::Named(ArrowDown), PhysicalKey::Code(KeyCode::ArrowDown))
+            }
+            "arrowleft" => {
+                (Key::Named(ArrowLeft), PhysicalKey::Code(KeyCode::ArrowLeft))
+            }
             "arrowright" => (
                 Key::Named(ArrowRight),
                 PhysicalKey::Code(KeyCode::ArrowRight),
@@ -117,9 +128,13 @@ impl KeyInput {
             "arrowup" => (Key::Named(ArrowUp), PhysicalKey::Code(KeyCode::ArrowUp)),
             "end" => (Key::Named(End), PhysicalKey::Code(KeyCode::End)),
             "home" => (Key::Named(Home), PhysicalKey::Code(KeyCode::Home)),
-            "pagedown" => (Key::Named(PageDown), PhysicalKey::Code(KeyCode::PageDown)),
+            "pagedown" => {
+                (Key::Named(PageDown), PhysicalKey::Code(KeyCode::PageDown))
+            }
             "pageup" => (Key::Named(PageUp), PhysicalKey::Code(KeyCode::PageUp)),
-            "backspace" => (Key::Named(Backspace), PhysicalKey::Code(KeyCode::Backspace)),
+            "backspace" => {
+                (Key::Named(Backspace), PhysicalKey::Code(KeyCode::Backspace))
+            }
             "clear" => (Key::Named(Clear), PhysicalKey::Code(KeyCode::Fn)),
             "copy" => (Key::Named(Copy), PhysicalKey::Code(KeyCode::Copy)),
             "crsel" => (Key::Named(CrSel), PhysicalKey::Code(KeyCode::Fn)),
@@ -149,8 +164,12 @@ impl KeyInput {
             "select" => (Key::Named(Select), PhysicalKey::Code(KeyCode::Select)),
             "zoomin" => (Key::Named(ZoomIn), PhysicalKey::Code(KeyCode::Fn)),
             "zoomout" => (Key::Named(ZoomOut), PhysicalKey::Code(KeyCode::Fn)),
-            "brightnessdown" => (Key::Named(BrightnessDown), PhysicalKey::Code(KeyCode::Fn)),
-            "brightnessup" => (Key::Named(BrightnessUp), PhysicalKey::Code(KeyCode::Fn)),
+            "brightnessdown" => {
+                (Key::Named(BrightnessDown), PhysicalKey::Code(KeyCode::Fn))
+            }
+            "brightnessup" => {
+                (Key::Named(BrightnessUp), PhysicalKey::Code(KeyCode::Fn))
+            }
             "eject" => (Key::Named(Eject), PhysicalKey::Code(KeyCode::Eject)),
             "logoff" => (Key::Named(LogOff), PhysicalKey::Code(KeyCode::Fn)),
             "power" => (Key::Named(Power), PhysicalKey::Code(KeyCode::Power)),
@@ -162,8 +181,12 @@ impl KeyInput {
             "hibernate" => (Key::Named(Hibernate), PhysicalKey::Code(KeyCode::Fn)),
             "standby" => (Key::Named(Standby), PhysicalKey::Code(KeyCode::Fn)),
             "wakeup" => (Key::Named(WakeUp), PhysicalKey::Code(KeyCode::WakeUp)),
-            "allcandidates" => (Key::Named(AllCandidates), PhysicalKey::Code(KeyCode::Fn)),
-            "alphanumeric" => (Key::Named(Alphanumeric), PhysicalKey::Code(KeyCode::Fn)),
+            "allcandidates" => {
+                (Key::Named(AllCandidates), PhysicalKey::Code(KeyCode::Fn))
+            }
+            "alphanumeric" => {
+                (Key::Named(Alphanumeric), PhysicalKey::Code(KeyCode::Fn))
+            }
             "codeinput" => (Key::Named(CodeInput), PhysicalKey::Code(KeyCode::Fn)),
             "compose" => (Key::Named(Compose), PhysicalKey::Code(KeyCode::Fn)),
             "convert" => (Key::Named(Convert), PhysicalKey::Code(KeyCode::Convert)),
@@ -172,9 +195,13 @@ impl KeyInput {
             "groupfirst" => (Key::Named(GroupFirst), PhysicalKey::Code(KeyCode::Fn)),
             "grouplast" => (Key::Named(GroupLast), PhysicalKey::Code(KeyCode::Fn)),
             "groupnext" => (Key::Named(GroupNext), PhysicalKey::Code(KeyCode::Fn)),
-            "groupprevious" => (Key::Named(GroupPrevious), PhysicalKey::Code(KeyCode::Fn)),
+            "groupprevious" => {
+                (Key::Named(GroupPrevious), PhysicalKey::Code(KeyCode::Fn))
+            }
             "modechange" => (Key::Named(ModeChange), PhysicalKey::Code(KeyCode::Fn)),
-            "nextcandidate" => (Key::Named(NextCandidate), PhysicalKey::Code(KeyCode::Fn)),
+            "nextcandidate" => {
+                (Key::Named(NextCandidate), PhysicalKey::Code(KeyCode::Fn))
+            }
             "nonconvert" => (
                 Key::Named(NonConvert),
                 PhysicalKey::Code(KeyCode::NonConvert),
@@ -184,20 +211,32 @@ impl KeyInput {
                 PhysicalKey::Code(KeyCode::Fn),
             ),
             "process" => (Key::Named(Process), PhysicalKey::Code(KeyCode::Fn)),
-            "singlecandidate" => (Key::Named(SingleCandidate), PhysicalKey::Code(KeyCode::Fn)),
+            "singlecandidate" => {
+                (Key::Named(SingleCandidate), PhysicalKey::Code(KeyCode::Fn))
+            }
             "hangulmode" => (Key::Named(HangulMode), PhysicalKey::Code(KeyCode::Fn)),
             "hanjamode" => (Key::Named(HanjaMode), PhysicalKey::Code(KeyCode::Fn)),
             "junjamode" => (Key::Named(JunjaMode), PhysicalKey::Code(KeyCode::Fn)),
             "eisu" => (Key::Named(Eisu), PhysicalKey::Code(KeyCode::Fn)),
             "hankaku" => (Key::Named(Hankaku), PhysicalKey::Code(KeyCode::Fn)),
-            "hiragana" => (Key::Named(Hiragana), PhysicalKey::Code(KeyCode::Hiragana)),
-            "hiraganakatakana" => (Key::Named(HiraganaKatakana), PhysicalKey::Code(KeyCode::Fn)),
-            "kanamode" => (Key::Named(KanaMode), PhysicalKey::Code(KeyCode::KanaMode)),
+            "hiragana" => {
+                (Key::Named(Hiragana), PhysicalKey::Code(KeyCode::Hiragana))
+            }
+            "hiraganakatakana" => {
+                (Key::Named(HiraganaKatakana), PhysicalKey::Code(KeyCode::Fn))
+            }
+            "kanamode" => {
+                (Key::Named(KanaMode), PhysicalKey::Code(KeyCode::KanaMode))
+            }
             "kanjimode" => (Key::Named(KanjiMode), PhysicalKey::Code(KeyCode::Fn)),
-            "katakana" => (Key::Named(Katakana), PhysicalKey::Code(KeyCode::Katakana)),
+            "katakana" => {
+                (Key::Named(Katakana), PhysicalKey::Code(KeyCode::Katakana))
+            }
             "romaji" => (Key::Named(Romaji), PhysicalKey::Code(KeyCode::Fn)),
             "zenkaku" => (Key::Named(Zenkaku), PhysicalKey::Code(KeyCode::Fn)),
-            "zenkakuhankaku" => (Key::Named(ZenkakuHankaku), PhysicalKey::Code(KeyCode::Fn)),
+            "zenkakuhankaku" => {
+                (Key::Named(ZenkakuHankaku), PhysicalKey::Code(KeyCode::Fn))
+            }
             "f1" => (Key::Named(F1), PhysicalKey::Code(KeyCode::F1)),
             "f2" => (Key::Named(F2), PhysicalKey::Code(KeyCode::F2)),
             "f3" => (Key::Named(F3), PhysicalKey::Code(KeyCode::F3)),
@@ -214,23 +253,35 @@ impl KeyInput {
             "soft2" => (Key::Named(Soft2), PhysicalKey::Code(KeyCode::Fn)),
             "soft3" => (Key::Named(Soft3), PhysicalKey::Code(KeyCode::Fn)),
             "soft4" => (Key::Named(Soft4), PhysicalKey::Code(KeyCode::Fn)),
-            "channeldown" => (Key::Named(ChannelDown), PhysicalKey::Code(KeyCode::Fn)),
+            "channeldown" => {
+                (Key::Named(ChannelDown), PhysicalKey::Code(KeyCode::Fn))
+            }
             "channelup" => (Key::Named(ChannelUp), PhysicalKey::Code(KeyCode::Fn)),
             "close" => (Key::Named(Close), PhysicalKey::Code(KeyCode::Fn)),
-            "mailforward" => (Key::Named(MailForward), PhysicalKey::Code(KeyCode::Fn)),
+            "mailforward" => {
+                (Key::Named(MailForward), PhysicalKey::Code(KeyCode::Fn))
+            }
             "mailreply" => (Key::Named(MailReply), PhysicalKey::Code(KeyCode::Fn)),
             "mailsend" => (Key::Named(MailSend), PhysicalKey::Code(KeyCode::Fn)),
             "mediaclose" => (Key::Named(MediaClose), PhysicalKey::Code(KeyCode::Fn)),
-            "mediafastforward" => (Key::Named(MediaFastForward), PhysicalKey::Code(KeyCode::Fn)),
+            "mediafastforward" => {
+                (Key::Named(MediaFastForward), PhysicalKey::Code(KeyCode::Fn))
+            }
             "mediapause" => (Key::Named(MediaPause), PhysicalKey::Code(KeyCode::Fn)),
             "mediaplay" => (Key::Named(MediaPlay), PhysicalKey::Code(KeyCode::Fn)),
             "mediaplaypause" => (
                 Key::Named(MediaPlayPause),
                 PhysicalKey::Code(KeyCode::MediaPlayPause),
             ),
-            "mediarecord" => (Key::Named(MediaRecord), PhysicalKey::Code(KeyCode::Fn)),
-            "mediarewind" => (Key::Named(MediaRewind), PhysicalKey::Code(KeyCode::Fn)),
-            "mediastop" => (Key::Named(MediaStop), PhysicalKey::Code(KeyCode::MediaStop)),
+            "mediarecord" => {
+                (Key::Named(MediaRecord), PhysicalKey::Code(KeyCode::Fn))
+            }
+            "mediarewind" => {
+                (Key::Named(MediaRewind), PhysicalKey::Code(KeyCode::Fn))
+            }
+            "mediastop" => {
+                (Key::Named(MediaStop), PhysicalKey::Code(KeyCode::MediaStop))
+            }
             "mediatracknext" => (
                 Key::Named(MediaTrackNext),
                 PhysicalKey::Code(KeyCode::MediaTrackNext),
@@ -246,7 +297,9 @@ impl KeyInput {
             "spellcheck" => (Key::Named(SpellCheck), PhysicalKey::Code(KeyCode::Fn)),
             "key11" => (Key::Named(Key11), PhysicalKey::Code(KeyCode::Fn)),
             "key12" => (Key::Named(Key12), PhysicalKey::Code(KeyCode::Fn)),
-            "audiobalanceleft" => (Key::Named(AudioBalanceLeft), PhysicalKey::Code(KeyCode::Fn)),
+            "audiobalanceleft" => {
+                (Key::Named(AudioBalanceLeft), PhysicalKey::Code(KeyCode::Fn))
+            }
             "audiobalanceright" => (
                 Key::Named(AudioBalanceRight),
                 PhysicalKey::Code(KeyCode::Fn),
@@ -259,15 +312,25 @@ impl KeyInput {
                 Key::Named(AudioBassBoostToggle),
                 PhysicalKey::Code(KeyCode::Fn),
             ),
-            "audiobassboostup" => (Key::Named(AudioBassBoostUp), PhysicalKey::Code(KeyCode::Fn)),
-            "audiofaderfront" => (Key::Named(AudioFaderFront), PhysicalKey::Code(KeyCode::Fn)),
-            "audiofaderrear" => (Key::Named(AudioFaderRear), PhysicalKey::Code(KeyCode::Fn)),
+            "audiobassboostup" => {
+                (Key::Named(AudioBassBoostUp), PhysicalKey::Code(KeyCode::Fn))
+            }
+            "audiofaderfront" => {
+                (Key::Named(AudioFaderFront), PhysicalKey::Code(KeyCode::Fn))
+            }
+            "audiofaderrear" => {
+                (Key::Named(AudioFaderRear), PhysicalKey::Code(KeyCode::Fn))
+            }
             "audiosurroundmodenext" => (
                 Key::Named(AudioSurroundModeNext),
                 PhysicalKey::Code(KeyCode::Fn),
             ),
-            "audiotrebledown" => (Key::Named(AudioTrebleDown), PhysicalKey::Code(KeyCode::Fn)),
-            "audiotrebleup" => (Key::Named(AudioTrebleUp), PhysicalKey::Code(KeyCode::Fn)),
+            "audiotrebledown" => {
+                (Key::Named(AudioTrebleDown), PhysicalKey::Code(KeyCode::Fn))
+            }
+            "audiotrebleup" => {
+                (Key::Named(AudioTrebleUp), PhysicalKey::Code(KeyCode::Fn))
+            }
             "audiovolumedown" => (
                 Key::Named(AudioVolumeDown),
                 PhysicalKey::Code(KeyCode::AudioVolumeDown),
@@ -280,7 +343,9 @@ impl KeyInput {
                 Key::Named(AudioVolumeMute),
                 PhysicalKey::Code(KeyCode::AudioVolumeMute),
             ),
-            "microphonetoggle" => (Key::Named(MicrophoneToggle), PhysicalKey::Code(KeyCode::Fn)),
+            "microphonetoggle" => {
+                (Key::Named(MicrophoneToggle), PhysicalKey::Code(KeyCode::Fn))
+            }
             "microphonevolumedown" => (
                 Key::Named(MicrophoneVolumeDown),
                 PhysicalKey::Code(KeyCode::Fn),
@@ -309,8 +374,12 @@ impl KeyInput {
                 Key::Named(LaunchApplication2),
                 PhysicalKey::Code(KeyCode::Fn),
             ),
-            "launchcalendar" => (Key::Named(LaunchCalendar), PhysicalKey::Code(KeyCode::Fn)),
-            "launchcontacts" => (Key::Named(LaunchContacts), PhysicalKey::Code(KeyCode::Fn)),
+            "launchcalendar" => {
+                (Key::Named(LaunchCalendar), PhysicalKey::Code(KeyCode::Fn))
+            }
+            "launchcontacts" => {
+                (Key::Named(LaunchContacts), PhysicalKey::Code(KeyCode::Fn))
+            }
             "launchmail" => (
                 Key::Named(LaunchMail),
                 PhysicalKey::Code(KeyCode::LaunchMail),
@@ -323,7 +392,9 @@ impl KeyInput {
                 Key::Named(LaunchMusicPlayer),
                 PhysicalKey::Code(KeyCode::Fn),
             ),
-            "launchphone" => (Key::Named(LaunchPhone), PhysicalKey::Code(KeyCode::Fn)),
+            "launchphone" => {
+                (Key::Named(LaunchPhone), PhysicalKey::Code(KeyCode::Fn))
+            }
             "launchscreensaver" => (
                 Key::Named(LaunchScreenSaver),
                 PhysicalKey::Code(KeyCode::Fn),
@@ -332,8 +403,12 @@ impl KeyInput {
                 Key::Named(LaunchSpreadsheet),
                 PhysicalKey::Code(KeyCode::Fn),
             ),
-            "launchwebbrowser" => (Key::Named(LaunchWebBrowser), PhysicalKey::Code(KeyCode::Fn)),
-            "launchwebcam" => (Key::Named(LaunchWebCam), PhysicalKey::Code(KeyCode::Fn)),
+            "launchwebbrowser" => {
+                (Key::Named(LaunchWebBrowser), PhysicalKey::Code(KeyCode::Fn))
+            }
+            "launchwebcam" => {
+                (Key::Named(LaunchWebCam), PhysicalKey::Code(KeyCode::Fn))
+            }
             "launchwordprocessor" => (
                 Key::Named(LaunchWordProcessor),
                 PhysicalKey::Code(KeyCode::Fn),
@@ -369,18 +444,28 @@ impl KeyInput {
             "appswitch" => (Key::Named(AppSwitch), PhysicalKey::Code(KeyCode::Fn)),
             "call" => (Key::Named(Call), PhysicalKey::Code(KeyCode::Fn)),
             "camera" => (Key::Named(Camera), PhysicalKey::Code(KeyCode::Fn)),
-            "camerafocus" => (Key::Named(CameraFocus), PhysicalKey::Code(KeyCode::Fn)),
+            "camerafocus" => {
+                (Key::Named(CameraFocus), PhysicalKey::Code(KeyCode::Fn))
+            }
             "endcall" => (Key::Named(EndCall), PhysicalKey::Code(KeyCode::Fn)),
             "goback" => (Key::Named(GoBack), PhysicalKey::Code(KeyCode::Fn)),
             "gohome" => (Key::Named(GoHome), PhysicalKey::Code(KeyCode::Fn)),
-            "headsethook" => (Key::Named(HeadsetHook), PhysicalKey::Code(KeyCode::Fn)),
-            "lastnumberredial" => (Key::Named(LastNumberRedial), PhysicalKey::Code(KeyCode::Fn)),
-            "notification" => (Key::Named(Notification), PhysicalKey::Code(KeyCode::Fn)),
+            "headsethook" => {
+                (Key::Named(HeadsetHook), PhysicalKey::Code(KeyCode::Fn))
+            }
+            "lastnumberredial" => {
+                (Key::Named(LastNumberRedial), PhysicalKey::Code(KeyCode::Fn))
+            }
+            "notification" => {
+                (Key::Named(Notification), PhysicalKey::Code(KeyCode::Fn))
+            }
             "mannermode" => (Key::Named(MannerMode), PhysicalKey::Code(KeyCode::Fn)),
             "voicedial" => (Key::Named(VoiceDial), PhysicalKey::Code(KeyCode::Fn)),
             "tv" => (Key::Named(TV), PhysicalKey::Code(KeyCode::Fn)),
             "tv3dmode" => (Key::Named(TV3DMode), PhysicalKey::Code(KeyCode::Fn)),
-            "tvantennacable" => (Key::Named(TVAntennaCable), PhysicalKey::Code(KeyCode::Fn)),
+            "tvantennacable" => {
+                (Key::Named(TVAntennaCable), PhysicalKey::Code(KeyCode::Fn))
+            }
             "tvaudiodescription" => (
                 Key::Named(TVAudioDescription),
                 PhysicalKey::Code(KeyCode::Fn),
@@ -393,8 +478,12 @@ impl KeyInput {
                 Key::Named(TVAudioDescriptionMixUp),
                 PhysicalKey::Code(KeyCode::Fn),
             ),
-            "tvcontentsmenu" => (Key::Named(TVContentsMenu), PhysicalKey::Code(KeyCode::Fn)),
-            "tvdataservice" => (Key::Named(TVDataService), PhysicalKey::Code(KeyCode::Fn)),
+            "tvcontentsmenu" => {
+                (Key::Named(TVContentsMenu), PhysicalKey::Code(KeyCode::Fn))
+            }
+            "tvdataservice" => {
+                (Key::Named(TVDataService), PhysicalKey::Code(KeyCode::Fn))
+            }
             "tvinput" => (Key::Named(TVInput), PhysicalKey::Code(KeyCode::Fn)),
             "tvinputcomponent1" => (
                 Key::Named(TVInputComponent1),
@@ -412,19 +501,41 @@ impl KeyInput {
                 Key::Named(TVInputComposite2),
                 PhysicalKey::Code(KeyCode::Fn),
             ),
-            "tvinputhdmi1" => (Key::Named(TVInputHDMI1), PhysicalKey::Code(KeyCode::Fn)),
-            "tvinputhdmi2" => (Key::Named(TVInputHDMI2), PhysicalKey::Code(KeyCode::Fn)),
-            "tvinputhdmi3" => (Key::Named(TVInputHDMI3), PhysicalKey::Code(KeyCode::Fn)),
-            "tvinputhdmi4" => (Key::Named(TVInputHDMI4), PhysicalKey::Code(KeyCode::Fn)),
-            "tvinputvga1" => (Key::Named(TVInputVGA1), PhysicalKey::Code(KeyCode::Fn)),
-            "tvmediacontext" => (Key::Named(TVMediaContext), PhysicalKey::Code(KeyCode::Fn)),
+            "tvinputhdmi1" => {
+                (Key::Named(TVInputHDMI1), PhysicalKey::Code(KeyCode::Fn))
+            }
+            "tvinputhdmi2" => {
+                (Key::Named(TVInputHDMI2), PhysicalKey::Code(KeyCode::Fn))
+            }
+            "tvinputhdmi3" => {
+                (Key::Named(TVInputHDMI3), PhysicalKey::Code(KeyCode::Fn))
+            }
+            "tvinputhdmi4" => {
+                (Key::Named(TVInputHDMI4), PhysicalKey::Code(KeyCode::Fn))
+            }
+            "tvinputvga1" => {
+                (Key::Named(TVInputVGA1), PhysicalKey::Code(KeyCode::Fn))
+            }
+            "tvmediacontext" => {
+                (Key::Named(TVMediaContext), PhysicalKey::Code(KeyCode::Fn))
+            }
             "tvnetwork" => (Key::Named(TVNetwork), PhysicalKey::Code(KeyCode::Fn)),
-            "tvnumberentry" => (Key::Named(TVNumberEntry), PhysicalKey::Code(KeyCode::Fn)),
+            "tvnumberentry" => {
+                (Key::Named(TVNumberEntry), PhysicalKey::Code(KeyCode::Fn))
+            }
             "tvpower" => (Key::Named(TVPower), PhysicalKey::Code(KeyCode::Fn)),
-            "tvradioservice" => (Key::Named(TVRadioService), PhysicalKey::Code(KeyCode::Fn)),
-            "tvsatellite" => (Key::Named(TVSatellite), PhysicalKey::Code(KeyCode::Fn)),
-            "tvsatellitebs" => (Key::Named(TVSatelliteBS), PhysicalKey::Code(KeyCode::Fn)),
-            "tvsatellitecs" => (Key::Named(TVSatelliteCS), PhysicalKey::Code(KeyCode::Fn)),
+            "tvradioservice" => {
+                (Key::Named(TVRadioService), PhysicalKey::Code(KeyCode::Fn))
+            }
+            "tvsatellite" => {
+                (Key::Named(TVSatellite), PhysicalKey::Code(KeyCode::Fn))
+            }
+            "tvsatellitebs" => {
+                (Key::Named(TVSatelliteBS), PhysicalKey::Code(KeyCode::Fn))
+            }
+            "tvsatellitecs" => {
+                (Key::Named(TVSatelliteCS), PhysicalKey::Code(KeyCode::Fn))
+            }
             "tvsatellitetoggle" => (
                 Key::Named(TVSatelliteToggle),
                 PhysicalKey::Code(KeyCode::Fn),
@@ -441,81 +552,157 @@ impl KeyInput {
             "avrinput" => (Key::Named(AVRInput), PhysicalKey::Code(KeyCode::Fn)),
             "avrpower" => (Key::Named(AVRPower), PhysicalKey::Code(KeyCode::Fn)),
             "colorf0red" => (Key::Named(ColorF0Red), PhysicalKey::Code(KeyCode::Fn)),
-            "colorf1green" => (Key::Named(ColorF1Green), PhysicalKey::Code(KeyCode::Fn)),
-            "colorf2yellow" => (Key::Named(ColorF2Yellow), PhysicalKey::Code(KeyCode::Fn)),
-            "colorf3blue" => (Key::Named(ColorF3Blue), PhysicalKey::Code(KeyCode::Fn)),
-            "colorf4grey" => (Key::Named(ColorF4Grey), PhysicalKey::Code(KeyCode::Fn)),
-            "colorf5brown" => (Key::Named(ColorF5Brown), PhysicalKey::Code(KeyCode::Fn)),
+            "colorf1green" => {
+                (Key::Named(ColorF1Green), PhysicalKey::Code(KeyCode::Fn))
+            }
+            "colorf2yellow" => {
+                (Key::Named(ColorF2Yellow), PhysicalKey::Code(KeyCode::Fn))
+            }
+            "colorf3blue" => {
+                (Key::Named(ColorF3Blue), PhysicalKey::Code(KeyCode::Fn))
+            }
+            "colorf4grey" => {
+                (Key::Named(ColorF4Grey), PhysicalKey::Code(KeyCode::Fn))
+            }
+            "colorf5brown" => {
+                (Key::Named(ColorF5Brown), PhysicalKey::Code(KeyCode::Fn))
+            }
             "closedcaptiontoggle" => (
                 Key::Named(ClosedCaptionToggle),
                 PhysicalKey::Code(KeyCode::Fn),
             ),
             "dimmer" => (Key::Named(Dimmer), PhysicalKey::Code(KeyCode::Fn)),
-            "displayswap" => (Key::Named(DisplaySwap), PhysicalKey::Code(KeyCode::Fn)),
+            "displayswap" => {
+                (Key::Named(DisplaySwap), PhysicalKey::Code(KeyCode::Fn))
+            }
             "dvr" => (Key::Named(DVR), PhysicalKey::Code(KeyCode::Fn)),
             "exit" => (Key::Named(Exit), PhysicalKey::Code(KeyCode::Fn)),
-            "favoriteclear0" => (Key::Named(FavoriteClear0), PhysicalKey::Code(KeyCode::Fn)),
-            "favoriteclear1" => (Key::Named(FavoriteClear1), PhysicalKey::Code(KeyCode::Fn)),
-            "favoriteclear2" => (Key::Named(FavoriteClear2), PhysicalKey::Code(KeyCode::Fn)),
-            "favoriteclear3" => (Key::Named(FavoriteClear3), PhysicalKey::Code(KeyCode::Fn)),
-            "favoriterecall0" => (Key::Named(FavoriteRecall0), PhysicalKey::Code(KeyCode::Fn)),
-            "favoriterecall1" => (Key::Named(FavoriteRecall1), PhysicalKey::Code(KeyCode::Fn)),
-            "favoriterecall2" => (Key::Named(FavoriteRecall2), PhysicalKey::Code(KeyCode::Fn)),
-            "favoriterecall3" => (Key::Named(FavoriteRecall3), PhysicalKey::Code(KeyCode::Fn)),
-            "favoritestore0" => (Key::Named(FavoriteStore0), PhysicalKey::Code(KeyCode::Fn)),
-            "favoritestore1" => (Key::Named(FavoriteStore1), PhysicalKey::Code(KeyCode::Fn)),
-            "favoritestore2" => (Key::Named(FavoriteStore2), PhysicalKey::Code(KeyCode::Fn)),
-            "favoritestore3" => (Key::Named(FavoriteStore3), PhysicalKey::Code(KeyCode::Fn)),
+            "favoriteclear0" => {
+                (Key::Named(FavoriteClear0), PhysicalKey::Code(KeyCode::Fn))
+            }
+            "favoriteclear1" => {
+                (Key::Named(FavoriteClear1), PhysicalKey::Code(KeyCode::Fn))
+            }
+            "favoriteclear2" => {
+                (Key::Named(FavoriteClear2), PhysicalKey::Code(KeyCode::Fn))
+            }
+            "favoriteclear3" => {
+                (Key::Named(FavoriteClear3), PhysicalKey::Code(KeyCode::Fn))
+            }
+            "favoriterecall0" => {
+                (Key::Named(FavoriteRecall0), PhysicalKey::Code(KeyCode::Fn))
+            }
+            "favoriterecall1" => {
+                (Key::Named(FavoriteRecall1), PhysicalKey::Code(KeyCode::Fn))
+            }
+            "favoriterecall2" => {
+                (Key::Named(FavoriteRecall2), PhysicalKey::Code(KeyCode::Fn))
+            }
+            "favoriterecall3" => {
+                (Key::Named(FavoriteRecall3), PhysicalKey::Code(KeyCode::Fn))
+            }
+            "favoritestore0" => {
+                (Key::Named(FavoriteStore0), PhysicalKey::Code(KeyCode::Fn))
+            }
+            "favoritestore1" => {
+                (Key::Named(FavoriteStore1), PhysicalKey::Code(KeyCode::Fn))
+            }
+            "favoritestore2" => {
+                (Key::Named(FavoriteStore2), PhysicalKey::Code(KeyCode::Fn))
+            }
+            "favoritestore3" => {
+                (Key::Named(FavoriteStore3), PhysicalKey::Code(KeyCode::Fn))
+            }
             "guide" => (Key::Named(Guide), PhysicalKey::Code(KeyCode::Fn)),
-            "guidenextday" => (Key::Named(GuideNextDay), PhysicalKey::Code(KeyCode::Fn)),
-            "guidepreviousday" => (Key::Named(GuidePreviousDay), PhysicalKey::Code(KeyCode::Fn)),
+            "guidenextday" => {
+                (Key::Named(GuideNextDay), PhysicalKey::Code(KeyCode::Fn))
+            }
+            "guidepreviousday" => {
+                (Key::Named(GuidePreviousDay), PhysicalKey::Code(KeyCode::Fn))
+            }
             "info" => (Key::Named(Info), PhysicalKey::Code(KeyCode::Fn)),
-            "instantreplay" => (Key::Named(InstantReplay), PhysicalKey::Code(KeyCode::Fn)),
+            "instantreplay" => {
+                (Key::Named(InstantReplay), PhysicalKey::Code(KeyCode::Fn))
+            }
             "link" => (Key::Named(Link), PhysicalKey::Code(KeyCode::Fn)),
-            "listprogram" => (Key::Named(ListProgram), PhysicalKey::Code(KeyCode::Fn)),
-            "livecontent" => (Key::Named(LiveContent), PhysicalKey::Code(KeyCode::Fn)),
+            "listprogram" => {
+                (Key::Named(ListProgram), PhysicalKey::Code(KeyCode::Fn))
+            }
+            "livecontent" => {
+                (Key::Named(LiveContent), PhysicalKey::Code(KeyCode::Fn))
+            }
             "lock" => (Key::Named(Lock), PhysicalKey::Code(KeyCode::Fn)),
             "mediaapps" => (Key::Named(MediaApps), PhysicalKey::Code(KeyCode::Fn)),
-            "mediaaudiotrack" => (Key::Named(MediaAudioTrack), PhysicalKey::Code(KeyCode::Fn)),
+            "mediaaudiotrack" => {
+                (Key::Named(MediaAudioTrack), PhysicalKey::Code(KeyCode::Fn))
+            }
             "medialast" => (Key::Named(MediaLast), PhysicalKey::Code(KeyCode::Fn)),
             "mediaskipbackward" => (
                 Key::Named(MediaSkipBackward),
                 PhysicalKey::Code(KeyCode::Fn),
             ),
-            "mediaskipforward" => (Key::Named(MediaSkipForward), PhysicalKey::Code(KeyCode::Fn)),
+            "mediaskipforward" => {
+                (Key::Named(MediaSkipForward), PhysicalKey::Code(KeyCode::Fn))
+            }
             "mediastepbackward" => (
                 Key::Named(MediaStepBackward),
                 PhysicalKey::Code(KeyCode::Fn),
             ),
-            "mediastepforward" => (Key::Named(MediaStepForward), PhysicalKey::Code(KeyCode::Fn)),
-            "mediatopmenu" => (Key::Named(MediaTopMenu), PhysicalKey::Code(KeyCode::Fn)),
+            "mediastepforward" => {
+                (Key::Named(MediaStepForward), PhysicalKey::Code(KeyCode::Fn))
+            }
+            "mediatopmenu" => {
+                (Key::Named(MediaTopMenu), PhysicalKey::Code(KeyCode::Fn))
+            }
             "navigatein" => (Key::Named(NavigateIn), PhysicalKey::Code(KeyCode::Fn)),
-            "navigatenext" => (Key::Named(NavigateNext), PhysicalKey::Code(KeyCode::Fn)),
-            "navigateout" => (Key::Named(NavigateOut), PhysicalKey::Code(KeyCode::Fn)),
-            "navigateprevious" => (Key::Named(NavigatePrevious), PhysicalKey::Code(KeyCode::Fn)),
+            "navigatenext" => {
+                (Key::Named(NavigateNext), PhysicalKey::Code(KeyCode::Fn))
+            }
+            "navigateout" => {
+                (Key::Named(NavigateOut), PhysicalKey::Code(KeyCode::Fn))
+            }
+            "navigateprevious" => {
+                (Key::Named(NavigatePrevious), PhysicalKey::Code(KeyCode::Fn))
+            }
             "nextfavoritechannel" => (
                 Key::Named(NextFavoriteChannel),
                 PhysicalKey::Code(KeyCode::Fn),
             ),
-            "nextuserprofile" => (Key::Named(NextUserProfile), PhysicalKey::Code(KeyCode::Fn)),
+            "nextuserprofile" => {
+                (Key::Named(NextUserProfile), PhysicalKey::Code(KeyCode::Fn))
+            }
             "ondemand" => (Key::Named(OnDemand), PhysicalKey::Code(KeyCode::Fn)),
             "pairing" => (Key::Named(Pairing), PhysicalKey::Code(KeyCode::Fn)),
             "pinpdown" => (Key::Named(PinPDown), PhysicalKey::Code(KeyCode::Fn)),
             "pinpmove" => (Key::Named(PinPMove), PhysicalKey::Code(KeyCode::Fn)),
             "pinptoggle" => (Key::Named(PinPToggle), PhysicalKey::Code(KeyCode::Fn)),
             "pinpup" => (Key::Named(PinPUp), PhysicalKey::Code(KeyCode::Fn)),
-            "playspeeddown" => (Key::Named(PlaySpeedDown), PhysicalKey::Code(KeyCode::Fn)),
-            "playspeedreset" => (Key::Named(PlaySpeedReset), PhysicalKey::Code(KeyCode::Fn)),
-            "playspeedup" => (Key::Named(PlaySpeedUp), PhysicalKey::Code(KeyCode::Fn)),
-            "randomtoggle" => (Key::Named(RandomToggle), PhysicalKey::Code(KeyCode::Fn)),
-            "rclowbattery" => (Key::Named(RcLowBattery), PhysicalKey::Code(KeyCode::Fn)),
-            "recordspeednext" => (Key::Named(RecordSpeedNext), PhysicalKey::Code(KeyCode::Fn)),
+            "playspeeddown" => {
+                (Key::Named(PlaySpeedDown), PhysicalKey::Code(KeyCode::Fn))
+            }
+            "playspeedreset" => {
+                (Key::Named(PlaySpeedReset), PhysicalKey::Code(KeyCode::Fn))
+            }
+            "playspeedup" => {
+                (Key::Named(PlaySpeedUp), PhysicalKey::Code(KeyCode::Fn))
+            }
+            "randomtoggle" => {
+                (Key::Named(RandomToggle), PhysicalKey::Code(KeyCode::Fn))
+            }
+            "rclowbattery" => {
+                (Key::Named(RcLowBattery), PhysicalKey::Code(KeyCode::Fn))
+            }
+            "recordspeednext" => {
+                (Key::Named(RecordSpeedNext), PhysicalKey::Code(KeyCode::Fn))
+            }
             "rfbypass" => (Key::Named(RfBypass), PhysicalKey::Code(KeyCode::Fn)),
             "scanchannelstoggle" => (
                 Key::Named(ScanChannelsToggle),
                 PhysicalKey::Code(KeyCode::Fn),
             ),
-            "screenmodenext" => (Key::Named(ScreenModeNext), PhysicalKey::Code(KeyCode::Fn)),
+            "screenmodenext" => {
+                (Key::Named(ScreenModeNext), PhysicalKey::Code(KeyCode::Fn))
+            }
             "settings" => (Key::Named(Settings), PhysicalKey::Code(KeyCode::Fn)),
             "splitscreentoggle" => (
                 Key::Named(SplitScreenToggle),
@@ -525,7 +712,9 @@ impl KeyInput {
             "stbpower" => (Key::Named(STBPower), PhysicalKey::Code(KeyCode::Fn)),
             "subtitle" => (Key::Named(Subtitle), PhysicalKey::Code(KeyCode::Fn)),
             "teletext" => (Key::Named(Teletext), PhysicalKey::Code(KeyCode::Fn)),
-            "videomodenext" => (Key::Named(VideoModeNext), PhysicalKey::Code(KeyCode::Fn)),
+            "videomodenext" => {
+                (Key::Named(VideoModeNext), PhysicalKey::Code(KeyCode::Fn))
+            }
             "wink" => (Key::Named(Wink), PhysicalKey::Code(KeyCode::Fn)),
             "zoomtoggle" => (Key::Named(ZoomToggle), PhysicalKey::Code(KeyCode::Fn)),
 
@@ -617,16 +806,21 @@ impl Display for KeyInput {
                 PhysicalKey::Code(KeyCode::AltRight) => f.write_str("Alt"),
                 PhysicalKey::Code(KeyCode::Backspace) => f.write_str("backspace"),
                 PhysicalKey::Code(KeyCode::CapsLock) => f.write_str("CapsLock"),
-                PhysicalKey::Code(KeyCode::ContextMenu) => f.write_str("ContextMenu"),
+                PhysicalKey::Code(KeyCode::ContextMenu) => {
+                    f.write_str("ContextMenu")
+                }
                 PhysicalKey::Code(KeyCode::ControlLeft) => f.write_str("Ctrl"),
                 PhysicalKey::Code(KeyCode::ControlRight) => f.write_str("Ctrl"),
                 PhysicalKey::Code(KeyCode::Enter) => f.write_str("Enter"),
-                PhysicalKey::Code(KeyCode::SuperLeft) => match std::env::consts::OS {
-                    "macos" => f.write_str("Cmd"),
-                    "windows" => f.write_str("Win"),
-                    _ => f.write_str("Meta"),
-                },
-                PhysicalKey::Code(KeyCode::SuperRight) => match std::env::consts::OS {
+                PhysicalKey::Code(KeyCode::SuperLeft) => {
+                    match std::env::consts::OS {
+                        "macos" => f.write_str("Cmd"),
+                        "windows" => f.write_str("Win"),
+                        _ => f.write_str("Meta"),
+                    }
+                }
+                PhysicalKey::Code(KeyCode::SuperRight) => match std::env::consts::OS
+                {
                     "macos" => f.write_str("Cmd"),
                     "windows" => f.write_str("Win"),
                     _ => f.write_str("Meta"),
@@ -666,54 +860,116 @@ impl Display for KeyInput {
                 PhysicalKey::Code(KeyCode::Numpad8) => f.write_str("Numpad8"),
                 PhysicalKey::Code(KeyCode::Numpad9) => f.write_str("Numpad9"),
                 PhysicalKey::Code(KeyCode::NumpadAdd) => f.write_str("NumpadAdd"),
-                PhysicalKey::Code(KeyCode::NumpadBackspace) => f.write_str("NumpadBackspace"),
-                PhysicalKey::Code(KeyCode::NumpadClear) => f.write_str("NumpadClear"),
-                PhysicalKey::Code(KeyCode::NumpadClearEntry) => f.write_str("NumpadClearEntry"),
-                PhysicalKey::Code(KeyCode::NumpadComma) => f.write_str("NumpadComma"),
-                PhysicalKey::Code(KeyCode::NumpadDecimal) => f.write_str("NumpadDecimal"),
-                PhysicalKey::Code(KeyCode::NumpadDivide) => f.write_str("NumpadDivide"),
-                PhysicalKey::Code(KeyCode::NumpadEnter) => f.write_str("NumpadEnter"),
-                PhysicalKey::Code(KeyCode::NumpadEqual) => f.write_str("NumpadEqual"),
+                PhysicalKey::Code(KeyCode::NumpadBackspace) => {
+                    f.write_str("NumpadBackspace")
+                }
+                PhysicalKey::Code(KeyCode::NumpadClear) => {
+                    f.write_str("NumpadClear")
+                }
+                PhysicalKey::Code(KeyCode::NumpadClearEntry) => {
+                    f.write_str("NumpadClearEntry")
+                }
+                PhysicalKey::Code(KeyCode::NumpadComma) => {
+                    f.write_str("NumpadComma")
+                }
+                PhysicalKey::Code(KeyCode::NumpadDecimal) => {
+                    f.write_str("NumpadDecimal")
+                }
+                PhysicalKey::Code(KeyCode::NumpadDivide) => {
+                    f.write_str("NumpadDivide")
+                }
+                PhysicalKey::Code(KeyCode::NumpadEnter) => {
+                    f.write_str("NumpadEnter")
+                }
+                PhysicalKey::Code(KeyCode::NumpadEqual) => {
+                    f.write_str("NumpadEqual")
+                }
                 PhysicalKey::Code(KeyCode::NumpadHash) => f.write_str("NumpadHash"),
-                PhysicalKey::Code(KeyCode::NumpadMemoryAdd) => f.write_str("NumpadMemoryAdd"),
-                PhysicalKey::Code(KeyCode::NumpadMemoryClear) => f.write_str("NumpadMemoryClear"),
-                PhysicalKey::Code(KeyCode::NumpadMemoryRecall) => f.write_str("NumpadMemoryRecall"),
-                PhysicalKey::Code(KeyCode::NumpadMemoryStore) => f.write_str("NumpadMemoryStore"),
+                PhysicalKey::Code(KeyCode::NumpadMemoryAdd) => {
+                    f.write_str("NumpadMemoryAdd")
+                }
+                PhysicalKey::Code(KeyCode::NumpadMemoryClear) => {
+                    f.write_str("NumpadMemoryClear")
+                }
+                PhysicalKey::Code(KeyCode::NumpadMemoryRecall) => {
+                    f.write_str("NumpadMemoryRecall")
+                }
+                PhysicalKey::Code(KeyCode::NumpadMemoryStore) => {
+                    f.write_str("NumpadMemoryStore")
+                }
                 PhysicalKey::Code(KeyCode::NumpadMemorySubtract) => {
                     f.write_str("NumpadMemorySubtract")
                 }
-                PhysicalKey::Code(KeyCode::NumpadMultiply) => f.write_str("NumpadMultiply"),
-                PhysicalKey::Code(KeyCode::NumpadParenLeft) => f.write_str("NumpadParenLeft"),
-                PhysicalKey::Code(KeyCode::NumpadParenRight) => f.write_str("NumpadParenRight"),
+                PhysicalKey::Code(KeyCode::NumpadMultiply) => {
+                    f.write_str("NumpadMultiply")
+                }
+                PhysicalKey::Code(KeyCode::NumpadParenLeft) => {
+                    f.write_str("NumpadParenLeft")
+                }
+                PhysicalKey::Code(KeyCode::NumpadParenRight) => {
+                    f.write_str("NumpadParenRight")
+                }
                 PhysicalKey::Code(KeyCode::NumpadStar) => f.write_str("NumpadStar"),
-                PhysicalKey::Code(KeyCode::NumpadSubtract) => f.write_str("NumpadSubtract"),
+                PhysicalKey::Code(KeyCode::NumpadSubtract) => {
+                    f.write_str("NumpadSubtract")
+                }
                 PhysicalKey::Code(KeyCode::Escape) => f.write_str("Escape"),
                 PhysicalKey::Code(KeyCode::Fn) => f.write_str("Fn"),
                 PhysicalKey::Code(KeyCode::FnLock) => f.write_str("FnLock"),
-                PhysicalKey::Code(KeyCode::PrintScreen) => f.write_str("PrintScreen"),
+                PhysicalKey::Code(KeyCode::PrintScreen) => {
+                    f.write_str("PrintScreen")
+                }
                 PhysicalKey::Code(KeyCode::ScrollLock) => f.write_str("ScrollLock"),
                 PhysicalKey::Code(KeyCode::Pause) => f.write_str("Pause"),
-                PhysicalKey::Code(KeyCode::BrowserBack) => f.write_str("BrowserBack"),
-                PhysicalKey::Code(KeyCode::BrowserFavorites) => f.write_str("BrowserFavorites"),
-                PhysicalKey::Code(KeyCode::BrowserForward) => f.write_str("BrowserForward"),
-                PhysicalKey::Code(KeyCode::BrowserHome) => f.write_str("BrowserHome"),
-                PhysicalKey::Code(KeyCode::BrowserRefresh) => f.write_str("BrowserRefresh"),
-                PhysicalKey::Code(KeyCode::BrowserSearch) => f.write_str("BrowserSearch"),
-                PhysicalKey::Code(KeyCode::BrowserStop) => f.write_str("BrowserStop"),
+                PhysicalKey::Code(KeyCode::BrowserBack) => {
+                    f.write_str("BrowserBack")
+                }
+                PhysicalKey::Code(KeyCode::BrowserFavorites) => {
+                    f.write_str("BrowserFavorites")
+                }
+                PhysicalKey::Code(KeyCode::BrowserForward) => {
+                    f.write_str("BrowserForward")
+                }
+                PhysicalKey::Code(KeyCode::BrowserHome) => {
+                    f.write_str("BrowserHome")
+                }
+                PhysicalKey::Code(KeyCode::BrowserRefresh) => {
+                    f.write_str("BrowserRefresh")
+                }
+                PhysicalKey::Code(KeyCode::BrowserSearch) => {
+                    f.write_str("BrowserSearch")
+                }
+                PhysicalKey::Code(KeyCode::BrowserStop) => {
+                    f.write_str("BrowserStop")
+                }
                 PhysicalKey::Code(KeyCode::Eject) => f.write_str("Eject"),
                 PhysicalKey::Code(KeyCode::LaunchApp1) => f.write_str("LaunchApp1"),
                 PhysicalKey::Code(KeyCode::LaunchApp2) => f.write_str("LaunchApp2"),
                 PhysicalKey::Code(KeyCode::LaunchMail) => f.write_str("LaunchMail"),
-                PhysicalKey::Code(KeyCode::MediaPlayPause) => f.write_str("MediaPlayPause"),
-                PhysicalKey::Code(KeyCode::MediaSelect) => f.write_str("MediaSelect"),
+                PhysicalKey::Code(KeyCode::MediaPlayPause) => {
+                    f.write_str("MediaPlayPause")
+                }
+                PhysicalKey::Code(KeyCode::MediaSelect) => {
+                    f.write_str("MediaSelect")
+                }
                 PhysicalKey::Code(KeyCode::MediaStop) => f.write_str("MediaStop"),
-                PhysicalKey::Code(KeyCode::MediaTrackNext) => f.write_str("MediaTrackNext"),
-                PhysicalKey::Code(KeyCode::MediaTrackPrevious) => f.write_str("MediaTrackPrevious"),
+                PhysicalKey::Code(KeyCode::MediaTrackNext) => {
+                    f.write_str("MediaTrackNext")
+                }
+                PhysicalKey::Code(KeyCode::MediaTrackPrevious) => {
+                    f.write_str("MediaTrackPrevious")
+                }
                 PhysicalKey::Code(KeyCode::Power) => f.write_str("Power"),
                 PhysicalKey::Code(KeyCode::Sleep) => f.write_str("Sleep"),
-                PhysicalKey::Code(KeyCode::AudioVolumeDown) => f.write_str("AudioVolumeDown"),
-                PhysicalKey::Code(KeyCode::AudioVolumeMute) => f.write_str("AudioVolumeMute"),
-                PhysicalKey::Code(KeyCode::AudioVolumeUp) => f.write_str("AudioVolumeUp"),
+                PhysicalKey::Code(KeyCode::AudioVolumeDown) => {
+                    f.write_str("AudioVolumeDown")
+                }
+                PhysicalKey::Code(KeyCode::AudioVolumeMute) => {
+                    f.write_str("AudioVolumeMute")
+                }
+                PhysicalKey::Code(KeyCode::AudioVolumeUp) => {
+                    f.write_str("AudioVolumeUp")
+                }
                 PhysicalKey::Code(KeyCode::WakeUp) => f.write_str("WakeUp"),
                 PhysicalKey::Code(KeyCode::Meta) => match std::env::consts::OS {
                     "macos" => f.write_str("Cmd"),
@@ -776,8 +1032,12 @@ impl Display for KeyInput {
             Self::Pointer(PointerButton::Mouse(MouseButton::Auxiliary)) => {
                 f.write_str("MouseMiddle")
             }
-            Self::Pointer(PointerButton::Mouse(MouseButton::X2)) => f.write_str("MouseForward"),
-            Self::Pointer(PointerButton::Mouse(MouseButton::X1)) => f.write_str("MouseBackward"),
+            Self::Pointer(PointerButton::Mouse(MouseButton::X2)) => {
+                f.write_str("MouseForward")
+            }
+            Self::Pointer(PointerButton::Mouse(MouseButton::X1)) => {
+                f.write_str("MouseBackward")
+            }
             Self::Pointer(_) => f.write_str("MouseUnimplemented"),
         }
     }
@@ -809,9 +1069,10 @@ impl Hash for KeyInput {
 impl PartialEq for KeyInput {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (KeyInput::Keyboard(_key_a, key_code_a), KeyInput::Keyboard(_key_b, key_code_b)) => {
-                key_code_a.eq(key_code_b)
-            }
+            (
+                KeyInput::Keyboard(_key_a, key_code_a),
+                KeyInput::Keyboard(_key_b, key_code_b),
+            ) => key_code_a.eq(key_code_b),
             (KeyInput::Pointer(a), KeyInput::Pointer(b)) => a.eq(b),
             _ => false,
         }

@@ -6,8 +6,9 @@ use peniko::kurbo::{Point, Rect, RoundedRectRadii, Size, Stroke, Vec2};
 use peniko::{Brush, Color};
 
 use crate::style::{
-    BorderBottomLeftRadius, BorderBottomRightRadius, BorderRightColor, BorderTopLeftRadius,
-    BorderTopRightRadius, CustomStylable, CustomStyle, OverflowX, OverflowY,
+    BorderBottomLeftRadius, BorderBottomRightRadius, BorderRightColor,
+    BorderTopLeftRadius, BorderTopRightRadius, CustomStylable, CustomStyle,
+    OverflowX, OverflowY,
 };
 use crate::unit::PxPct;
 use crate::{
@@ -274,7 +275,10 @@ impl Scroll {
     /// # Reactivity
     /// The scroll position will automatically update whenever the target view changes,
     /// as determined by the `view` function which will update any time there are changes in the signals that it depends on.
-    pub fn scroll_to_view(self, view: impl Fn() -> Option<ViewId> + 'static) -> Self {
+    pub fn scroll_to_view(
+        self,
+        view: impl Fn() -> Option<ViewId> + 'static,
+    ) -> Self {
         let id = self.id();
         create_effect(move |_| {
             if let Some(view) = view() {
@@ -287,11 +291,17 @@ impl Scroll {
 
     fn do_scroll_delta(&mut self, app_state: &mut AppState, delta: Vec2) {
         let new_origin = self.child_viewport.origin() + delta;
-        self.clamp_child_viewport(app_state, self.child_viewport.with_origin(new_origin));
+        self.clamp_child_viewport(
+            app_state,
+            self.child_viewport.with_origin(new_origin),
+        );
     }
 
     fn do_scroll_to(&mut self, app_state: &mut AppState, origin: Point) {
-        self.clamp_child_viewport(app_state, self.child_viewport.with_origin(origin));
+        self.clamp_child_viewport(
+            app_state,
+            self.child_viewport.with_origin(origin),
+        );
     }
 
     /// Ensure that an entire area is visible in the scroll view.
@@ -346,7 +356,10 @@ impl Scroll {
         let delta_x = if x0.abs() > x1.abs() { x0 } else { x1 };
         let delta_y = if y0.abs() > y1.abs() { y0 } else { y1 };
         let new_origin = self.child_viewport.origin() + Vec2::new(delta_x, delta_y);
-        self.clamp_child_viewport(app_state, self.child_viewport.with_origin(new_origin));
+        self.clamp_child_viewport(
+            app_state,
+            self.child_viewport.with_origin(new_origin),
+        );
     }
 
     /// Pan the smallest distance that makes the target [`Rect`] visible.
@@ -424,7 +437,10 @@ impl Scroll {
         let delta_x = if x0.abs() > x1.abs() { x0 } else { x1 };
         let delta_y = if y0.abs() > y1.abs() { y0 } else { y1 };
         let new_origin = self.child_viewport.origin() + Vec2::new(delta_x, delta_y);
-        self.clamp_child_viewport(app_state, self.child_viewport.with_origin(new_origin));
+        self.clamp_child_viewport(
+            app_state,
+            self.child_viewport.with_origin(new_origin),
+        );
     }
 
     fn update_size(&mut self) {
@@ -479,7 +495,9 @@ impl Scroll {
     fn child_size(&self) -> Size {
         self.child
             .get_layout()
-            .map(|layout| Size::new(layout.size.width as f64, layout.size.height as f64))
+            .map(|layout| {
+                Size::new(layout.size.width as f64, layout.size.height as f64)
+            })
             .unwrap()
     }
 
@@ -515,8 +533,14 @@ impl Scroll {
             } else {
                 let size = rect.size().min_side();
                 RoundedRectRadii {
-                    top_left: crate::view::border_radius(style.border_top_left_radius(), size),
-                    top_right: crate::view::border_radius(style.border_top_right_radius(), size),
+                    top_left: crate::view::border_radius(
+                        style.border_top_left_radius(),
+                        size,
+                    ),
+                    top_right: crate::view::border_radius(
+                        style.border_top_right_radius(),
+                        size,
+                    ),
                     bottom_left: crate::view::border_radius(
                         style.border_bottom_left_radius(),
                         size,
@@ -531,12 +555,13 @@ impl Scroll {
 
         if let Some(bounds) = self.calc_vertical_bar_bounds(cx.app_state) {
             let style = self.v_handle_style();
-            let track_style =
-                if self.v_track_hover || matches!(self.held, BarHeldState::Vertical(..)) {
-                    &self.track_hover_style
-                } else {
-                    &self.track_style
-                };
+            let track_style = if self.v_track_hover
+                || matches!(self.held, BarHeldState::Vertical(..))
+            {
+                &self.track_hover_style
+            } else {
+                &self.track_style
+            };
 
             if let Some(color) = track_style.color() {
                 let mut bounds = bounds - scroll_offset;
@@ -556,12 +581,13 @@ impl Scroll {
         // Horizontal bar
         if let Some(bounds) = self.calc_horizontal_bar_bounds(cx.app_state) {
             let style = self.h_handle_style();
-            let track_style =
-                if self.h_track_hover || matches!(self.held, BarHeldState::Horizontal(..)) {
-                    &self.track_hover_style
-                } else {
-                    &self.track_style
-                };
+            let track_style = if self.h_track_hover
+                || matches!(self.held, BarHeldState::Horizontal(..))
+            {
+                &self.track_hover_style
+            } else {
+                &self.track_style
+            };
 
             if let Some(color) = track_style.color() {
                 let mut bounds = bounds - scroll_offset;
@@ -594,13 +620,15 @@ impl Scroll {
         let bar_pad = self.scroll_style.vertical_bar_inset().0;
 
         let percent_visible = viewport_size.height / content_size.height;
-        let percent_scrolled = scroll_offset.y / (content_size.height - viewport_size.height);
+        let percent_scrolled =
+            scroll_offset.y / (content_size.height - viewport_size.height);
 
         let length = (percent_visible * self.total_rect.height()).ceil();
         // Vertical scroll bar must have ast least the same height as it's width
         let length = length.max(style.thickness().0);
 
-        let top_y_offset = ((self.total_rect.height() - length) * percent_scrolled).ceil();
+        let top_y_offset =
+            ((self.total_rect.height() - length) * percent_scrolled).ceil();
         let bottom_y_offset = top_y_offset + length;
 
         let x0 = scroll_offset.x + self.total_rect.width() - bar_width - bar_pad;
@@ -627,7 +655,8 @@ impl Scroll {
         let bar_pad = self.scroll_style.horizontal_bar_inset().0;
 
         let percent_visible = viewport_size.width / content_size.width;
-        let percent_scrolled = scroll_offset.x / (content_size.width - viewport_size.width);
+        let percent_scrolled =
+            scroll_offset.x / (content_size.width - viewport_size.width);
 
         let length = (percent_visible * self.total_rect.width()).ceil();
         let length = length.max(SCROLLBAR_MIN_SIZE);
@@ -639,7 +668,9 @@ impl Scroll {
         };
 
         let left_x_offset =
-            ((self.total_rect.width() - length - horizontal_padding) * percent_scrolled).ceil();
+            ((self.total_rect.width() - length - horizontal_padding)
+                * percent_scrolled)
+                .ceil();
         let right_x_offset = left_x_offset + length;
 
         let x0 = scroll_offset.x + left_x_offset;
@@ -678,7 +709,11 @@ impl Scroll {
         }
     }
 
-    fn point_hits_horizontal_bar(&self, app_state: &mut AppState, pos: Point) -> bool {
+    fn point_hits_horizontal_bar(
+        &self,
+        app_state: &mut AppState,
+        pos: Point,
+    ) -> bool {
         if let Some(mut bounds) = self.calc_horizontal_bar_bounds(app_state) {
             // Stretch hitbox to edge of widget
             let scroll_offset = self.child_viewport.origin().to_vec2();
@@ -689,7 +724,11 @@ impl Scroll {
         }
     }
 
-    fn point_hits_vertical_handle(&self, app_state: &mut AppState, pos: Point) -> bool {
+    fn point_hits_vertical_handle(
+        &self,
+        app_state: &mut AppState,
+        pos: Point,
+    ) -> bool {
         if let Some(mut bounds) = self.calc_vertical_bar_bounds(app_state) {
             // Stretch hitbox to edge of widget
             let scroll_offset = self.child_viewport.origin().to_vec2();
@@ -700,7 +739,11 @@ impl Scroll {
         }
     }
 
-    fn point_hits_horizontal_handle(&self, app_state: &mut AppState, pos: Point) -> bool {
+    fn point_hits_horizontal_handle(
+        &self,
+        app_state: &mut AppState,
+        pos: Point,
+    ) -> bool {
         if let Some(mut bounds) = self.calc_horizontal_bar_bounds(app_state) {
             // Stretch hitbox to edge of widget
             let scroll_offset = self.child_viewport.origin().to_vec2();
@@ -803,7 +846,11 @@ impl View for Scroll {
         )
     }
 
-    fn update(&mut self, cx: &mut crate::context::UpdateCx, state: Box<dyn std::any::Any>) {
+    fn update(
+        &mut self,
+        cx: &mut crate::context::UpdateCx,
+        state: Box<dyn std::any::Any>,
+    ) {
         if let Ok(state) = state.downcast::<ScrollState>() {
             match *state {
                 ScrollState::EnsureVisible(rect) => {
@@ -829,7 +876,12 @@ impl View for Scroll {
         }
     }
 
-    fn scroll_to(&mut self, cx: &mut AppState, target: ViewId, rect: Option<Rect>) -> bool {
+    fn scroll_to(
+        &mut self,
+        cx: &mut AppState,
+        target: ViewId,
+        rect: Option<Rect>,
+    ) -> bool {
         let found = self.child.view().borrow_mut().scroll_to(cx, target, rect);
         if found {
             self.do_scroll_to_view(cx, target, rect);
@@ -944,22 +996,36 @@ impl View for Scroll {
 
                     if self.are_bars_held() {
                         match self.held {
-                            BarHeldState::Vertical(offset, initial_scroll_offset) => {
-                                let scale_y = viewport_size.height / content_size.height;
-                                let y = initial_scroll_offset.y + (event.pos.y - offset) / scale_y;
+                            BarHeldState::Vertical(
+                                offset,
+                                initial_scroll_offset,
+                            ) => {
+                                let scale_y =
+                                    viewport_size.height / content_size.height;
+                                let y = initial_scroll_offset.y
+                                    + (event.pos.y - offset) / scale_y;
                                 self.clamp_child_viewport(
                                     cx.app_state,
-                                    self.child_viewport
-                                        .with_origin(Point::new(initial_scroll_offset.x, y)),
+                                    self.child_viewport.with_origin(Point::new(
+                                        initial_scroll_offset.x,
+                                        y,
+                                    )),
                                 );
                             }
-                            BarHeldState::Horizontal(offset, initial_scroll_offset) => {
-                                let scale_x = viewport_size.width / content_size.width;
-                                let x = initial_scroll_offset.x + (event.pos.x - offset) / scale_x;
+                            BarHeldState::Horizontal(
+                                offset,
+                                initial_scroll_offset,
+                            ) => {
+                                let scale_x =
+                                    viewport_size.width / content_size.width;
+                                let x = initial_scroll_offset.x
+                                    + (event.pos.x - offset) / scale_x;
                                 self.clamp_child_viewport(
                                     cx.app_state,
-                                    self.child_viewport
-                                        .with_origin(Point::new(x, initial_scroll_offset.y)),
+                                    self.child_viewport.with_origin(Point::new(
+                                        x,
+                                        initial_scroll_offset.y,
+                                    )),
                                 );
                             }
                             BarHeldState::None => {}
@@ -1007,12 +1073,15 @@ impl View for Scroll {
             } else {
                 delta
             };
-            let any_change = self.clamp_child_viewport(cx.app_state, self.child_viewport + delta);
+            let any_change =
+                self.clamp_child_viewport(cx.app_state, self.child_viewport + delta);
 
             // Check if the scroll bars now hover
             self.update_hover_states(cx.app_state, pointer_event.pos);
 
-            return if self.scroll_style.propagate_pointer_wheel() && any_change.is_none() {
+            return if self.scroll_style.propagate_pointer_wheel()
+                && any_change.is_none()
+            {
                 EventPropagation::Continue
             } else {
                 EventPropagation::Stop
@@ -1188,7 +1257,10 @@ impl ScrollCustomStyle {
     }
 
     /// Sets whether vertical scrolling should be interpreted as horizontal scrolling.
-    pub fn vertical_scroll_as_horizontal(mut self, vert_as_horiz: impl Into<bool>) -> Self {
+    pub fn vertical_scroll_as_horizontal(
+        mut self,
+        vert_as_horiz: impl Into<bool>,
+    ) -> Self {
         self = Self(self.0.set(VerticalScrollAsHorizontal, vert_as_horiz));
         self
     }

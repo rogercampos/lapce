@@ -2,8 +2,9 @@ use anyhow::{anyhow, Result};
 use floem_renderer::swash::SwashScaler;
 use floem_renderer::text::{CacheKey, LayoutRun, SwashContent};
 use floem_renderer::tiny_skia::{
-    self, FillRule, FilterQuality, GradientStop, LinearGradient, Mask, MaskType, Paint, Path,
-    PathBuilder, Pattern, Pixmap, RadialGradient, Shader, SpreadMode, Stroke, Transform,
+    self, FillRule, FilterQuality, GradientStop, LinearGradient, Mask, MaskType,
+    Paint, Path, PathBuilder, Pattern, Pixmap, RadialGradient, Shader, SpreadMode,
+    Stroke, Transform,
 };
 use floem_renderer::Img;
 use floem_renderer::Renderer;
@@ -31,7 +32,11 @@ thread_local! {
     static SWASH_SCALER: RefCell<SwashScaler> = RefCell::new(SwashScaler::default());
 }
 
-fn cache_glyph(cache_color: CacheColor, cache_key: CacheKey, color: Color) -> Option<Rc<Glyph>> {
+fn cache_glyph(
+    cache_color: CacheColor,
+    cache_key: CacheKey,
+    color: Color,
+) -> Option<Rc<Glyph>> {
     let c = color.to_rgba8();
 
     if let Some(opt_glyph) = GLYPH_CACHE.with_borrow_mut(|gc| {
@@ -54,7 +59,8 @@ fn cache_glyph(cache_color: CacheColor, cache_key: CacheKey, color: Color) -> Op
         let mut pixmap = Pixmap::new(image.placement.width, image.placement.height)?;
 
         if image.content == SwashContent::Mask {
-            for (a, &alpha) in pixmap.pixels_mut().iter_mut().zip(image.data.iter()) {
+            for (a, &alpha) in pixmap.pixels_mut().iter_mut().zip(image.data.iter())
+            {
                 *a = tiny_skia::Color::from_rgba8(c.r, c.g, c.b, alpha)
                     .premultiply()
                     .to_color_u8();
@@ -76,8 +82,9 @@ fn cache_glyph(cache_color: CacheColor, cache_key: CacheKey, color: Color) -> Op
         }))
     };
 
-    GLYPH_CACHE
-        .with_borrow_mut(|gc| gc.insert((cache_key, c.to_u32()), (cache_color, result.clone())));
+    GLYPH_CACHE.with_borrow_mut(|gc| {
+        gc.insert((cache_key, c.to_u32()), (cache_color, result.clone()))
+    });
 
     result
 }
@@ -128,7 +135,13 @@ impl Layer {
 
     /// Renders the pixmap at the position and transforms it with the given transform.
     /// x and y should have already been scaled by the window scale
-    fn render_pixmap_direct(&mut self, img_pixmap: &Pixmap, x: f32, y: f32, transform: Affine) {
+    fn render_pixmap_direct(
+        &mut self,
+        img_pixmap: &Pixmap,
+        x: f32,
+        y: f32,
+        transform: Affine,
+    ) {
         let img_rect = Rect::from_origin_size(
             (x, y),
             (img_pixmap.width() as f64, img_pixmap.height() as f64),
@@ -231,15 +244,18 @@ impl Layer {
         let scaled_box = Affine::scale(window_scale).transform_rect_bbox(bbox);
         let width = scaled_box.width() as u32;
         let height = scaled_box.height() as u32;
-        let mut mask = Mask::new(width, height).ok_or_else(|| anyhow!("unable to create mask"))?;
+        let mut mask = Mask::new(width, height)
+            .ok_or_else(|| anyhow!("unable to create mask"))?;
         mask.fill_path(
-            &shape_to_path(clip).ok_or_else(|| anyhow!("unable to create clip shape"))?,
+            &shape_to_path(clip)
+                .ok_or_else(|| anyhow!("unable to create clip shape"))?,
             FillRule::Winding,
             false,
             Transform::from_scale(window_scale as f32, window_scale as f32),
         );
         Ok(Self {
-            pixmap: Pixmap::new(width, height).ok_or_else(|| anyhow!("unable to create pixmap"))?,
+            pixmap: Pixmap::new(width, height)
+                .ok_or_else(|| anyhow!("unable to create pixmap"))?,
             mask,
             clip: Some(bbox),
             transform,
@@ -310,7 +326,12 @@ impl Layer {
         );
     }
 
-    fn fill<'b>(&mut self, shape: &impl Shape, brush: impl Into<BrushRef<'b>>, _blur_radius: f64) {
+    fn fill<'b>(
+        &mut self,
+        shape: &impl Shape,
+        brush: impl Into<BrushRef<'b>>,
+        _blur_radius: f64,
+    ) {
         // FIXME: Handle _blur_radius
 
         let paint = try_ret!(brush_to_paint(brush));
@@ -496,10 +517,17 @@ pub struct TinySkiaRenderer<W> {
     layers: Vec<Layer>,
 }
 
-impl<W: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle>
-    TinySkiaRenderer<W>
+impl<
+        W: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle,
+    > TinySkiaRenderer<W>
 {
-    pub fn new(window: W, width: u32, height: u32, scale: f64, font_embolden: f32) -> Result<Self>
+    pub fn new(
+        window: W,
+        width: u32,
+        height: u32,
+        scale: f64,
+        font_embolden: f32,
+    ) -> Result<Self>
     where
         W: Clone,
     {
@@ -514,10 +542,11 @@ impl<W: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle
             )
             .map_err(|_| anyhow!("failed to resize surface"))?;
 
-        let pixmap =
-            Pixmap::new(width, height).ok_or_else(|| anyhow!("unable to create pixmap"))?;
+        let pixmap = Pixmap::new(width, height)
+            .ok_or_else(|| anyhow!("unable to create pixmap"))?;
 
-        let mask = Mask::new(width, height).ok_or_else(|| anyhow!("unable to create mask"))?;
+        let mask = Mask::new(width, height)
+            .ok_or_else(|| anyhow!("unable to create mask"))?;
 
         // this is fine to modify the embolden here but it shouldn't be modified any other time
         SWASH_SCALER.with_borrow_mut(|s| s.font_embolden = font_embolden);
@@ -544,15 +573,19 @@ impl<W: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle
     }
 
     pub fn resize(&mut self, width: u32, height: u32, scale: f64) {
-        if width != self.layers[0].pixmap.width() || height != self.layers[0].pixmap.width() {
+        if width != self.layers[0].pixmap.width()
+            || height != self.layers[0].pixmap.width()
+        {
             self.surface
                 .resize(
                     NonZeroU32::new(width).unwrap_or(NonZeroU32::new(1).unwrap()),
                     NonZeroU32::new(height).unwrap_or(NonZeroU32::new(1).unwrap()),
                 )
                 .expect("failed to resize surface");
-            self.layers[0].pixmap = Pixmap::new(width, height).expect("unable to create pixmap");
-            self.layers[0].mask = Mask::new(width, height).expect("unable to create mask");
+            self.layers[0].pixmap =
+                Pixmap::new(width, height).expect("unable to create pixmap");
+            self.layers[0].mask =
+                Mask::new(width, height).expect("unable to create mask");
         }
         self.layers[0].window_scale = scale;
         self.window_scale = scale;
@@ -584,8 +617,9 @@ fn to_point(point: Point) -> tiny_skia::Point {
     tiny_skia::Point::from_xy(point.x as f32, point.y as f32)
 }
 
-impl<W: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle> Renderer
-    for TinySkiaRenderer<W>
+impl<
+        W: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle,
+    > Renderer for TinySkiaRenderer<W>
 {
     fn begin(&mut self, _capture: bool) {
         assert!(self.layers.len() == 1);
@@ -604,7 +638,12 @@ impl<W: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle
         self.layers.last_mut().unwrap().stroke(shape, brush, stroke);
     }
 
-    fn fill<'b>(&mut self, shape: &impl Shape, brush: impl Into<BrushRef<'b>>, blur_radius: f64) {
+    fn fill<'b>(
+        &mut self,
+        shape: &impl Shape,
+        brush: impl Into<BrushRef<'b>>,
+        blur_radius: f64,
+    ) {
         self.layers
             .last_mut()
             .unwrap()
@@ -655,8 +694,10 @@ impl<W: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle
 
     fn finish(&mut self) -> Option<peniko::Image> {
         // Remove cache entries which were not accessed.
-        IMAGE_CACHE.with_borrow_mut(|ic| ic.retain(|_, (c, _)| *c == self.cache_color));
-        GLYPH_CACHE.with_borrow_mut(|gc| gc.retain(|_, (c, _)| *c == self.cache_color));
+        IMAGE_CACHE
+            .with_borrow_mut(|ic| ic.retain(|_, (c, _)| *c == self.cache_color));
+        GLYPH_CACHE
+            .with_borrow_mut(|gc| gc.retain(|_, (c, _)| *c == self.cache_color));
 
         // Swap the cache color.
         self.cache_color = CacheColor(!self.cache_color.0);
@@ -667,8 +708,8 @@ impl<W: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle
             .expect("failed to get the surface buffer");
 
         // Copy from `tiny_skia::Pixmap` to the format specified by `softbuffer::Buffer`.
-        for (out_pixel, pixel) in
-            (buffer.iter_mut()).zip(self.layers.last().unwrap().pixmap.pixels().iter())
+        for (out_pixel, pixel) in (buffer.iter_mut())
+            .zip(self.layers.last().unwrap().pixmap.pixels().iter())
         {
             *out_pixel = ((pixel.red() as u32) << 16)
                 | ((pixel.green() as u32) << 8)
@@ -748,7 +789,9 @@ fn brush_to_paint<'b>(brush: impl Into<BrushRef<'b>>) -> Option<Paint<'static>> 
             let stops = g
                 .stops
                 .iter()
-                .map(|s| GradientStop::new(s.offset, to_color(s.color.to_alpha_color())))
+                .map(|s| {
+                    GradientStop::new(s.offset, to_color(s.color.to_alpha_color()))
+                })
                 .collect();
             match g.kind {
                 GradientKind::Linear { start, end } => LinearGradient::new(
@@ -808,13 +851,17 @@ enum BlendStrategy {
 
 fn determine_blend_strategy(peniko_mode: &BlendMode) -> BlendStrategy {
     match (peniko_mode.mix, peniko_mode.compose) {
-        (Mix::Normal, compose) => BlendStrategy::SinglePass(compose_to_tiny_blend_mode(compose)),
+        (Mix::Normal, compose) => {
+            BlendStrategy::SinglePass(compose_to_tiny_blend_mode(compose))
+        }
         (Mix::Clip, compose) => BlendStrategy::MultiPass {
             first_pass: compose_to_tiny_blend_mode(compose),
             second_pass: TinyBlendMode::Source,
         },
 
-        (mix, Compose::SrcOver) => BlendStrategy::SinglePass(mix_to_tiny_blend_mode(mix)),
+        (mix, Compose::SrcOver) => {
+            BlendStrategy::SinglePass(mix_to_tiny_blend_mode(mix))
+        }
 
         (mix, compose) => BlendStrategy::MultiPass {
             first_pass: compose_to_tiny_blend_mode(compose),

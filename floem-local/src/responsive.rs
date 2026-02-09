@@ -106,7 +106,9 @@ pub fn range<R: RangeBounds<ScreenSize>>(range: R) -> ScreenSize {
     let mask = highest_end.bits() - lowest_start.bits();
     // Subtract to get all the flags between the two, and then OR to ensure everything in the range
     // is set.
-    let result = SizeFlags::from_bits(highest_end.bits() | mask | lowest_start.bits()).unwrap();
+    let result =
+        SizeFlags::from_bits(highest_end.bits() | mask | lowest_start.bits())
+            .unwrap();
 
     ScreenSize { flags: result }
 }

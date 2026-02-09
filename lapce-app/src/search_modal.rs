@@ -11,20 +11,28 @@ use floem::{
     },
     style::{CursorStyle, Display},
     views::{
-        Decorators, VirtualVector, container, label, scroll, stack, text,
-        scroll::PropagatePointerWheel, virtual_stack,
+        Decorators, VirtualVector, container, label, scroll,
+        scroll::PropagatePointerWheel, stack, text, virtual_stack,
     },
 };
-use lapce_core::{buffer::Buffer, command::FocusCommand, mode::Mode, selection::Selection};
+use lapce_core::{
+    buffer::Buffer, command::FocusCommand, mode::Mode, selection::Selection,
+};
 use lapce_rpc::proxy::SearchMatch;
 use lapce_xi_rope::Rope;
 
 use crate::{
     about::exclusive_popup,
-    command::{CommandExecuted, CommandKind, InternalCommand, LapceCommand, LapceWorkbenchCommand},
+    command::{
+        CommandExecuted, CommandKind, InternalCommand, LapceCommand,
+        LapceWorkbenchCommand,
+    },
     config::{LapceConfig, color::LapceColor},
-    editor::{EditorData, EditorViewKind, location::{EditorLocation, EditorPosition}},
     editor::view::editor_container_view,
+    editor::{
+        EditorData, EditorViewKind,
+        location::{EditorLocation, EditorPosition},
+    },
     focus_text::focus_text,
     global_search::GlobalSearchData,
     keypress::KeyPressFocus,
@@ -174,9 +182,9 @@ impl SearchModalData {
                 if !word.is_empty() {
                     let word_len = word.len();
                     self.input_editor.doc().reload(Rope::from(&word), true);
-                    self.input_editor
-                        .cursor()
-                        .update(|cursor| cursor.set_insert(Selection::region(0, word_len)));
+                    self.input_editor.cursor().update(|cursor| {
+                        cursor.set_insert(Selection::region(0, word_len))
+                    });
                 }
             }
         }
@@ -196,8 +204,9 @@ impl SearchModalData {
         let matches = self.flat_matches.get_untracked();
         let idx = self.index.get_untracked();
         if let Some(m) = matches.get(idx) {
-            self.common.internal_command.send(
-                InternalCommand::JumpToLocation {
+            self.common
+                .internal_command
+                .send(InternalCommand::JumpToLocation {
                     location: EditorLocation {
                         path: m.path.clone(),
                         position: Some(EditorPosition::Line(
@@ -206,8 +215,7 @@ impl SearchModalData {
                         scroll_offset: None,
                         same_editor_tab: false,
                     },
-                },
-            );
+                });
         }
         self.close();
     }
@@ -274,15 +282,9 @@ impl KeyPressFocus for SearchModalData {
     ) -> bool {
         use crate::keypress::condition::Condition;
         if self.preview_focused.get_untracked() {
-            matches!(
-                condition,
-                Condition::ModalFocus | Condition::EditorFocus
-            )
+            matches!(condition, Condition::ModalFocus | Condition::EditorFocus)
         } else {
-            matches!(
-                condition,
-                Condition::ListFocus | Condition::ModalFocus
-            )
+            matches!(condition, Condition::ListFocus | Condition::ModalFocus)
         }
     }
 
@@ -321,9 +323,7 @@ impl KeyPressFocus for SearchModalData {
             },
             _ => {
                 if self.preview_focused.get_untracked() {
-                    return self
-                        .preview_editor
-                        .run_command(command, count, mods);
+                    return self.preview_editor.run_command(command, count, mods);
                 }
                 self.input_editor.run_command(command, count, mods);
             }
@@ -428,26 +428,29 @@ fn search_modal_input(
     focus: RwSignal<Focus>,
 ) -> impl View {
     let preview_focused = data.preview_focused;
-    let is_focused = move || focus.get() == Focus::SearchModal && !preview_focused.get();
+    let is_focused =
+        move || focus.get() == Focus::SearchModal && !preview_focused.get();
     let input = TextInputBuilder::new()
         .is_focused(is_focused)
         .build_editor(data.input_editor.clone())
         .placeholder(|| "Search in files...".to_owned())
         .style(|s| s.width_full());
 
-    container(container(input)
-        .on_event_cont(EventListener::PointerDown, move |_| {
-            preview_focused.set(false);
-        })
-        .style(move |s| {
-            let config = config.get();
-            s.width_full()
-                .height(30.0)
-                .items_center()
-                .border_bottom(1.0)
-                .border_color(config.color(LapceColor::LAPCE_BORDER))
-                .background(config.color(LapceColor::EDITOR_BACKGROUND))
-        }))
+    container(
+        container(input)
+            .on_event_cont(EventListener::PointerDown, move |_| {
+                preview_focused.set(false);
+            })
+            .style(move |s| {
+                let config = config.get();
+                s.width_full()
+                    .height(30.0)
+                    .items_center()
+                    .border_bottom(1.0)
+                    .border_color(config.color(LapceColor::LAPCE_BORDER))
+                    .background(config.color(LapceColor::EDITOR_BACKGROUND))
+            }),
+    )
     .style(|s| s.padding_bottom(5.0))
 }
 
@@ -469,7 +472,15 @@ fn search_modal_body(
                 let data = data.clone();
                 virtual_stack(
                     move || FlatSearchItems(flat_matches.get()),
-                    move |(i, m)| (*i, m.path.clone(), m.search_match.line, m.search_match.start, m.search_match.end),
+                    move |(i, m)| {
+                        (
+                            *i,
+                            m.path.clone(),
+                            m.search_match.line,
+                            m.search_match.start,
+                            m.search_match.end,
+                        )
+                    },
                     move |(i, m)| {
                         let data = data.clone();
                         let double_click_data = data.clone();
@@ -499,8 +510,12 @@ fn search_modal_body(
                                     },
                                     move || {
                                         let config = config.get();
-                                        let offset = if config.ui.trim_search_results_whitespace {
-                                            line_content_for_trim.trim_start().len() as i32
+                                        let offset = if config
+                                            .ui
+                                            .trim_search_results_whitespace
+                                        {
+                                            line_content_for_trim.trim_start().len()
+                                                as i32
                                                 - line_content_for_trim.len() as i32
                                         } else {
                                             0
@@ -514,12 +529,18 @@ fn search_modal_body(
                                     },
                                 )
                                 .style(|s| s.min_width(0.0)),
-                                container(text("")).style(|s| s.flex_grow(1.0).min_width(10.0)),
-                                label(move || location_label.clone())
-                                    .style(move |s| {
-                                        s.color(config.get().color(LapceColor::EDITOR_DIM))
-                                            .flex_shrink(0.0)
-                                    }),
+                                container(text(""))
+                                    .style(|s| s.flex_grow(1.0).min_width(10.0)),
+                                label(move || location_label.clone()).style(
+                                    move |s| {
+                                        s.color(
+                                            config
+                                                .get()
+                                                .color(LapceColor::EDITOR_DIM),
+                                        )
+                                        .flex_shrink(0.0)
+                                    },
+                                ),
                             ))
                             .style(|s| s.width_full().items_center()),
                         )
@@ -541,13 +562,15 @@ fn search_modal_body(
                                 .items_center()
                                 .cursor(CursorStyle::Pointer)
                                 .apply_if(is_selected, |s| {
-                                    s.background(
-                                        config.color(LapceColor::PALETTE_CURRENT_BACKGROUND),
-                                    )
+                                    s.background(config.color(
+                                        LapceColor::PALETTE_CURRENT_BACKGROUND,
+                                    ))
                                 })
                                 .hover(|s| {
                                     s.background(
-                                        config.color(LapceColor::PANEL_HOVERED_BACKGROUND),
+                                        config.color(
+                                            LapceColor::PANEL_HOVERED_BACKGROUND,
+                                        ),
                                     )
                                 })
                         })
@@ -593,9 +616,7 @@ fn search_modal_body(
                     String::new()
                 }
             })
-            .style(move |s| {
-                s.color(config.get().color(LapceColor::EDITOR_DIM))
-            }),
+            .style(move |s| s.color(config.get().color(LapceColor::EDITOR_DIM))),
         )
         .style(move |s| {
             let config = config.get();
@@ -657,7 +678,11 @@ fn search_modal_footer(
         }),
         container(text("")).style(|s| s.flex_grow(1.0)),
         label(|| {
-            let modifier = if cfg!(target_os = "macos") { "\u{2318}" } else { "Ctrl" };
+            let modifier = if cfg!(target_os = "macos") {
+                "\u{2318}"
+            } else {
+                "Ctrl"
+            };
             format!("{modifier}+Enter")
         })
         .style(move |s| {

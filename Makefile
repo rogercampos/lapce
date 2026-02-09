@@ -29,6 +29,20 @@ vpath $(DMG_NAME) $(APP_DIR)
 
 all: help
 
+ci: fmt clippy build test ## Run all CI checks locally
+
+fmt: ## Check code formatting
+	cargo fmt --all --check
+
+clippy: ## Run clippy lints
+	cargo clippy
+
+build: ## Build the project
+	cargo build
+
+test: ## Run doc tests
+	cargo test --doc --workspace
+
 help: ## Print this help message
 	@grep -E '^[a-zA-Z._-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
 

@@ -3,7 +3,11 @@ use winit::keyboard::NamedKey;
 
 use crate::{app_state::AppState, id::ViewId, view::view_tab_navigation};
 
-pub(crate) fn view_arrow_navigation(key: NamedKey, app_state: &mut AppState, view: ViewId) {
+pub(crate) fn view_arrow_navigation(
+    key: NamedKey,
+    app_state: &mut AppState,
+    view: ViewId,
+) {
     let focused = match app_state.focus {
         Some(id) => id,
         None => {
@@ -18,9 +22,13 @@ pub(crate) fn view_arrow_navigation(key: NamedKey, app_state: &mut AppState, vie
     let rect = focused.layout_rect().inflate(10.0, 10.0);
     let center = rect.center();
     let intersect_target = match key {
-        NamedKey::ArrowUp => Rect::new(rect.x0, f64::NEG_INFINITY, rect.x1, center.y),
+        NamedKey::ArrowUp => {
+            Rect::new(rect.x0, f64::NEG_INFINITY, rect.x1, center.y)
+        }
         NamedKey::ArrowDown => Rect::new(rect.x0, center.y, rect.x1, f64::INFINITY),
-        NamedKey::ArrowLeft => Rect::new(f64::NEG_INFINITY, rect.y0, center.x, rect.y1),
+        NamedKey::ArrowLeft => {
+            Rect::new(f64::NEG_INFINITY, rect.y0, center.x, rect.y1)
+        }
         NamedKey::ArrowRight => Rect::new(center.x, rect.y0, f64::INFINITY, rect.y1),
         _ => panic!(),
     };
@@ -28,11 +36,15 @@ pub(crate) fn view_arrow_navigation(key: NamedKey, app_state: &mut AppState, vie
         NamedKey::ArrowUp => {
             Rect::new(f64::NEG_INFINITY, f64::NEG_INFINITY, f64::INFINITY, rect.y0)
         }
-        NamedKey::ArrowDown => Rect::new(f64::NEG_INFINITY, rect.y1, f64::INFINITY, f64::INFINITY),
+        NamedKey::ArrowDown => {
+            Rect::new(f64::NEG_INFINITY, rect.y1, f64::INFINITY, f64::INFINITY)
+        }
         NamedKey::ArrowLeft => {
             Rect::new(f64::NEG_INFINITY, f64::NEG_INFINITY, rect.x0, f64::INFINITY)
         }
-        NamedKey::ArrowRight => Rect::new(rect.x1, f64::NEG_INFINITY, f64::INFINITY, f64::INFINITY),
+        NamedKey::ArrowRight => {
+            Rect::new(rect.x1, f64::NEG_INFINITY, f64::INFINITY, f64::INFINITY)
+        }
         _ => panic!(),
     };
     let mut keyboard_navigable: Vec<ViewId> =

@@ -8,7 +8,9 @@ use crate::{
     keyboard::{Key, Modifiers, NamedKey},
     kurbo::{BezPath, Line, Point, Rect, Size, Vec2},
     peniko::Color,
-    reactive::{batch, create_effect, create_memo, create_rw_signal, Memo, RwSignal, Scope},
+    reactive::{
+        batch, create_effect, create_memo, create_rw_signal, Memo, RwSignal, Scope,
+    },
     style::{CursorStyle, Style},
     style_class,
     taffy::tree::NodeId,
@@ -348,7 +350,8 @@ impl EditorView {
         affinity: CursorAffinity,
     ) {
         // TODO: selections should have separate start/end affinity
-        let (start_rvline, start_col) = ed.rvline_col_of_offset(start_offset, affinity);
+        let (start_rvline, start_col) =
+            ed.rvline_col_of_offset(start_offset, affinity);
         let (end_rvline, end_col) = ed.rvline_col_of_offset(end_offset, affinity);
 
         for LineInfo {
@@ -375,7 +378,10 @@ impl EditorView {
 
             // Skip over empty selections
             if !info.is_empty_phantom() && left_col == right_col {
-                let rect = Rect::from_origin_size((0.0, vline_y), (CHAR_WIDTH, line_height));
+                let rect = Rect::from_origin_size(
+                    (0.0, vline_y),
+                    (CHAR_WIDTH, line_height),
+                );
                 cx.fill(&rect, color, 0.0);
 
                 continue;
@@ -383,10 +389,20 @@ impl EditorView {
 
             // TODO: What affinity should these use?
             let x0 = ed
-                .line_point_of_line_col(line, left_col, CursorAffinity::Forward, true)
+                .line_point_of_line_col(
+                    line,
+                    left_col,
+                    CursorAffinity::Forward,
+                    true,
+                )
                 .x;
             let x1 = ed
-                .line_point_of_line_col(line, right_col, CursorAffinity::Backward, true)
+                .line_point_of_line_col(
+                    line,
+                    right_col,
+                    CursorAffinity::Backward,
+                    true,
+                )
                 .x;
             // TODO(minor): Should this be line != end_line?
             let x1 = if rvline != end_rvline {
@@ -447,10 +463,14 @@ impl EditorView {
             let right_col = ed.last_col(info, true);
 
             // TODO: what affinity to use?
-            let x1 = ed
-                .line_point_of_line_col(line, right_col, CursorAffinity::Backward, true)
-                .x
-                + CHAR_WIDTH;
+            let x1 =
+                ed.line_point_of_line_col(
+                    line,
+                    right_col,
+                    CursorAffinity::Backward,
+                    true,
+                )
+                .x + CHAR_WIDTH;
 
             let line_height = ed.line_height(line);
             let rect = Rect::from_origin_size(
@@ -472,7 +492,8 @@ impl EditorView {
         affinity: CursorAffinity,
         horiz: Option<ColPosition>,
     ) {
-        let (start_rvline, start_col) = ed.rvline_col_of_offset(start_offset, affinity);
+        let (start_rvline, start_col) =
+            ed.rvline_col_of_offset(start_offset, affinity);
         let (end_rvline, end_col) = ed.rvline_col_of_offset(end_offset, affinity);
         let left_col = start_col.min(end_col);
         let right_col = start_col.max(end_col) + 1;
@@ -494,15 +515,27 @@ impl EditorView {
 
             // TODO: what affinity to use?
             let x0 = ed
-                .line_point_of_line_col(line, left_col, CursorAffinity::Forward, true)
+                .line_point_of_line_col(
+                    line,
+                    left_col,
+                    CursorAffinity::Forward,
+                    true,
+                )
                 .x;
             let x1 = ed
-                .line_point_of_line_col(line, right_col, CursorAffinity::Backward, true)
+                .line_point_of_line_col(
+                    line,
+                    right_col,
+                    CursorAffinity::Backward,
+                    true,
+                )
                 .x;
 
             let line_height = ed.line_height(line);
-            let rect =
-                Rect::from_origin_size((x0, line_info.vline_y), (x1 - x0, f64::from(line_height)));
+            let rect = Rect::from_origin_size(
+                (x0, line_info.vline_y),
+                (x1 - x0, f64::from(line_height)),
+            );
             cx.fill(&rect, color, 0.0);
         }
     }
@@ -530,7 +563,8 @@ impl EditorView {
                         let rvline = ed.rvline_of_offset(end, cursor.affinity);
 
                         if let Some(info) = screen_lines.info(rvline) {
-                            let line_height = ed.line_height(info.vline_info.rvline.line);
+                            let line_height =
+                                ed.line_height(info.vline_info.rvline.line);
                             let rect = Rect::from_origin_size(
                                 (viewport.x0, info.vline_y),
                                 (viewport.width(), f64::from(line_height)),
@@ -546,7 +580,11 @@ impl EditorView {
         });
     }
 
-    pub fn paint_selection(cx: &mut PaintCx, ed: &Editor, screen_lines: &ScreenLines) {
+    pub fn paint_selection(
+        cx: &mut PaintCx,
+        ed: &Editor,
+        screen_lines: &ScreenLines,
+    ) {
         let cursor = ed.cursor;
 
         let selection_color = ed.es.with_untracked(|es| es.selection());
@@ -603,7 +641,9 @@ impl EditorView {
                 );
             }
             CursorMode::Insert(_) => {
-                for (start, end) in cursor.regions_iter().filter(|(start, end)| start != end) {
+                for (start, end) in
+                    cursor.regions_iter().filter(|(start, end)| start != end)
+                {
                     EditorView::paint_normal_selection(
                         cx,
                         ed,
@@ -648,15 +688,22 @@ impl EditorView {
                     }
 
                     let line_height = ed.line_height(info.vline_info.rvline.line);
-                    let rect =
-                        Rect::from_origin_size((x, info.vline_y), (width, f64::from(line_height)));
+                    let rect = Rect::from_origin_size(
+                        (x, info.vline_y),
+                        (width, f64::from(line_height)),
+                    );
                     cx.fill(&rect, &caret_color, 0.0);
                 }
             }
         });
     }
 
-    pub fn paint_wave_line(cx: &mut PaintCx, width: f64, point: Point, color: Color) {
+    pub fn paint_wave_line(
+        cx: &mut PaintCx,
+        width: f64,
+        point: Point,
+        color: Color,
+    ) {
         let radius = 2.0;
         let origin = Point::new(point.x, point.y + radius);
         let mut path = BezPath::new();
@@ -721,7 +768,12 @@ impl EditorView {
             if let Some(color) = style.wave_line {
                 let width = style.width.unwrap_or_else(|| viewport.width());
                 let y = y + style.y + height;
-                EditorView::paint_wave_line(cx, width, Point::new(style.x, y), color);
+                EditorView::paint_wave_line(
+                    cx,
+                    width,
+                    Point::new(style.x, y),
+                    color,
+                );
             }
         }
     }
@@ -853,14 +905,16 @@ impl View for EditorView {
             let line_height = f64::from(editor.line_height(0));
 
             let width = editor.max_line_width().max(parent_size.width());
-            let last_line_height = line_height * (editor.last_vline().get() + 1) as f64;
+            let last_line_height =
+                line_height * (editor.last_vline().get() + 1) as f64;
             let height = last_line_height.max(parent_size.height());
 
-            let margin_bottom = if editor.es.with_untracked(|es| es.scroll_beyond_last_line()) {
-                parent_size.height().min(last_line_height) - line_height
-            } else {
-                0.0
-            };
+            let margin_bottom =
+                if editor.es.with_untracked(|es| es.scroll_beyond_last_line()) {
+                    parent_size.height().min(last_line_height) - line_height
+                } else {
+                    0.0
+                };
 
             let style = Style::new()
                 .width(width)
@@ -873,7 +927,10 @@ impl View for EditorView {
         })
     }
 
-    fn compute_layout(&mut self, cx: &mut crate::context::ComputeLayoutCx) -> Option<Rect> {
+    fn compute_layout(
+        &mut self,
+        cx: &mut crate::context::ComputeLayoutCx,
+    ) -> Option<Rect> {
         let editor = self.editor.get_untracked();
 
         let viewport = cx.current_viewport();
@@ -964,8 +1021,8 @@ pub fn editor_view(
                 let (_, point_below) = ed.points_of_offset(offset, affinity);
                 let window_origin = editor_window_origin.get();
                 let viewport = editor_viewport.get();
-                let pos =
-                    window_origin + (point_below.x - viewport.x0, point_below.y - viewport.y0);
+                let pos = window_origin
+                    + (point_below.x - viewport.x0, point_below.y - viewport.y0);
                 set_ime_cursor_area(pos, Size::new(800.0, 600.0));
             }
         }
@@ -1044,7 +1101,12 @@ pub fn cursor_caret(
 
     let (_, col) = ed.offset_to_line_col(offset);
 
-    let point = ed.line_point_of_line_col(info.rvline.line, col, CursorAffinity::Forward, false);
+    let point = ed.line_point_of_line_col(
+        info.rvline.line,
+        col,
+        CursorAffinity::Forward,
+        false,
+    );
 
     let rvline = if preedit_start.is_some() {
         // If there's an IME edit, then we need to use the point's y to get the actual y position
@@ -1063,7 +1125,12 @@ pub fn cursor_caret(
     let x0 = point.x;
     if block {
         let x0 = ed
-            .line_point_of_line_col(info.rvline.line, col, CursorAffinity::Forward, true)
+            .line_point_of_line_col(
+                info.rvline.line,
+                col,
+                CursorAffinity::Forward,
+                true,
+            )
             .x;
         let new_offset = ed.move_right(offset, Mode::Insert, 1);
         let (_, new_col) = ed.offset_to_line_col(new_offset);
@@ -1071,7 +1138,12 @@ pub fn cursor_caret(
             CHAR_WIDTH
         } else {
             let x1 = ed
-                .line_point_of_line_col(info.rvline.line, new_col, CursorAffinity::Backward, true)
+                .line_point_of_line_col(
+                    info.rvline.line,
+                    new_col,
+                    CursorAffinity::Backward,
+                    true,
+                )
                 .x;
             x1 - x0
         };
@@ -1140,8 +1212,8 @@ fn editor_content(
     let viewport = ed.viewport;
 
     scroll({
-        let editor_content_view =
-            editor_view(editor, is_active).style(move |s| s.absolute().cursor(CursorStyle::Text));
+        let editor_content_view = editor_view(editor, is_active)
+            .style(move |s| s.absolute().cursor(CursorStyle::Text));
 
         let id = editor_content_view.id();
         ed.editor_view_id.set(Some(id));
@@ -1191,10 +1263,15 @@ fn editor_content(
                 if mods.is_empty() {
                     if let KeyInput::Keyboard(Key::Character(c), _) = keypress.key {
                         editor.get_untracked().receive_char(&c);
-                    } else if let KeyInput::Keyboard(Key::Named(NamedKey::Space), _) = keypress.key
+                    } else if let KeyInput::Keyboard(
+                        Key::Named(NamedKey::Space),
+                        _,
+                    ) = keypress.key
                     {
                         editor.get_untracked().receive_char(" ");
-                    } else if let KeyInput::Keyboard(Key::Unidentified(_), _) = keypress.key {
+                    } else if let KeyInput::Keyboard(Key::Unidentified(_), _) =
+                        keypress.key
+                    {
                         if let Some(text) = key_text {
                             editor.get_untracked().receive_char(&text);
                         }
@@ -1223,9 +1300,11 @@ fn editor_content(
 
         // TODO: is there a good way to avoid the calculation of the vline here?
         let vline = editor.vline_of_rvline(rvline);
-        let rect =
-            Rect::from_origin_size((x, vline.get() as f64 * line_height), (width, line_height))
-                .inflate(10.0, 1.0);
+        let rect = Rect::from_origin_size(
+            (x, vline.get() as f64 * line_height),
+            (width, line_height),
+        )
+        .inflate(10.0, 1.0);
 
         let viewport = viewport.get_untracked();
         let smallest_distance = (viewport.y0 - rect.y0)
@@ -1238,14 +1317,15 @@ fn editor_content(
             .max((viewport.y1 - rect.y0).abs())
             .max((viewport.y0 - rect.y1).abs())
             .max((viewport.y1 - rect.y1).abs());
-        let jump_to_middle =
-            biggest_distance > viewport.height() && smallest_distance > viewport.height() / 2.0;
+        let jump_to_middle = biggest_distance > viewport.height()
+            && smallest_distance > viewport.height() / 2.0;
 
         if jump_to_middle {
             rect.inflate(0.0, viewport.height() / 2.0)
         } else {
             let mut rect = rect;
-            let cursor_surrounding_lines = editor.es.with(|s| s.cursor_surrounding_lines()) as f64;
+            let cursor_surrounding_lines =
+                editor.es.with(|s| s.cursor_surrounding_lines()) as f64;
             rect.y0 -= cursor_surrounding_lines * line_height;
             rect.y1 += cursor_surrounding_lines * line_height;
             rect

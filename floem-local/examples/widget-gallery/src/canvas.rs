@@ -90,7 +90,11 @@ fn two_d_picker(color: RwSignal<Color>) -> impl IntoView {
         .debug_name("2d picker")
 }
 
-fn draw_transparency_checkerboard(cx: &mut PaintCx, size: Size, clip_path: &impl Shape) {
+fn draw_transparency_checkerboard(
+    cx: &mut PaintCx,
+    size: Size,
+    clip_path: &impl Shape,
+) {
     cx.push_layer(Mix::Normal, 1.0, Affine::IDENTITY, clip_path);
 
     let cell_size = 8.0;
@@ -142,8 +146,8 @@ impl SatValuePicker {
     fn position_to_hsl(&self, pos: Point) -> AlphaColor<Hsl> {
         let hue = self.current_color.components[0];
 
-        let saturation =
-            (pos.x / self.size.width * 100.).clamp(0.0 + f64::EPSILON, 100.0 - f64::EPSILON);
+        let saturation = (pos.x / self.size.width * 100.)
+            .clamp(0.0 + f64::EPSILON, 100.0 - f64::EPSILON);
 
         let value = ((1.0 - (pos.y / self.size.height)) * 100.)
             .clamp(0.0 + f64::EPSILON, 100.0 - f64::EPSILON);
@@ -163,12 +167,19 @@ impl View for SatValuePicker {
         self.id
     }
 
-    fn compute_layout(&mut self, _cx: &mut floem::context::ComputeLayoutCx) -> Option<Rect> {
+    fn compute_layout(
+        &mut self,
+        _cx: &mut floem::context::ComputeLayoutCx,
+    ) -> Option<Rect> {
         self.size = self.id.get_size().unwrap_or_default();
         None
     }
 
-    fn update(&mut self, _cx: &mut floem::context::UpdateCx, state: Box<dyn std::any::Any>) {
+    fn update(
+        &mut self,
+        _cx: &mut floem::context::UpdateCx,
+        state: Box<dyn std::any::Any>,
+    ) {
         if let Ok(color) = state.downcast::<Color>() {
             self.current_color = color.convert();
         }
@@ -212,17 +223,19 @@ impl View for SatValuePicker {
         let rect_path = Rect::ZERO.with_size(size).to_rounded_rect(8.);
         let hue = self.current_color.components[0];
 
-        let lightness_gradient = Gradient::new_linear(Point::ZERO, Point::new(0.0, size.height))
-            .with_stops([(0.0, css::WHITE), (1.0, css::BLACK)]);
+        let lightness_gradient =
+            Gradient::new_linear(Point::ZERO, Point::new(0.0, size.height))
+                .with_stops([(0.0, css::WHITE), (1.0, css::BLACK)]);
         cx.fill(&rect_path, &lightness_gradient, 0.);
 
         cx.push_layer(Mix::Color, 1.0, Affine::IDENTITY, &rect_path);
 
-        let saturation_gradient = Gradient::new_linear(Point::ZERO, Point::new(size.width, 0.0))
-            .with_stops([
-                (0.0, AlphaColor::<Hsl>::new([hue, 0., 50., 1.])),
-                (1.0, AlphaColor::<Hsl>::new([hue, 100., 50., 1.])),
-            ]);
+        let saturation_gradient =
+            Gradient::new_linear(Point::ZERO, Point::new(size.width, 0.0))
+                .with_stops([
+                    (0.0, AlphaColor::<Hsl>::new([hue, 0., 50., 1.])),
+                    (1.0, AlphaColor::<Hsl>::new([hue, 100., 50., 1.])),
+                ]);
         cx.fill(&rect_path, &saturation_gradient, 0.);
 
         cx.pop_layer();
@@ -235,7 +248,8 @@ impl View for SatValuePicker {
             let y_pos = (1.0 - value as f64 / 100.0) * size.height;
 
             let indicator_radius = 6.0;
-            let indicator_circle = Circle::new(Point::new(x_pos, y_pos), indicator_radius);
+            let indicator_circle =
+                Circle::new(Point::new(x_pos, y_pos), indicator_radius);
 
             cx.stroke(&indicator_circle, css::WHITE, &Stroke::new(2.0));
         }
@@ -284,12 +298,19 @@ impl View for HuePicker {
         self.id
     }
 
-    fn compute_layout(&mut self, _cx: &mut floem::context::ComputeLayoutCx) -> Option<Rect> {
+    fn compute_layout(
+        &mut self,
+        _cx: &mut floem::context::ComputeLayoutCx,
+    ) -> Option<Rect> {
         self.size = self.id.get_size().unwrap_or_default();
         None
     }
 
-    fn update(&mut self, _cx: &mut floem::context::UpdateCx, state: Box<dyn std::any::Any>) {
+    fn update(
+        &mut self,
+        _cx: &mut floem::context::UpdateCx,
+        state: Box<dyn std::any::Any>,
+    ) {
         if let Ok(color) = state.downcast::<Color>() {
             self.current_color = color.convert();
         }
@@ -406,12 +427,19 @@ impl View for OpacityPicker {
         self.id
     }
 
-    fn compute_layout(&mut self, _cx: &mut floem::context::ComputeLayoutCx) -> Option<Rect> {
+    fn compute_layout(
+        &mut self,
+        _cx: &mut floem::context::ComputeLayoutCx,
+    ) -> Option<Rect> {
         self.size = self.id.get_size().unwrap_or_default();
         None
     }
 
-    fn update(&mut self, _cx: &mut floem::context::UpdateCx, state: Box<dyn std::any::Any>) {
+    fn update(
+        &mut self,
+        _cx: &mut floem::context::UpdateCx,
+        state: Box<dyn std::any::Any>,
+    ) {
         if let Ok(color) = state.downcast::<Color>() {
             self.current_color = *color;
         }

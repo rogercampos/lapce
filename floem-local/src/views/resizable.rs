@@ -5,8 +5,8 @@ use crate::{
     prelude::*,
     prop, prop_extractor,
     style::{
-        CursorStyle, CustomStylable, CustomStyle, FlexDirectionProp, Style, StyleClass,
-        StyleSelector,
+        CursorStyle, CustomStylable, CustomStyle, FlexDirectionProp, Style,
+        StyleClass, StyleSelector,
     },
     style_class,
     unit::{Px, PxPct},
@@ -119,8 +119,12 @@ impl View for ResizableStack {
         let style = cx.style();
         let handle_style = match self.handle_state {
             HandleState::None => style,
-            HandleState::Hovered(_) => style.apply_selectors(&[StyleSelector::Hover]),
-            HandleState::Active(_) => style.apply_selectors(&[StyleSelector::Active]),
+            HandleState::Hovered(_) => {
+                style.apply_selectors(&[StyleSelector::Hover])
+            }
+            HandleState::Active(_) => {
+                style.apply_selectors(&[StyleSelector::Active])
+            }
         };
         self.handle_style.read_style(cx, &handle_style);
         for child in self.id().children() {
@@ -143,7 +147,10 @@ impl View for ResizableStack {
                     FlexDirection::Column | FlexDirection::ColumnReverse => {
                         child.update_style(
                             offset,
-                            Style::new().height(size).max_height(size).min_height(20.),
+                            Style::new()
+                                .height(size)
+                                .max_height(size)
+                                .min_height(20.),
                         );
                     }
                 }
@@ -176,7 +183,11 @@ impl View for ResizableStack {
         layout_rect
     }
 
-    fn event_before_children(&mut self, _cx: &mut EventCx, event: &Event) -> EventPropagation {
+    fn event_before_children(
+        &mut self,
+        _cx: &mut EventCx,
+        event: &Event,
+    ) -> EventPropagation {
         match event {
             Event::PointerDown(PointerInputEvent {
                 pos,
@@ -192,14 +203,16 @@ impl View for ResizableStack {
                     self.handle_state = HandleState::Active(handle_idx);
                     self.id.request_all();
                     {
-                        let cursor = if let Some(cursor) = self.handle_style.cursor() {
+                        let cursor = if let Some(cursor) = self.handle_style.cursor()
+                        {
                             cursor
                         } else {
                             match self.re_style.direction() {
                                 FlexDirection::Row | FlexDirection::RowReverse => {
                                     CursorStyle::ColResize
                                 }
-                                FlexDirection::Column | FlexDirection::ColumnReverse => {
+                                FlexDirection::Column
+                                | FlexDirection::ColumnReverse => {
                                     CursorStyle::RowResize
                                 }
                             }
@@ -220,7 +233,9 @@ impl View for ResizableStack {
                     self.clear_handle_pos(idx);
                     self.should_clear_on_up = None;
                 }
-                if let HandleState::Active(_) | HandleState::Hovered(_) = self.handle_state {
+                if let HandleState::Active(_) | HandleState::Hovered(_) =
+                    self.handle_state
+                {
                     self.id.clear_active();
                     self.handle_state = HandleState::None;
                     self.id.request_all();
@@ -235,7 +250,9 @@ impl View for ResizableStack {
                 if let HandleState::Active(handle_idx) = self.handle_state {
                     self.update_handle_position(handle_idx, *pos);
                     let cursor = match self.re_style.direction() {
-                        FlexDirection::Row | FlexDirection::RowReverse => CursorStyle::ColResize,
+                        FlexDirection::Row | FlexDirection::RowReverse => {
+                            CursorStyle::ColResize
+                        }
                         FlexDirection::Column | FlexDirection::ColumnReverse => {
                             CursorStyle::RowResize
                         }
@@ -247,7 +264,9 @@ impl View for ResizableStack {
                 } else if let Some(handle_idx) = self.find_handle_at_position(*pos) {
                     self.handle_state = HandleState::Hovered(handle_idx);
                     let cursor = match self.re_style.direction() {
-                        FlexDirection::Row | FlexDirection::RowReverse => CursorStyle::ColResize,
+                        FlexDirection::Row | FlexDirection::RowReverse => {
+                            CursorStyle::ColResize
+                        }
                         FlexDirection::Column | FlexDirection::ColumnReverse => {
                             CursorStyle::RowResize
                         }
@@ -295,7 +314,10 @@ impl View for ResizableStack {
 }
 
 impl ResizableStack {
-    pub fn custom_sizes(self, sizes: impl Fn() -> Vec<(usize, f64)> + 'static) -> Self {
+    pub fn custom_sizes(
+        self,
+        sizes: impl Fn() -> Vec<(usize, f64)> + 'static,
+    ) -> Self {
         let id = self.id;
         create_effect(move |_| {
             let sizes = sizes();
@@ -541,7 +563,10 @@ impl ResizableCustomStyle {
     /// # Arguments
     /// * `cursor_style` - An optional `CursorStyle` that sets the handle's cursor style.
     ///   If `None` is provided, default automatic cursor style is used.
-    pub fn handle_cursor_style(mut self, cursor_style: impl Into<Option<CursorStyle>>) -> Self {
+    pub fn handle_cursor_style(
+        mut self,
+        cursor_style: impl Into<Option<CursorStyle>>,
+    ) -> Self {
         self = ResizableCustomStyle(self.0.set(HandleCursorStyle, cursor_style));
         self
     }

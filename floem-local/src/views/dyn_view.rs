@@ -38,7 +38,11 @@ impl View for DynamicView {
         self.id
     }
 
-    fn update(&mut self, cx: &mut crate::context::UpdateCx, state: Box<dyn std::any::Any>) {
+    fn update(
+        &mut self,
+        cx: &mut crate::context::UpdateCx,
+        state: Box<dyn std::any::Any>,
+    ) {
         if let Ok(val) = state.downcast::<(Vec<ViewId>, Scope)>() {
             let old_child_scope = self.child_scope;
             let (old_children, child_scope) = *val;

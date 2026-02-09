@@ -75,8 +75,12 @@ impl VelloRenderer {
         let texture_format = surface_caps
             .formats
             .into_iter()
-            .find(|it| matches!(it, TextureFormat::Rgba8Unorm | TextureFormat::Bgra8Unorm))
-            .ok_or_else(|| anyhow::anyhow!("surface should support Rgba8Unorm or Bgra8Unorm"))?;
+            .find(|it| {
+                matches!(it, TextureFormat::Rgba8Unorm | TextureFormat::Bgra8Unorm)
+            })
+            .ok_or_else(|| {
+                anyhow::anyhow!("surface should support Rgba8Unorm or Bgra8Unorm")
+            })?;
 
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -101,12 +105,14 @@ impl VelloRenderer {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
+            usage: wgpu::TextureUsages::STORAGE_BINDING
+                | wgpu::TextureUsages::TEXTURE_BINDING,
             format: TextureFormat::Rgba8Unorm,
             view_formats: &[],
         });
 
-        let target_view = target_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let target_view =
+            target_texture.create_view(&wgpu::TextureViewDescriptor::default());
 
         let render_surface = RenderSurface {
             surface,
@@ -146,22 +152,26 @@ impl VelloRenderer {
     }
 
     pub fn resize(&mut self, width: u32, height: u32, scale: f64) {
-        if width != self.surface.config.width || height != self.surface.config.height {
-            let target_texture = self.device.create_texture(&wgpu::TextureDescriptor {
-                label: None,
-                size: wgpu::Extent3d {
-                    width,
-                    height,
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
-                format: TextureFormat::Rgba8Unorm,
-                view_formats: &[],
-            });
-            let target_view = target_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        if width != self.surface.config.width || height != self.surface.config.height
+        {
+            let target_texture =
+                self.device.create_texture(&wgpu::TextureDescriptor {
+                    label: None,
+                    size: wgpu::Extent3d {
+                        width,
+                        height,
+                        depth_or_array_layers: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    usage: wgpu::TextureUsages::STORAGE_BINDING
+                        | wgpu::TextureUsages::TEXTURE_BINDING,
+                    format: TextureFormat::Rgba8Unorm,
+                    view_formats: &[],
+                });
+            let target_view =
+                target_texture.create_view(&wgpu::TextureViewDescriptor::default());
             self.surface.target_texture = target_texture;
             self.surface.target_view = target_view;
             self.surface.config.width = width;
@@ -251,7 +261,12 @@ impl Renderer for VelloRenderer {
         }
     }
 
-    fn fill<'b>(&mut self, path: &impl Shape, brush: impl Into<BrushRef<'b>>, blur_radius: f64) {
+    fn fill<'b>(
+        &mut self,
+        path: &impl Shape,
+        brush: impl Into<BrushRef<'b>>,
+        blur_radius: f64,
+    ) {
         let brush: BrushRef<'b> = brush.into();
 
         // For solid colors with specific shapes, use optimized methods
@@ -417,7 +432,13 @@ impl Renderer for VelloRenderer {
                         scene.append(&vello_svg::render_tree(svg.tree), None);
                     },
                     move |scene| {
-                        scene.fill(Fill::NonZero, Affine::IDENTITY, brush, None, &rect);
+                        scene.fill(
+                            Fill::NonZero,
+                            Affine::IDENTITY,
+                            brush,
+                            None,
+                            &rect,
+                        );
                     },
                 )
             },
@@ -479,11 +500,11 @@ impl Renderer for VelloRenderer {
                     .unwrap();
 
                 // Perform the copy
-                let mut encoder =
-                    self.device
-                        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                            label: Some("Surface Blit"),
-                        });
+                let mut encoder = self.device.create_command_encoder(
+                    &wgpu::CommandEncoderDescriptor {
+                        label: Some("Surface Blit"),
+                    },
+                );
 
                 self.surface.blitter.copy(
                     &self.device,
@@ -692,8 +713,10 @@ impl VelloRenderer {
             let font_data = font.data();
             let font_index = face.index;
             drop(font_system);
-            let font =
-                vello::peniko::Font::new(Blob::new(Arc::new(font_data.to_vec())), font_index);
+            let font = vello::peniko::Font::new(
+                Blob::new(Arc::new(font_data.to_vec())),
+                font_index,
+            );
             self.font_cache.insert(font_id, font.clone());
             font
         })

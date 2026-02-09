@@ -62,7 +62,8 @@ fn snap_to_soft_tab_logic(
     assert!(tab_width >= 1);
 
     // Number of spaces, ignoring incomplete soft tabs.
-    let space_count = (count_spaces_from(text, start_line_offset) / tab_width) * tab_width;
+    let space_count =
+        (count_spaces_from(text, start_line_offset) / tab_width) * tab_width;
 
     // If we're past the soft tabs, we don't need to snap.
     if offset_or_col >= space_count {
@@ -149,11 +150,21 @@ mod tests {
                 test_case.1
             );
             assert_eq!(
-                snap_to_soft_tab(&text, test_case.0, SnapDirection::Nearest, tab_width),
+                snap_to_soft_tab(
+                    &text,
+                    test_case.0,
+                    SnapDirection::Nearest,
+                    tab_width
+                ),
                 test_case.2
             );
             assert_eq!(
-                snap_to_soft_tab(&text, test_case.0, SnapDirection::Right, tab_width),
+                snap_to_soft_tab(
+                    &text,
+                    test_case.0,
+                    SnapDirection::Right,
+                    tab_width
+                ),
                 test_case.3
             );
         }

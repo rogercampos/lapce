@@ -37,7 +37,8 @@ pub(crate) fn default_theme() -> Theme {
     let light_hover_bg_color = Color::from_rgb8(250, 252, 248);
     let light_focus_hover_bg_color = Color::from_rgb8(250, 249, 251);
 
-    let focus_applied_style = Style::new().border_color(Color::from_rgb8(114, 74, 140));
+    let focus_applied_style =
+        Style::new().border_color(Color::from_rgb8(114, 74, 140));
 
     let focus_visible_applied_style = Style::new().outline(3.0);
 
@@ -47,7 +48,9 @@ pub(crate) fn default_theme() -> Theme {
         .focus_visible(|_| focus_visible_applied_style.clone());
 
     let border_style = Style::new()
-        .disabled(|s| s.border_color(Color::from_rgb8(131, 145, 123).with_alpha(0.3)))
+        .disabled(|s| {
+            s.border_color(Color::from_rgb8(131, 145, 123).with_alpha(0.3))
+        })
         .border(1.0)
         .border_color(border)
         .padding(padding)
@@ -106,7 +109,9 @@ pub(crate) fn default_theme() -> Theme {
             s.color(palette::css::GRAY).class(CheckboxClass, |s| {
                 s.background(Color::from_rgb8(180, 188, 175).with_alpha(0.3))
                     .color(palette::css::GRAY)
-                    .hover(|s| s.background(Color::from_rgb8(180, 188, 175).with_alpha(0.3)))
+                    .hover(|s| {
+                        s.background(Color::from_rgb8(180, 188, 175).with_alpha(0.3))
+                    })
             })
         })
         .apply(focus_style.clone());
@@ -155,7 +160,9 @@ pub(crate) fn default_theme() -> Theme {
             s.color(palette::css::GRAY).class(RadioButtonClass, |s| {
                 s.background(Color::from_rgb8(180, 188, 175).with_alpha(0.3))
                     .color(palette::css::GRAY)
-                    .hover(|s| s.background(Color::from_rgb8(180, 188, 175).with_alpha(0.3)))
+                    .hover(|s| {
+                        s.background(Color::from_rgb8(180, 188, 175).with_alpha(0.3))
+                    })
             })
         })
         .apply(focus_style.clone());
@@ -265,10 +272,9 @@ pub(crate) fn default_theme() -> Theme {
                 .box_shadow_color(palette::css::BLACK.with_alpha(0.2))
         })
         .class(dropdown::DropdownClass, |s| {
-            s.width(75)
-                .padding(3)
-                .apply(border_style)
-                .class(scroll::ScrollClass, |s| {
+            s.width(75).padding(3).apply(border_style).class(
+                scroll::ScrollClass,
+                |s| {
                     s.width_full()
                         .margin_top(3)
                         .padding_vert(3)
@@ -282,7 +288,8 @@ pub(crate) fn default_theme() -> Theme {
                         .class(ListItemClass, |s| {
                             s.margin_horiz(3).padding(3).items_center()
                         })
-                })
+                },
+            )
         })
         .font_size(FONT_SIZE)
         .color(palette::css::BLACK);

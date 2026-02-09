@@ -29,7 +29,8 @@ fn child_view() -> impl IntoView {
         .style(|s| s.border(1.0).border_radius(8.0).height(64.0).width(64.0)),
         h_stack((
             v_stack((
-                img(move || ferris_png.to_vec()).style(|s| s.width(69.0).height(45.9)),
+                img(move || ferris_png.to_vec())
+                    .style(|s| s.width(69.0).height(45.9)),
                 "PNG".style(|s| s.justify_center()),
             )),
             v_stack((
@@ -52,7 +53,8 @@ fn child_view() -> impl IntoView {
 }
 
 fn app_view() -> impl IntoView {
-    let (view_transform, set_view_transform) = create_signal(kurbo::Affine::default());
+    let (view_transform, set_view_transform) =
+        create_signal(kurbo::Affine::default());
 
     pan_zoom_view(
         view_transform.get(),

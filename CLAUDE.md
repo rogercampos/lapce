@@ -1,5 +1,7 @@
 # Lapce Developer Guide
 
+**Important:** Always run `cargo fmt --all` after finishing any code changes to ensure consistent formatting.
+
 ## Build & Run
 
 ```bash
@@ -9,6 +11,9 @@ cargo run --profile fastdev --bin lapce
 
 # Release build
 cargo build --release
+
+# Run all CI checks locally (fmt, clippy, build, doc tests)
+make ci
 ```
 
 Rust toolchain must be installed via rustup. On macOS, the stable toolchain is at `~/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo`.

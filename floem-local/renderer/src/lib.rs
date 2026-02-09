@@ -45,7 +45,12 @@ pub trait Renderer {
     /// Fill a [`Shape`], using the [non-zero fill rule].
     ///
     /// [non-zero fill rule]: https://en.wikipedia.org/wiki/Nonzero-rule
-    fn fill<'b>(&mut self, path: &impl Shape, brush: impl Into<BrushRef<'b>>, blur_radius: f64);
+    fn fill<'b>(
+        &mut self,
+        path: &impl Shape,
+        brush: impl Into<BrushRef<'b>>,
+        blur_radius: f64,
+    );
 
     /// Push a layer (This is not supported with Vger)
     fn push_layer(
@@ -73,7 +78,12 @@ pub trait Renderer {
         pos: impl Into<Point>,
     );
 
-    fn draw_svg<'b>(&mut self, svg: Svg<'b>, rect: Rect, brush: Option<impl Into<BrushRef<'b>>>);
+    fn draw_svg<'b>(
+        &mut self,
+        svg: Svg<'b>,
+        rect: Rect,
+        brush: Option<impl Into<BrushRef<'b>>>,
+    );
 
     fn draw_img(&mut self, img: Img<'_>, rect: Rect);
 

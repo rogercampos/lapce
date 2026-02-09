@@ -7,8 +7,8 @@ use std::{
 };
 
 use floem_reactive::{
-    as_child_of_current_scope, create_effect, create_signal, ReadSignal, RwSignal, Scope,
-    SignalGet, SignalTrack, SignalUpdate, SignalWith, WriteSignal,
+    as_child_of_current_scope, create_effect, create_signal, ReadSignal, RwSignal,
+    Scope, SignalGet, SignalTrack, SignalUpdate, SignalWith, WriteSignal,
 };
 use peniko::kurbo::{Rect, Size};
 use smallvec::SmallVec;
@@ -110,7 +110,10 @@ impl<T: std::clone::Clone> VirtualStack<T> {
     }
 
     // For types that are hashable but need custom view
-    pub fn with_view<DF, I, V>(data_fn: DF, view_fn: impl Fn(T) -> V + 'static) -> VirtualStack<T>
+    pub fn with_view<DF, I, V>(
+        data_fn: DF,
+        view_fn: impl Fn(T) -> V + 'static,
+    ) -> VirtualStack<T>
     where
         DF: Fn() -> I + 'static,
         I: VirtualVector<T>,
@@ -129,7 +132,10 @@ impl<T: std::clone::Clone> VirtualStack<T> {
     }
 
     // For types that implement IntoView but need custom keys
-    pub fn with_key<DF, I, K>(data_fn: DF, key_fn: impl Fn(&T) -> K + 'static) -> VirtualStack<T>
+    pub fn with_key<DF, I, K>(
+        data_fn: DF,
+        key_fn: impl Fn(&T) -> K + 'static,
+    ) -> VirtualStack<T>
     where
         DF: Fn() -> I + 'static,
         I: VirtualVector<T>,
@@ -139,7 +145,11 @@ impl<T: std::clone::Clone> VirtualStack<T> {
         Self::full(data_fn, key_fn, |item| item.into_view())
     }
 
-    pub fn full<DF, I, KF, K, VF, V>(data_fn: DF, key_fn: KF, view_fn: VF) -> VirtualStack<T>
+    pub fn full<DF, I, KF, K, VF, V>(
+        data_fn: DF,
+        key_fn: KF,
+        view_fn: VF,
+    ) -> VirtualStack<T>
     where
         DF: Fn() -> I + 'static,
         I: VirtualVector<T>,
@@ -233,8 +243,12 @@ where
             FlexDirection::Row | FlexDirection::RowReverse => viewport.x0,
         };
         let max = match direction.get() {
-            FlexDirection::Column | FlexDirection::ColumnReverse => viewport.height() + viewport.y0,
-            FlexDirection::Row | FlexDirection::RowReverse => viewport.width() + viewport.x0,
+            FlexDirection::Column | FlexDirection::ColumnReverse => {
+                viewport.height() + viewport.y0
+            }
+            FlexDirection::Row | FlexDirection::RowReverse => {
+                viewport.width() + viewport.x0
+            }
         };
         let mut items = Vec::new();
 
@@ -317,29 +331,35 @@ where
         });
 
         let hashed_items = items.iter().map(&key_fn).collect::<FxIndexSet<_>>();
-        let (prev_before_size, prev_content_size, diff) =
-            if let Some((prev_before_size, prev_content_size, HashRun(prev_hash_run))) = prev {
-                let mut diff = diff(&prev_hash_run, &hashed_items);
-                let mut items = items
-                    .into_iter()
-                    .map(|i| Some(i))
-                    .collect::<SmallVec<[Option<_>; 128]>>();
-                for added in &mut diff.added {
-                    added.view = Some(items[added.at].take().unwrap());
-                }
-                (prev_before_size, prev_content_size, diff)
-            } else {
-                let mut diff = Diff::default();
-                for (i, item) in items.into_iter().enumerate() {
-                    diff.added.push(DiffOpAdd {
-                        at: i,
-                        view: Some(item),
-                    });
-                }
-                (0.0, 0.0, diff)
-            };
+        let (prev_before_size, prev_content_size, diff) = if let Some((
+            prev_before_size,
+            prev_content_size,
+            HashRun(prev_hash_run),
+        )) = prev
+        {
+            let mut diff = diff(&prev_hash_run, &hashed_items);
+            let mut items = items
+                .into_iter()
+                .map(|i| Some(i))
+                .collect::<SmallVec<[Option<_>; 128]>>();
+            for added in &mut diff.added {
+                added.view = Some(items[added.at].take().unwrap());
+            }
+            (prev_before_size, prev_content_size, diff)
+        } else {
+            let mut diff = Diff::default();
+            for (i, item) in items.into_iter().enumerate() {
+                diff.added.push(DiffOpAdd {
+                    at: i,
+                    view: Some(item),
+                });
+            }
+            (0.0, 0.0, diff)
+        };
 
-        if !diff.is_empty() || prev_before_size != before_size || prev_content_size != content_size
+        if !diff.is_empty()
+            || prev_before_size != before_size
+            || prev_content_size != content_size
         {
             id.update_state(VirtualStackState {
                 diff,
@@ -351,7 +371,8 @@ where
         (before_size, content_size, HashRun(hashed_items))
     });
 
-    let view_fn = Box::new(as_child_of_current_scope(move |e| view_fn(e).into_any()));
+    let view_fn =
+        Box::new(as_child_of_current_scope(move |e| view_fn(e).into_any()));
 
     VirtualStack {
         id,
@@ -380,7 +401,11 @@ impl<T> View for VirtualStack<T> {
         "VirtualStack".into()
     }
 
-    fn update(&mut self, cx: &mut crate::context::UpdateCx, state: Box<dyn std::any::Any>) {
+    fn update(
+        &mut self,
+        cx: &mut crate::context::UpdateCx,
+        state: Box<dyn std::any::Any>,
+    ) {
         if state.is::<VirtualStackState<T>>() {
             if let Ok(state) = state.downcast::<VirtualStackState<T>>() {
                 if self.before_size == state.before_size
@@ -472,10 +497,12 @@ impl<T> View for VirtualStack<T> {
                                 height: Dimension::length(self.before_size as f32),
                             }
                         }
-                        FlexDirection::Row | FlexDirection::RowReverse => taffy::prelude::Size {
-                            width: Dimension::length(self.before_size as f32),
-                            height: Dimension::auto(),
-                        },
+                        FlexDirection::Row | FlexDirection::RowReverse => {
+                            taffy::prelude::Size {
+                                width: Dimension::length(self.before_size as f32),
+                                height: Dimension::auto(),
+                            }
+                        }
                     },
                     ..Default::default()
                 },
@@ -503,10 +530,15 @@ impl<T> View for VirtualStack<T> {
                         .get_layout()
                         .map(|layout| layout.size)
                         .unwrap_or_default();
-                    let rect = Size::new(size.width as f64, size.height as f64).to_rect();
+                    let rect =
+                        Size::new(size.width as f64, size.height as f64).to_rect();
                     let relevant_size = match self.direction.get_untracked() {
-                        FlexDirection::Column | FlexDirection::ColumnReverse => rect.height(),
-                        FlexDirection::Row | FlexDirection::RowReverse => rect.width(),
+                        FlexDirection::Column | FlexDirection::ColumnReverse => {
+                            rect.height()
+                        }
+                        FlexDirection::Row | FlexDirection::RowReverse => {
+                            rect.width()
+                        }
                     };
                     Some(relevant_size)
                 } else {
@@ -579,7 +611,11 @@ impl<T: Clone> VirtualVector<T> for im::Vector<T> {
 
 impl<T> VirtualVector<T> for Range<T>
 where
-    T: Copy + std::ops::Sub<Output = T> + std::ops::Add<Output = T> + PartialOrd + From<usize>,
+    T: Copy
+        + std::ops::Sub<Output = T>
+        + std::ops::Add<Output = T>
+        + PartialOrd
+        + From<usize>,
     usize: From<T>,
     std::ops::Range<T>: Iterator<Item = T>,
 {
@@ -598,7 +634,11 @@ where
 }
 impl<T> VirtualVector<T> for RangeInclusive<T>
 where
-    T: Copy + std::ops::Sub<Output = T> + std::ops::Add<Output = T> + PartialOrd + From<usize>,
+    T: Copy
+        + std::ops::Sub<Output = T>
+        + std::ops::Add<Output = T>
+        + PartialOrd
+        + From<usize>,
     usize: From<T>,
     std::ops::Range<T>: Iterator<Item = T>,
 {

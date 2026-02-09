@@ -62,8 +62,9 @@ use self::{
     text::{Document, Preedit, PreeditData, RenderWhitespace, Styling, WrapMethod},
     view::{LineInfo, ScreenLines, ScreenLinesBase},
     visual_line::{
-        hit_position_aff, ConfigId, FontSizeCacheId, LayoutEvent, LineFontSizeProvider, Lines,
-        RVLine, ResolvedWrap, TextLayoutProvider, VLine, VLineInfo,
+        hit_position_aff, ConfigId, FontSizeCacheId, LayoutEvent,
+        LineFontSizeProvider, Lines, RVLine, ResolvedWrap, TextLayoutProvider,
+        VLine, VLineInfo,
     },
 };
 
@@ -198,7 +199,12 @@ impl Editor {
     /// Create a new editor into the given document, using the styling.  
     /// `doc`: The backing [`Document`], such as [`TextDocument`](self::text_document::TextDocument)
     /// `style`: How the editor should be styled, such as [`SimpleStyling`](self::text::SimpleStyling)
-    pub fn new(cx: Scope, doc: Rc<dyn Document>, style: Rc<dyn Styling>, modal: bool) -> Editor {
+    pub fn new(
+        cx: Scope,
+        doc: Rc<dyn Document>,
+        style: Rc<dyn Styling>,
+        modal: bool,
+    ) -> Editor {
         let id = EditorId::next();
         Editor::new_id(cx, id, doc, style, modal)
     }
@@ -263,7 +269,8 @@ impl Editor {
             doc: doc.read_only(),
         }));
         let lines = Rc::new(Lines::new(cx, font_sizes));
-        let screen_lines = cx.create_rw_signal(ScreenLines::new(cx, viewport.get_untracked()));
+        let screen_lines =
+            cx.create_rw_signal(ScreenLines::new(cx, viewport.get_untracked()));
 
         let editor_style = cx.create_rw_signal(EditorStyle::default());
 
@@ -332,7 +339,11 @@ impl Editor {
     }
 
     /// Swap the underlying document out
-    pub fn update_doc(&self, doc: Rc<dyn Document>, styling: Option<Rc<dyn Styling>>) {
+    pub fn update_doc(
+        &self,
+        doc: Rc<dyn Document>,
+        styling: Option<Rc<dyn Styling>>,
+    ) {
         batch(|| {
             // Get rid of all the effects
             self.effects_cx.get().dispose();
@@ -444,7 +455,12 @@ impl Editor {
         self.doc.with_untracked(|doc| doc.preedit())
     }
 
-    pub fn set_preedit(&self, text: String, cursor: Option<(usize, usize)>, offset: usize) {
+    pub fn set_preedit(
+        &self,
+        text: String,
+        cursor: Option<(usize, usize)>,
+        offset: usize,
+    ) {
         batch(|| {
             self.preedit().preedit.set(Some(Preedit {
                 text,
@@ -555,9 +571,12 @@ impl Editor {
     pub fn pointer_move(&self, pointer_event: &PointerMoveEvent) {
         let mode = self.cursor.with_untracked(|c| c.get_mode());
         let (offset, _is_inside) = self.offset_of_point(mode, pointer_event.pos);
-        if self.active.get_untracked() && self.cursor.with_untracked(|c| c.offset()) != offset {
-            self.cursor
-                .update(|cursor| cursor.set_offset(offset, true, pointer_event.modifiers.alt()));
+        if self.active.get_untracked()
+            && self.cursor.with_untracked(|c| c.offset()) != offset
+        {
+            self.cursor.update(|cursor| {
+                cursor.set_offset(offset, true, pointer_event.modifiers.alt())
+            });
         }
     }
 
@@ -607,7 +626,8 @@ impl Editor {
 
         let current_line_position = line as f64 * line_height;
 
-        let desired_top = current_line_position - viewport_center + (line_height / 2.0);
+        let desired_top =
+            current_line_position - viewport_center + (line_height / 2.0);
 
         let scroll_delta = desired_top - viewport.y0;
 
@@ -635,7 +655,8 @@ impl Editor {
         let offset = self.cursor.with_untracked(|cursor| cursor.offset());
         let (line, _col) = self.offset_to_line_col(offset);
 
-        let desired_bottom = (line + scroll_off + 1) as f64 * line_height - viewport.height();
+        let desired_bottom =
+            (line + scroll_off + 1) as f64 * line_height - viewport.height();
 
         let scroll_delta = desired_bottom - viewport.y0;
 
@@ -826,17 +847,29 @@ impl Editor {
 
     /// Get the visual line and column of the given offset.  
     /// The column is before phantom text is applied.
-    pub fn vline_col_of_offset(&self, offset: usize, affinity: CursorAffinity) -> (VLine, usize) {
+    pub fn vline_col_of_offset(
+        &self,
+        offset: usize,
+        affinity: CursorAffinity,
+    ) -> (VLine, usize) {
         self.lines
             .vline_col_of_offset(&self.text_prov(), offset, affinity)
     }
 
-    pub fn rvline_of_offset(&self, offset: usize, affinity: CursorAffinity) -> RVLine {
+    pub fn rvline_of_offset(
+        &self,
+        offset: usize,
+        affinity: CursorAffinity,
+    ) -> RVLine {
         self.lines
             .rvline_of_offset(&self.text_prov(), offset, affinity)
     }
 
-    pub fn rvline_col_of_offset(&self, offset: usize, affinity: CursorAffinity) -> (RVLine, usize) {
+    pub fn rvline_col_of_offset(
+        &self,
+        offset: usize,
+        affinity: CursorAffinity,
+    ) -> (RVLine, usize) {
         self.lines
             .rvline_col_of_offset(&self.text_prov(), offset, affinity)
     }
@@ -868,7 +901,11 @@ impl Editor {
         self.iter_rvlines(false, rvline).next().unwrap()
     }
 
-    pub fn rvline_info_of_offset(&self, offset: usize, affinity: CursorAffinity) -> VLineInfo<()> {
+    pub fn rvline_info_of_offset(
+        &self,
+        offset: usize,
+        affinity: CursorAffinity,
+    ) -> VLineInfo<()> {
         let rvline = self.rvline_of_offset(offset, affinity);
         self.rvline_info(rvline)
     }
@@ -879,7 +916,11 @@ impl Editor {
     }
 
     /// Get the last column in the overall line of the visual line
-    pub fn last_col<T: std::fmt::Debug>(&self, info: VLineInfo<T>, caret: bool) -> usize {
+    pub fn last_col<T: std::fmt::Debug>(
+        &self,
+        info: VLineInfo<T>,
+        caret: bool,
+    ) -> usize {
         info.last_col(&self.text_prov(), caret)
     }
 
@@ -891,7 +932,11 @@ impl Editor {
 
     /// Returns the point into the text layout of the line at the given offset.
     /// `x` being the leading edge of the character, and `y` being the baseline.
-    pub fn line_point_of_offset(&self, offset: usize, affinity: CursorAffinity) -> Point {
+    pub fn line_point_of_offset(
+        &self,
+        offset: usize,
+        affinity: CursorAffinity,
+    ) -> Point {
         let (line, col) = self.offset_to_line_col(offset);
         self.line_point_of_line_col(line, col, affinity, false)
     }
@@ -924,13 +969,18 @@ impl Editor {
     }
 
     /// Get the (point above, point below) of a particular offset within the editor.
-    pub fn points_of_offset(&self, offset: usize, affinity: CursorAffinity) -> (Point, Point) {
+    pub fn points_of_offset(
+        &self,
+        offset: usize,
+        affinity: CursorAffinity,
+    ) -> (Point, Point) {
         let line = self.line_of_offset(offset);
         let line_height = f64::from(self.style().line_height(self.id(), line));
 
         let info = self.screen_lines.with_untracked(|sl| {
             sl.iter_line_info().find(|info| {
-                info.vline_info.interval.start <= offset && offset <= info.vline_info.interval.end
+                info.vline_info.interval.start <= offset
+                    && offset <= info.vline_info.interval.end
             })
         });
         let Some(info) = info else {
@@ -965,13 +1015,16 @@ impl Editor {
             self.screen_lines
                 .with_untracked(|sl| {
                     sl.iter_line_info().find(|info| {
-                        info.vline_y <= point.y && info.vline_y + line_height >= point.y
+                        info.vline_y <= point.y
+                            && info.vline_y + line_height >= point.y
                     })
                 })
                 .map(|info| info.vline_info)
         };
         let info = info.unwrap_or_else(|| {
-            for (y_idx, info) in self.iter_rvlines(false, RVLine::default()).enumerate() {
+            for (y_idx, info) in
+                self.iter_rvlines(false, RVLine::default()).enumerate()
+            {
                 let vline_y = y_idx as f64 * line_height;
                 if vline_y <= point.y && vline_y + line_height >= point.y {
                     return info;
@@ -995,7 +1048,11 @@ impl Editor {
     /// The boolean indicates whether the point is within the text bounds.
     /// Points outside of vertical bounds will return the last line.
     /// Points outside of horizontal bounds will return the last column on the line.
-    pub fn line_col_of_point(&self, mode: Mode, point: Point) -> ((usize, usize), bool) {
+    pub fn line_col_of_point(
+        &self,
+        mode: Mode,
+        point: Point,
+    ) -> ((usize, usize), bool) {
         // TODO: this assumes that line height is constant!
         let line_height = f64::from(self.style().line_height(self.id(), 0));
         let info = if point.y <= 0.0 {
@@ -1004,13 +1061,16 @@ impl Editor {
             self.screen_lines
                 .with_untracked(|sl| {
                     sl.iter_line_info().find(|info| {
-                        info.vline_y <= point.y && info.vline_y + line_height >= point.y
+                        info.vline_y <= point.y
+                            && info.vline_y + line_height >= point.y
                     })
                 })
                 .map(|info| info.vline_info)
         };
         let info = info.unwrap_or_else(|| {
-            for (y_idx, info) in self.iter_rvlines(false, RVLine::default()).enumerate() {
+            for (y_idx, info) in
+                self.iter_rvlines(false, RVLine::default()).enumerate()
+            {
                 let vline_y = y_idx as f64 * line_height;
                 if vline_y <= point.y && vline_y + line_height >= point.y {
                     return info;
@@ -1060,7 +1120,12 @@ impl Editor {
     }
 
     // TODO: colposition probably has issues with wrapping?
-    pub fn line_horiz_col(&self, line: usize, horiz: &ColPosition, caret: bool) -> usize {
+    pub fn line_horiz_col(
+        &self,
+        line: usize,
+        horiz: &ColPosition,
+        caret: bool,
+    ) -> usize {
         match *horiz {
             ColPosition::Col(x) => {
                 // TODO: won't this be incorrect with phantom text? Shouldn't this just use
@@ -1074,7 +1139,9 @@ impl Editor {
             }
             ColPosition::End => self.line_end_col(line, caret),
             ColPosition::Start => 0,
-            ColPosition::FirstNonBlank => self.first_non_blank_character_on_line(line),
+            ColPosition::FirstNonBlank => {
+                self.first_non_blank_character_on_line(line)
+            }
         }
     }
 
@@ -1094,9 +1161,12 @@ impl Editor {
                     .layout_runs()
                     .nth(line_index)
                     .map(|run| run.line_y)
-                    .or_else(|| text_layout.text.layout_runs().last().map(|run| run.line_y))
+                    .or_else(|| {
+                        text_layout.text.layout_runs().last().map(|run| run.line_y)
+                    })
                     .unwrap_or(0.0);
-                let hit_point = text_layout.text.hit_point(Point::new(x, y_pos as f64));
+                let hit_point =
+                    text_layout.text.hit_point(Point::new(x, y_pos as f64));
                 let n = hit_point.index;
                 let col = text_layout.phantom_text.before_col(n);
 
@@ -1133,10 +1203,19 @@ impl Editor {
         self.text_layout_trigger(line, true)
     }
 
-    pub fn text_layout_trigger(&self, line: usize, trigger: bool) -> Arc<TextLayoutLine> {
+    pub fn text_layout_trigger(
+        &self,
+        line: usize,
+        trigger: bool,
+    ) -> Arc<TextLayoutLine> {
         let cache_rev = self.doc().cache_rev().get_untracked();
-        self.lines
-            .get_init_text_layout(cache_rev, self.config_id(), self, line, trigger)
+        self.lines.get_init_text_layout(
+            cache_rev,
+            self.config_id(),
+            self,
+            line,
+            trigger,
+        )
     }
 
     fn try_get_text_layout(&self, line: usize) -> Option<Arc<TextLayoutLine>> {
@@ -1195,7 +1274,9 @@ impl Editor {
                 }
                 _ => {
                     if (char_found && render_between)
-                        || (char_found && render_boundary && whitespace_buffer.len() > 1)
+                        || (char_found
+                            && render_boundary
+                            && whitespace_buffer.len() > 1)
                         || (!char_found && render_leading)
                     {
                         rendered_whitespaces.extend(whitespace_buffer.iter());
@@ -1239,13 +1320,14 @@ impl TextLayoutProvider for Editor {
         // and the content without the newline characters
         // TODO: cache or add some way that text layout is created to auto insert the spaces instead
         // though we immediately combine with phantom text so that's a thing.
-        let line_content = if let Some(s) = line_content_original.strip_suffix("\r\n") {
-            format!("{s}  ")
-        } else if let Some(s) = line_content_original.strip_suffix('\n') {
-            format!("{s} ",)
-        } else {
-            line_content_original.to_string()
-        };
+        let line_content =
+            if let Some(s) = line_content_original.strip_suffix("\r\n") {
+                format!("{s}  ")
+            } else if let Some(s) = line_content_original.strip_suffix('\n') {
+                format!("{s} ",)
+            } else {
+                line_content_original.to_string()
+            };
         // Combine the phantom text with the line content
         let phantom_text = doc.phantom_text(edid, &self.es.get_untracked(), line);
         let line_content = phantom_text.combine_with_text(&line_content);
@@ -1318,13 +1400,14 @@ impl TextLayoutProvider for Editor {
         let indent = if indent_line != line {
             // TODO: This creates the layout if it isn't already cached, but it doesn't cache the
             // result because the current method of managing the cache is not very smart.
-            let layout = self.try_get_text_layout(indent_line).unwrap_or_else(|| {
-                self.new_text_layout(
-                    indent_line,
-                    style.font_size(edid, indent_line),
-                    self.lines.wrap(),
-                )
-            });
+            let layout =
+                self.try_get_text_layout(indent_line).unwrap_or_else(|| {
+                    self.new_text_layout(
+                        indent_line,
+                        style.font_size(edid, indent_line),
+                        self.lines.wrap(),
+                    )
+                });
             layout.indent + 1.0
         } else {
             let offset = text.first_non_blank_character_on_line(indent_line);
@@ -1501,7 +1584,8 @@ pub fn normal_compute_screen_lines(
     // TODO: don't assume universal line height!
     let line_height = style.line_height(editor.id(), 0);
 
-    let (y0, y1) = base.with_untracked(|base| (base.active_viewport.y0, base.active_viewport.y1));
+    let (y0, y1) = base
+        .with_untracked(|base| (base.active_viewport.y0, base.active_viewport.y1));
     // Get the start and end (visual) lines that are visible in the viewport
     let min_vline = VLine((y0 / line_height as f64).floor() as usize);
     let max_vline = VLine((y1 / line_height as f64).ceil() as usize);
@@ -1539,7 +1623,8 @@ pub fn normal_compute_screen_lines(
     for (i, vline_info) in iter.enumerate() {
         rvlines.push(vline_info.rvline);
 
-        let line_height = f64::from(style.line_height(editor.id(), vline_info.rvline.line));
+        let line_height =
+            f64::from(style.line_height(editor.id(), vline_info.rvline.line));
 
         let y_idx = min_vline.get() + i;
         let vline_y = y_idx as f64 * line_height;
@@ -1593,15 +1678,17 @@ impl CursorInfo {
         let blink_interval = (info.blink_interval)();
         if blink_interval > 0 && (info.should_blink)() {
             let blink_timer = info.blink_timer;
-            let timer_token =
-                exec_after(Duration::from_millis(blink_interval), move |timer_token| {
+            let timer_token = exec_after(
+                Duration::from_millis(blink_interval),
+                move |timer_token| {
                     if info.blink_timer.try_get_untracked() == Some(timer_token) {
                         info.hidden.update(|hide| {
                             *hide = !*hide;
                         });
                         info.blink();
                     }
-                });
+                },
+            );
             blink_timer.set(timer_token);
         }
     }

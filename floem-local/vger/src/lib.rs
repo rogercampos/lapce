@@ -17,7 +17,8 @@ use peniko::{
     BrushRef, Color, GradientKind,
 };
 use wgpu::{
-    Adapter, Device, DeviceType, Queue, StoreOp, Surface, SurfaceConfiguration, TextureFormat,
+    Adapter, Device, DeviceType, Queue, StoreOp, Surface, SurfaceConfiguration,
+    TextureFormat,
 };
 
 pub struct VgerRenderer {
@@ -76,8 +77,12 @@ impl VgerRenderer {
         let texture_format = surface_caps
             .formats
             .into_iter()
-            .find(|it| matches!(it, TextureFormat::Rgba8Unorm | TextureFormat::Bgra8Unorm))
-            .ok_or_else(|| anyhow::anyhow!("surface should support Rgba8Unorm or Bgra8Unorm"))?;
+            .find(|it| {
+                matches!(it, TextureFormat::Rgba8Unorm | TextureFormat::Bgra8Unorm)
+            })
+            .ok_or_else(|| {
+                anyhow::anyhow!("surface should support Rgba8Unorm or Bgra8Unorm")
+            })?;
 
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -91,7 +96,8 @@ impl VgerRenderer {
         };
         surface.configure(&device, &config);
 
-        let vger = floem_vger_rs::Vger::new(device.clone(), queue.clone(), texture_format);
+        let vger =
+            floem_vger_rs::Vger::new(device.clone(), queue.clone(), texture_format);
 
         Ok(Self {
             device,
@@ -132,7 +138,10 @@ impl VgerRenderer {
 }
 
 impl VgerRenderer {
-    fn brush_to_paint<'b>(&mut self, brush: impl Into<BrushRef<'b>>) -> Option<PaintIndex> {
+    fn brush_to_paint<'b>(
+        &mut self,
+        brush: impl Into<BrushRef<'b>>,
+    ) -> Option<PaintIndex> {
         let paint = match brush.into() {
             BrushRef::Solid(color) => self.vger.color_paint(vger_color(color)),
             BrushRef::Gradient(g) => match g.kind {
@@ -150,8 +159,13 @@ impl VgerRenderer {
                         end.x as f32 * second_stop.offset,
                         end.y as f32 * second_stop.offset,
                     );
-                    self.vger
-                        .linear_gradient(start, end, inner_color, outer_color, 0.0)
+                    self.vger.linear_gradient(
+                        start,
+                        end,
+                        inner_color,
+                        outer_color,
+                        0.0,
+                    )
                 }
                 GradientKind::Radial { .. } => return None,
                 GradientKind::Sweep { .. } => return None,
@@ -198,7 +212,8 @@ impl VgerRenderer {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::COPY_SRC,
             label: Some("render_texture"),
             view_formats: &[wgpu::TextureFormat::Rgba8Unorm],
         };
@@ -255,7 +270,9 @@ impl VgerRenderer {
             if let Ok(r) = rx.try_recv() {
                 break r.ok()?;
             }
-            if let wgpu::MaintainResult::Ok = self.device.poll(wgpu::MaintainBase::Wait) {
+            if let wgpu::MaintainResult::Ok =
+                self.device.poll(wgpu::MaintainBase::Wait)
+            {
                 rx.recv().ok()?.ok()?;
                 break;
             }
@@ -402,7 +419,12 @@ impl Renderer for VgerRenderer {
         }
     }
 
-    fn fill<'b>(&mut self, path: &impl Shape, brush: impl Into<BrushRef<'b>>, blur_radius: f64) {
+    fn fill<'b>(
+        &mut self,
+        path: &impl Shape,
+        brush: impl Into<BrushRef<'b>>,
+        blur_radius: f64,
+    ) {
         let coeffs = self.transform.as_coeffs();
         let scale = (coeffs[0] + coeffs[3]) / 2. * self.scale;
         let paint = match self.brush_to_paint(brush) {
@@ -470,8 +492,10 @@ impl Renderer for VgerRenderer {
                         - cubic.p0.to_vec2()
                         - cubic.p3.to_vec2())
                         / 4.0;
-                    self.vger
-                        .quad_to(self.vger_point(q1.to_point()), self.vger_point(cubic.p3));
+                    self.vger.quad_to(
+                        self.vger_point(q1.to_point()),
+                        self.vger_point(cubic.p3),
+                    );
                 }
             }
         }
@@ -533,7 +557,8 @@ impl Renderer for VgerRenderer {
                 if let Some(paint) = self.brush_to_paint(color) {
                     let glyph_x = x as f32;
                     let glyph_y = y.round() as f32;
-                    let font_size = (glyph_run.font_size * (scale as f32)).round() as u32;
+                    let font_size =
+                        (glyph_run.font_size * (scale as f32)).round() as u32;
                     let (cache_key, new_x, new_y) = CacheKey::new(
                         glyph_run.font_id,
                         glyph_run.glyph_id,
@@ -570,9 +595,11 @@ impl Renderer for VgerRenderer {
 
         let origin = rect.origin();
         let transformed_x =
-            (transform[0] * origin.x + transform[2] * origin.y + transform[4]) * self.scale;
+            (transform[0] * origin.x + transform[2] * origin.y + transform[4])
+                * self.scale;
         let transformed_y =
-            (transform[1] * origin.x + transform[3] * origin.y + transform[5]) * self.scale;
+            (transform[1] * origin.x + transform[3] * origin.y + transform[5])
+                * self.scale;
 
         let x = transformed_x.round() as f32;
         let y = transformed_y.round() as f32;
@@ -608,9 +635,11 @@ impl Renderer for VgerRenderer {
 
         let origin = rect.origin();
         let transformed_x =
-            (transform[0] * origin.x + transform[2] * origin.y + transform[4]) * self.scale;
+            (transform[0] * origin.x + transform[2] * origin.y + transform[4])
+                * self.scale;
         let transformed_y =
-            (transform[1] * origin.x + transform[3] * origin.y + transform[5]) * self.scale;
+            (transform[1] * origin.x + transform[3] * origin.y + transform[5])
+                * self.scale;
 
         let x = transformed_x.round() as f32;
         let y = transformed_y.round() as f32;
@@ -635,7 +664,8 @@ impl Renderer for VgerRenderer {
                 let final_scale_x = svg_scale;
                 let final_scale_y = svg_scale;
 
-                let transform = tiny_skia::Transform::from_scale(final_scale_x, final_scale_y);
+                let transform =
+                    tiny_skia::Transform::from_scale(final_scale_x, final_scale_y);
 
                 resvg::render(svg.tree, transform, &mut img.as_mut());
 

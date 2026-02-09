@@ -1,4 +1,6 @@
-use std::{any::Any, cell::RefCell, collections::HashMap, fmt, marker::PhantomData, rc::Rc};
+use std::{
+    any::Any, cell::RefCell, collections::HashMap, fmt, marker::PhantomData, rc::Rc,
+};
 
 use crate::{
     create_effect, create_updater,
@@ -6,7 +8,8 @@ use crate::{
     memo::{create_memo, Memo},
     runtime::RUNTIME,
     signal::{
-        create_rw_signal, create_signal, NotThreadSafe, ReadSignal, RwSignal, Signal, WriteSignal,
+        create_rw_signal, create_signal, NotThreadSafe, ReadSignal, RwSignal,
+        Signal, WriteSignal,
     },
     trigger::{create_trigger, Trigger},
 };
@@ -153,7 +156,9 @@ where
 
 /// Wrap the closure so that whenever the closure runs, it will be under a child Scope
 /// of the current Scope
-pub fn as_child_of_current_scope<T, U>(f: impl Fn(T) -> U + 'static) -> impl Fn(T) -> (U, Scope)
+pub fn as_child_of_current_scope<T, U>(
+    f: impl Fn(T) -> U + 'static,
+) -> impl Fn(T) -> (U, Scope)
 where
     T: 'static,
 {

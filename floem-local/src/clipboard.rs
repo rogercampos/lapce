@@ -70,7 +70,9 @@ impl Clipboard {
             if let RawDisplayHandle::Wayland(display) = display {
                 use copypasta::wayland_clipboard;
                 let (selection, clipboard) =
-                    wayland_clipboard::create_clipboards_from_external(display.display.as_ptr());
+                    wayland_clipboard::create_clipboards_from_external(
+                        display.display.as_ptr(),
+                    );
                 return Self {
                     clipboard: Box::new(clipboard),
                     selection: Some(Box::new(selection)),
@@ -80,7 +82,9 @@ impl Clipboard {
             use copypasta::x11_clipboard::{Primary, X11ClipboardContext};
             Self {
                 clipboard: Box::new(ClipboardContext::new().unwrap()),
-                selection: Some(Box::new(X11ClipboardContext::<Primary>::new().unwrap())),
+                selection: Some(Box::new(
+                    X11ClipboardContext::<Primary>::new().unwrap(),
+                )),
             }
         }
 

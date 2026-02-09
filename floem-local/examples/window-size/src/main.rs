@@ -11,15 +11,17 @@ use floem::{
 fn app_view() -> impl IntoView {
     let (size, set_size) = create_signal(Size::default());
 
-    let view = v_stack((label(move || format!("{}", size.get())).style(|s| s.font_size(30.0)),))
-        .style(|s| {
-            s.flex_col()
-                .items_center()
-                .justify_center()
-                .width_full()
-                .height_full()
-                .row_gap(10.0)
-        });
+    let view = v_stack((
+        label(move || format!("{}", size.get())).style(|s| s.font_size(30.0)),
+    ))
+    .style(|s| {
+        s.flex_col()
+            .items_center()
+            .justify_center()
+            .width_full()
+            .height_full()
+            .row_gap(10.0)
+    });
 
     let id = view.id();
     view.on_event_stop(EventListener::KeyUp, move |e| {

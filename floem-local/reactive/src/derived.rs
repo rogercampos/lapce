@@ -1,7 +1,8 @@
 use std::marker::PhantomData;
 
 use crate::{
-    read::SignalTrack, signal::NotThreadSafe, RwSignal, SignalGet, SignalUpdate, SignalWith,
+    read::SignalTrack, signal::NotThreadSafe, RwSignal, SignalGet, SignalUpdate,
+    SignalWith,
 };
 
 /// A signal that is derived from an [RwSignal](super::RwSignal) but lets you specify getters and setters for the signal.
@@ -22,16 +23,25 @@ pub struct DerivedRwSignal<
     ts: PhantomData<NotThreadSafe>,
 }
 
-impl<T, O, GF: Fn(&T) -> O + Copy, UF: Fn(&O) -> T + Copy> Clone for DerivedRwSignal<T, O, GF, UF> {
+impl<T, O, GF: Fn(&T) -> O + Copy, UF: Fn(&O) -> T + Copy> Clone
+    for DerivedRwSignal<T, O, GF, UF>
+{
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<T, O, GF: Fn(&T) -> O + Copy, UF: Fn(&O) -> T + Copy> Copy for DerivedRwSignal<T, O, GF, UF> {}
-
-impl<T: Clone + 'static, O: Clone, GF: Fn(&T) -> O + Copy, UF: Fn(&O) -> T + Copy> SignalGet<O>
+impl<T, O, GF: Fn(&T) -> O + Copy, UF: Fn(&O) -> T + Copy> Copy
     for DerivedRwSignal<T, O, GF, UF>
+{
+}
+
+impl<
+        T: Clone + 'static,
+        O: Clone,
+        GF: Fn(&T) -> O + Copy,
+        UF: Fn(&O) -> T + Copy,
+    > SignalGet<O> for DerivedRwSignal<T, O, GF, UF>
 {
     fn id(&self) -> crate::id::Id {
         self.signal.id
@@ -60,8 +70,12 @@ impl<T: Clone + 'static, O: Clone, GF: Fn(&T) -> O + Copy, UF: Fn(&O) -> T + Cop
     }
 }
 
-impl<T: Clone + 'static, O: Clone, GF: Fn(&T) -> O + Copy, UF: Fn(&O) -> T + Copy> SignalWith<O>
-    for DerivedRwSignal<T, O, GF, UF>
+impl<
+        T: Clone + 'static,
+        O: Clone,
+        GF: Fn(&T) -> O + Copy,
+        UF: Fn(&O) -> T + Copy,
+    > SignalWith<O> for DerivedRwSignal<T, O, GF, UF>
 {
     fn id(&self) -> crate::id::Id {
         self.signal.id
@@ -111,8 +125,12 @@ impl<T: Clone + 'static, O: Clone, GF: Fn(&T) -> O + Copy, UF: Fn(&O) -> T + Cop
     }
 }
 
-impl<T: Clone + 'static, O: Clone, GF: Fn(&T) -> O + Copy, UF: Fn(&O) -> T + Copy> SignalTrack<O>
-    for DerivedRwSignal<T, O, GF, UF>
+impl<
+        T: Clone + 'static,
+        O: Clone,
+        GF: Fn(&T) -> O + Copy,
+        UF: Fn(&O) -> T + Copy,
+    > SignalTrack<O> for DerivedRwSignal<T, O, GF, UF>
 {
     fn id(&self) -> crate::id::Id {
         self.signal.id

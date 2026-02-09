@@ -22,12 +22,14 @@ pub use base::{create_base_signal, BaseSignal};
 pub use context::{provide_context, use_context};
 pub use derived::{create_derived_rw_signal, DerivedRwSignal};
 pub use effect::{
-    batch, create_effect, create_stateful_updater, create_tracker, create_updater, untrack,
-    SignalTracker,
+    batch, create_effect, create_stateful_updater, create_tracker, create_updater,
+    untrack, SignalTracker,
 };
 pub use memo::{create_memo, Memo};
 pub use read::{ReadSignalValue, SignalGet, SignalRead, SignalTrack, SignalWith};
 pub use scope::{as_child_of_current_scope, with_scope, Scope};
-pub use signal::{create_rw_signal, create_signal, ReadSignal, RwSignal, WriteSignal};
+pub use signal::{
+    create_rw_signal, create_signal, ReadSignal, RwSignal, WriteSignal,
+};
 pub use trigger::{create_trigger, Trigger};
 pub use write::{SignalUpdate, SignalWrite, WriteSignalValue};

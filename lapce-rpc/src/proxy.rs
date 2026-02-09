@@ -967,7 +967,6 @@ impl ProxyRpcHandler {
     ) {
         self.request_async(ProxyRequest::GetSelectionRange { path, positions }, f);
     }
-
 }
 
 impl Default for ProxyRpcHandler {

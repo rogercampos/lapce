@@ -76,7 +76,8 @@ fn sortable_item(
 
 pub fn draggable_view() -> impl IntoView {
     let items = [
-        "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+        "zero", "one", "two", "three", "four", "five", "six", "seven", "eight",
+        "nine", "ten",
     ];
     let sortable_items = RwSignal::new((0..items.len()).collect::<Vec<usize>>());
     let dragger_id = RwSignal::new(0);
@@ -84,7 +85,9 @@ pub fn draggable_view() -> impl IntoView {
     dyn_stack(
         move || sortable_items.get(),
         move |item_id| *item_id,
-        move |item_id| sortable_item(items[item_id], sortable_items, dragger_id, item_id),
+        move |item_id| {
+            sortable_item(items[item_id], sortable_items, dragger_id, item_id)
+        },
     )
     .style(|s| s.flex_col().row_gap(5).padding(10))
     .into_view()

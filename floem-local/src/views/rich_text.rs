@@ -101,7 +101,10 @@ impl View for RichText {
         })
     }
 
-    fn compute_layout(&mut self, _cx: &mut crate::context::ComputeLayoutCx) -> Option<Rect> {
+    fn compute_layout(
+        &mut self,
+        _cx: &mut crate::context::ComputeLayoutCx,
+    ) -> Option<Rect> {
         let layout = self.id.get_layout().unwrap_or_default();
         let view_state = self.id.state();
         let (padding_left, padding_right) = {
@@ -181,12 +184,18 @@ impl<'a> RichSpan<'a> {
         self
     }
 
-    pub fn family(mut self, family: &'a [floem_renderer::text::FamilyOwned]) -> RichSpan<'a> {
+    pub fn family(
+        mut self,
+        family: &'a [floem_renderer::text::FamilyOwned],
+    ) -> RichSpan<'a> {
         self.attrs = self.attrs.family(family);
         self
     }
 
-    pub fn stretch(mut self, stretch: floem_renderer::text::Stretch) -> RichSpan<'a> {
+    pub fn stretch(
+        mut self,
+        stretch: floem_renderer::text::Stretch,
+    ) -> RichSpan<'a> {
         self.attrs = self.attrs.stretch(stretch);
         self
     }
@@ -355,11 +364,9 @@ impl std::ops::Add for RichSpanOwned {
 
     fn add(mut self, rhs: Self) -> Self::Output {
         let self_len = self.text.len();
-        self.spans.extend(
-            rhs.spans
-                .into_iter()
-                .map(|span| ((span.0.start + self_len)..(span.0.end + self_len), span.1)),
-        );
+        self.spans.extend(rhs.spans.into_iter().map(|span| {
+            ((span.0.start + self_len)..(span.0.end + self_len), span.1)
+        }));
         Self {
             text: self.text + &rhs.text,
             spans: self.spans,

@@ -140,7 +140,9 @@ impl AppState {
     }
 
     pub(crate) fn can_focus(&self, id: ViewId) -> bool {
-        self.keyboard_navigable.contains(&id) && !self.is_disabled(&id) && !id.is_hidden_recursive()
+        self.keyboard_navigable.contains(&id)
+            && !self.is_disabled(&id)
+            && !id.is_hidden_recursive()
     }
 
     pub fn is_hovered(&self, id: &ViewId) -> bool {
@@ -205,8 +207,12 @@ impl AppState {
             let _ = self.root_view_id.taffy().borrow_mut().compute_layout(
                 root,
                 taffy::prelude::Size {
-                    width: AvailableSpace::Definite((self.root_size.width / self.scale) as f32),
-                    height: AvailableSpace::Definite((self.root_size.height / self.scale) as f32),
+                    width: AvailableSpace::Definite(
+                        (self.root_size.width / self.scale) as f32,
+                    ),
+                    height: AvailableSpace::Definite(
+                        (self.root_size.height / self.scale) as f32,
+                    ),
                 },
             );
         }
@@ -290,12 +296,17 @@ impl AppState {
         }
     }
 
-    pub(crate) fn has_style_for_sel(&mut self, id: ViewId, selector_kind: StyleSelector) -> bool {
+    pub(crate) fn has_style_for_sel(
+        &mut self,
+        id: ViewId,
+        selector_kind: StyleSelector,
+    ) -> bool {
         let view_state = id.state();
         let view_state = view_state.borrow();
 
         view_state.has_style_selectors.has(selector_kind)
-            || (selector_kind == StyleSelector::Dragging && view_state.dragging_style.is_some())
+            || (selector_kind == StyleSelector::Dragging
+                && view_state.dragging_style.is_some())
     }
 
     pub(crate) fn update_context_menu(&mut self, menu: &mut Menu) {
@@ -336,7 +347,11 @@ impl AppState {
         }
     }
 
-    pub(crate) fn focus_changed(&mut self, old: Option<ViewId>, new: Option<ViewId>) {
+    pub(crate) fn focus_changed(
+        &mut self,
+        old: Option<ViewId>,
+        new: Option<ViewId>,
+    ) {
         if let Some(id) = new {
             // To apply the styles of the Focus selector
             if self.has_style_for_sel(id, StyleSelector::Focus)

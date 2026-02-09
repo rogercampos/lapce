@@ -54,8 +54,8 @@ use crate::{
     event::{Event, EventPropagation},
     id::ViewId,
     style::{
-        BorderBottomLeftRadius, BorderBottomRightRadius, BorderTopLeftRadius, BorderTopRightRadius,
-        LayoutProps, Style, StyleClassRef,
+        BorderBottomLeftRadius, BorderBottomRightRadius, BorderTopLeftRadius,
+        BorderTopRightRadius, LayoutProps, Style, StyleClassRef,
     },
     view_state::ViewStyleProps,
     views::{dyn_view, DynamicView},
@@ -315,7 +315,11 @@ pub trait View {
         default_compute_layout(self.id(), cx)
     }
 
-    fn event_before_children(&mut self, cx: &mut EventCx, event: &Event) -> EventPropagation {
+    fn event_before_children(
+        &mut self,
+        cx: &mut EventCx,
+        event: &Event,
+    ) -> EventPropagation {
         // these are here to just ignore these arguments in the default case
         let _ = cx;
         let _ = event;
@@ -323,7 +327,11 @@ pub trait View {
         EventPropagation::Continue
     }
 
-    fn event_after_children(&mut self, cx: &mut EventCx, event: &Event) -> EventPropagation {
+    fn event_after_children(
+        &mut self,
+        cx: &mut EventCx,
+        event: &Event,
+    ) -> EventPropagation {
         // these are here to just ignore these arguments in the default case
         let _ = cx;
         let _ = event;
@@ -340,7 +348,12 @@ pub trait View {
 
     /// Scrolls the view and all direct and indirect children to bring the `target` view to be
     /// visible. Returns true if this view contains or is the target.
-    fn scroll_to(&mut self, cx: &mut AppState, target: ViewId, rect: Option<Rect>) -> bool {
+    fn scroll_to(
+        &mut self,
+        cx: &mut AppState,
+        target: ViewId,
+        rect: Option<Rect>,
+    ) -> bool {
         if self.id() == target {
             return true;
         }
@@ -382,11 +395,19 @@ impl View for Box<dyn View> {
         (**self).layout(cx)
     }
 
-    fn event_before_children(&mut self, cx: &mut EventCx, event: &Event) -> EventPropagation {
+    fn event_before_children(
+        &mut self,
+        cx: &mut EventCx,
+        event: &Event,
+    ) -> EventPropagation {
         (**self).event_before_children(cx, event)
     }
 
-    fn event_after_children(&mut self, cx: &mut EventCx, event: &Event) -> EventPropagation {
+    fn event_after_children(
+        &mut self,
+        cx: &mut EventCx,
+        event: &Event,
+    ) -> EventPropagation {
         (**self).event_after_children(cx, event)
     }
 
@@ -398,7 +419,12 @@ impl View for Box<dyn View> {
         (**self).paint(cx)
     }
 
-    fn scroll_to(&mut self, cx: &mut AppState, target: ViewId, rect: Option<Rect>) -> bool {
+    fn scroll_to(
+        &mut self,
+        cx: &mut AppState,
+        target: ViewId,
+        rect: Option<Rect>,
+    ) -> bool {
         (**self).scroll_to(cx, target, rect)
     }
 }
@@ -432,8 +458,14 @@ fn border_to_radii_view(style: &ViewStyleProps, size: Size) -> RoundedRectRadii 
     RoundedRectRadii {
         top_left: border_radius(style.border_top_left_radius(), size.min_side()),
         top_right: border_radius(style.border_top_right_radius(), size.min_side()),
-        bottom_left: border_radius(style.border_bottom_left_radius(), size.min_side()),
-        bottom_right: border_radius(style.border_bottom_right_radius(), size.min_side()),
+        bottom_left: border_radius(
+            style.border_bottom_left_radius(),
+            size.min_side(),
+        ),
+        bottom_right: border_radius(
+            style.border_bottom_right_radius(),
+            size.min_side(),
+        ),
     }
 }
 
@@ -441,8 +473,14 @@ pub(crate) fn border_to_radii(style: &Style, size: Size) -> RoundedRectRadii {
     RoundedRectRadii {
         top_left: border_radius(style.get(BorderTopLeftRadius), size.min_side()),
         top_right: border_radius(style.get(BorderTopRightRadius), size.min_side()),
-        bottom_left: border_radius(style.get(BorderBottomLeftRadius), size.min_side()),
-        bottom_right: border_radius(style.get(BorderBottomRightRadius), size.min_side()),
+        bottom_left: border_radius(
+            style.get(BorderBottomLeftRadius),
+            size.min_side(),
+        ),
+        bottom_right: border_radius(
+            style.get(BorderBottomRightRadius),
+            size.min_side(),
+        ),
     }
 }
 
@@ -452,7 +490,8 @@ pub(crate) fn paint_bg(cx: &mut PaintCx, style: &ViewStyleProps, size: Size) {
         let rect = size.to_rect();
         let width = rect.width();
         let height = rect.height();
-        if width > 0.0 && height > 0.0 && radii_min(radii) > width.max(height) / 2.0 {
+        if width > 0.0 && height > 0.0 && radii_min(radii) > width.max(height) / 2.0
+        {
             let radius = width.max(height) / 2.0;
             let circle = Circle::new(rect.center(), radius);
             let bg = match style.background() {
@@ -511,7 +550,8 @@ fn paint_box_shadow(
         );
         let rect = rect.inflate(spread, spread).inset(inset);
         if let Some(radii) = rect_radius {
-            let rounded_rect = RoundedRect::from_rect(rect, radii_add(radii, spread));
+            let rounded_rect =
+                RoundedRect::from_rect(rect, radii_add(radii, spread));
             cx.fill(&rounded_rect, shadow.color, blur_radius);
         } else {
             cx.fill(&rect, shadow.color, blur_radius);
@@ -731,14 +771,19 @@ pub(crate) fn paint_border(
 
 /// Tab navigation finds the next or previous view with the `keyboard_navigatable` status in the tree.
 #[allow(dead_code)]
-pub(crate) fn view_tab_navigation(root_view: ViewId, app_state: &mut AppState, backwards: bool) {
+pub(crate) fn view_tab_navigation(
+    root_view: ViewId,
+    app_state: &mut AppState,
+    backwards: bool,
+) {
     let start = app_state
         .focus
         .unwrap_or(app_state.prev_focus.unwrap_or(root_view));
 
     let tree_iter = |id: ViewId| {
         if backwards {
-            view_tree_previous(root_view, id).unwrap_or_else(|| view_nested_last_child(root_view))
+            view_tree_previous(root_view, id)
+                .unwrap_or_else(|| view_nested_last_child(root_view))
         } else {
             view_tree_next(id).unwrap_or(root_view)
         }

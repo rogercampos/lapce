@@ -1,7 +1,9 @@
 use std::rc::Rc;
 
 use floem_editor_core::{buffer::rope_text::RopeTextVal, indent::IndentStyle};
-use floem_reactive::{create_updater, with_scope, RwSignal, Scope, SignalUpdate, SignalWith};
+use floem_reactive::{
+    create_updater, with_scope, RwSignal, Scope, SignalUpdate, SignalWith,
+};
 use peniko::Color;
 
 use lapce_xi_rope::Rope;
@@ -27,10 +29,10 @@ use super::editor::{
     keypress::press::KeyPress,
     text::{RenderWhitespace, WrapMethod},
     view::EditorViewClass,
-    CurrentLineColor, CursorSurroundingLines, IndentGuideColor, IndentStyleProp, Modal,
-    ModalRelativeLine, PhantomColor, PlaceholderColor, PreeditUnderlineColor, RenderWhitespaceProp,
-    ScrollBeyondLastLine, SelectionColor, ShowIndentGuide, SmartTab, VisibleWhitespaceColor,
-    WrapProp,
+    CurrentLineColor, CursorSurroundingLines, IndentGuideColor, IndentStyleProp,
+    Modal, ModalRelativeLine, PhantomColor, PlaceholderColor, PreeditUnderlineColor,
+    RenderWhitespaceProp, ScrollBeyondLastLine, SelectionColor, ShowIndentGuide,
+    SmartTab, VisibleWhitespaceColor, WrapProp,
 };
 
 /// A text editor view.
@@ -71,7 +73,8 @@ pub fn text_editor(text: impl Into<Rope>) -> TextEditor {
 
 pub fn text_editor_keys(
     text: impl Into<Rope>,
-    handle_key_event: impl Fn(RwSignal<Editor>, &KeyPress, Modifiers) -> CommandExecuted + 'static,
+    handle_key_event: impl Fn(RwSignal<Editor>, &KeyPress, Modifiers) -> CommandExecuted
+        + 'static,
 ) -> TextEditor {
     let id = ViewId::new();
     let cx = Scope::current();
@@ -120,11 +123,16 @@ impl View for TextEditor {
             .id
             .get_layout()
             .map(|layout| {
-                peniko::kurbo::Size::new(layout.size.width as f64, layout.size.height as f64)
+                peniko::kurbo::Size::new(
+                    layout.size.width as f64,
+                    layout.size.height as f64,
+                )
             })
             .unwrap_or_default();
-        let border_radii =
-            crate::view::border_to_radii(&self.id.state().borrow().combined_style, size);
+        let border_radii = crate::view::border_to_radii(
+            &self.id.state().borrow().combined_style,
+            size,
+        );
 
         if crate::view::radii_max(border_radii) > 0.0 {
             let rect = size.to_rect().to_rounded_rect(border_radii);
@@ -250,7 +258,10 @@ impl EditorCustomStyle {
     }
 
     /// Sets which white space characters should be rendered.
-    pub fn render_white_space(mut self, render_white_space: RenderWhitespace) -> Self {
+    pub fn render_white_space(
+        mut self,
+        render_white_space: RenderWhitespace,
+    ) -> Self {
         self.0 = self.0.class(EditorViewClass, |s| {
             s.set(RenderWhitespaceProp, render_white_space)
         });
@@ -420,7 +431,11 @@ impl TextEditor {
 
         let editor_sig = self.cx.create_rw_signal(editor.clone());
         let child = with_scope(self.cx, || {
-            editor_container_view(editor_sig, |_| true, default_key_handler(editor_sig))
+            editor_container_view(
+                editor_sig,
+                |_| true,
+                default_key_handler(editor_sig),
+            )
         })
         .into_view();
 
@@ -503,7 +518,10 @@ impl TextEditor {
     /// Note that these are specific to each text editor view.  
     ///   
     /// Note: only works for the default backing [`TextDocument`] doc
-    pub fn pre_command(self, f: impl Fn(PreCommand) -> CommandExecuted + 'static) -> Self {
+    pub fn pre_command(
+        self,
+        f: impl Fn(PreCommand) -> CommandExecuted + 'static,
+    ) -> Self {
         if let Some(doc) = self.text_doc() {
             doc.add_pre_command(self.editor.id(), f);
         }

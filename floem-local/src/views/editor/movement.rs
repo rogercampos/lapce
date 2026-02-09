@@ -109,7 +109,8 @@ pub fn move_offset(
             (new_offset, None)
         }
         Movement::Up => {
-            let (new_offset, horiz) = move_up(view, offset, affinity, horiz.cloned(), mode, count);
+            let (new_offset, horiz) =
+                move_up(view, offset, affinity, horiz.cloned(), mode, count);
 
             (new_offset, Some(horiz))
         }
@@ -145,7 +146,8 @@ pub fn move_offset(
             (new_offset, Some(horiz))
         }
         Movement::Line(position) => {
-            let (new_offset, horiz) = to_line(view, offset, horiz.cloned(), mode, position);
+            let (new_offset, horiz) =
+                to_line(view, offset, horiz.cloned(), mode, position);
 
             (new_offset, Some(horiz))
         }
@@ -154,9 +156,11 @@ pub fn move_offset(
             (new_offset, None)
         }
         Movement::WordEndForward => {
-            let new_offset =
-                view.rope_text()
-                    .move_n_wordends_forward(offset, count, mode == Mode::Insert);
+            let new_offset = view.rope_text().move_n_wordends_forward(
+                offset,
+                count,
+                mode == Mode::Insert,
+            );
             (new_offset, None)
         }
         Movement::WordForward => {
@@ -164,7 +168,8 @@ pub fn move_offset(
             (new_offset, None)
         }
         Movement::WordBackward => {
-            let new_offset = view.rope_text().move_n_words_backward(offset, count, mode);
+            let new_offset =
+                view.rope_text().move_n_words_backward(offset, count, mode);
             (new_offset, None)
         }
         Movement::NextUnmatched(char) => {
@@ -183,12 +188,14 @@ pub fn move_offset(
             (new_offset, None)
         }
         Movement::ParagraphForward => {
-            let new_offset = view.rope_text().move_n_paragraphs_forward(offset, count);
+            let new_offset =
+                view.rope_text().move_n_paragraphs_forward(offset, count);
 
             (new_offset, None)
         }
         Movement::ParagraphBackward => {
-            let new_offset = view.rope_text().move_n_paragraphs_backward(offset, count);
+            let new_offset =
+                view.rope_text().move_n_paragraphs_backward(offset, count);
 
             (new_offset, None)
         }
@@ -206,7 +213,9 @@ fn correct_crlf(text: &RopeTextVal, offset: usize) -> usize {
     }
 
     let mut cursor = lapce_xi_rope::Cursor::new(text.text(), offset);
-    if cursor.peek_next_codepoint() == Some('\n') && cursor.prev_codepoint() == Some('\r') {
+    if cursor.peek_next_codepoint() == Some('\n')
+        && cursor.prev_codepoint() == Some('\r')
+    {
         return offset - 1;
     }
 
@@ -329,8 +338,9 @@ fn move_up(
     let rvline = view.rvline_of_offset(offset, *affinity);
     if rvline.line == 0 && rvline.line_index == 0 {
         // Zeroth line
-        let horiz = horiz
-            .unwrap_or_else(|| ColPosition::Col(view.line_point_of_offset(offset, *affinity).x));
+        let horiz = horiz.unwrap_or_else(|| {
+            ColPosition::Col(view.line_point_of_offset(offset, *affinity).x)
+        });
 
         *affinity = CursorAffinity::Backward;
 
@@ -339,16 +349,18 @@ fn move_up(
 
     let Some(rvline) = find_prev_rvline(view, rvline, count) else {
         // Zeroth line
-        let horiz = horiz
-            .unwrap_or_else(|| ColPosition::Col(view.line_point_of_offset(offset, *affinity).x));
+        let horiz = horiz.unwrap_or_else(|| {
+            ColPosition::Col(view.line_point_of_offset(offset, *affinity).x)
+        });
 
         *affinity = CursorAffinity::Backward;
 
         return (0, horiz);
     };
 
-    let horiz =
-        horiz.unwrap_or_else(|| ColPosition::Col(view.line_point_of_offset(offset, *affinity).x));
+    let horiz = horiz.unwrap_or_else(|| {
+        ColPosition::Col(view.line_point_of_offset(offset, *affinity).x)
+    });
     let col = view.rvline_horiz_col(rvline, &horiz, mode != Mode::Normal);
 
     // TODO: this should maybe be doing `new_offset == info.interval.start`?
@@ -379,8 +391,9 @@ fn move_down_last_rvline(
     // We should appear after any phantom text at the very end of the line.
     *affinity = CursorAffinity::Forward;
 
-    let horiz =
-        horiz.unwrap_or_else(|| ColPosition::Col(view.line_point_of_offset(offset, *affinity).x));
+    let horiz = horiz.unwrap_or_else(|| {
+        ColPosition::Col(view.line_point_of_offset(offset, *affinity).x)
+    });
 
     (new_offset, horiz)
 }
@@ -445,8 +458,9 @@ fn move_down(
     };
 
     // TODO(minor): is this the right affinity?
-    let horiz =
-        horiz.unwrap_or_else(|| ColPosition::Col(view.line_point_of_offset(offset, *affinity).x));
+    let horiz = horiz.unwrap_or_else(|| {
+        ColPosition::Col(view.line_point_of_offset(offset, *affinity).x)
+    });
 
     let col = view.rvline_horiz_col(info.rvline, &horiz, mode != Mode::Normal);
 
@@ -469,7 +483,8 @@ fn document_end(
     affinity: &mut CursorAffinity,
     mode: Mode,
 ) -> (usize, ColPosition) {
-    let last_offset = rope_text.offset_line_end(rope_text.len(), mode != Mode::Normal);
+    let last_offset =
+        rope_text.offset_line_end(rope_text.len(), mode != Mode::Normal);
 
     // Put it past any inlay hints directly at the end
     *affinity = CursorAffinity::Forward;
@@ -601,7 +616,9 @@ pub fn move_cursor(
                     Mode::Insert,
                 );
                 let range = match movement {
-                    Movement::EndOfLine | Movement::WordEndForward => offset..moved_new_offset,
+                    Movement::EndOfLine | Movement::WordEndForward => {
+                        offset..moved_new_offset
+                    }
                     Movement::MatchPairs => {
                         if new_offset > offset {
                             offset..moved_new_offset
@@ -657,7 +674,11 @@ pub fn move_cursor(
     }
 }
 
-pub fn do_multi_selection(view: &Editor, cursor: &mut Cursor, cmd: &MultiSelectionCommand) {
+pub fn do_multi_selection(
+    view: &Editor,
+    cursor: &mut Cursor,
+    cmd: &MultiSelectionCommand,
+) {
     use MultiSelectionCommand::*;
     let rope_text = view.rope_text();
 
@@ -683,7 +704,8 @@ pub fn do_multi_selection(view: &Editor, cursor: &mut Cursor, cmd: &MultiSelecti
                     Mode::Insert,
                 );
                 if new_offset != offset {
-                    selection.add_region(SelRegion::new(new_offset, new_offset, None));
+                    selection
+                        .add_region(SelRegion::new(new_offset, new_offset, None));
                 }
                 cursor.set_insert(selection);
             }
@@ -701,7 +723,8 @@ pub fn do_multi_selection(view: &Editor, cursor: &mut Cursor, cmd: &MultiSelecti
                     Mode::Insert,
                 );
                 if new_offset != offset {
-                    selection.add_region(SelRegion::new(new_offset, new_offset, None));
+                    selection
+                        .add_region(SelRegion::new(new_offset, new_offset, None));
                 }
                 cursor.set_insert(selection);
             }
@@ -711,14 +734,16 @@ pub fn do_multi_selection(view: &Editor, cursor: &mut Cursor, cmd: &MultiSelecti
                 let mut new_selection = Selection::new();
                 for region in selection.regions() {
                     let (start_line, _) = rope_text.offset_to_line_col(region.min());
-                    let (end_line, end_col) = rope_text.offset_to_line_col(region.max());
+                    let (end_line, end_col) =
+                        rope_text.offset_to_line_col(region.max());
                     for line in start_line..end_line + 1 {
                         let offset = if line == end_line {
                             rope_text.offset_of_line_col(line, end_col)
                         } else {
                             rope_text.line_end_offset(line, true)
                         };
-                        new_selection.add_region(SelRegion::new(offset, offset, None));
+                        new_selection
+                            .add_region(SelRegion::new(offset, offset, None));
                     }
                 }
                 cursor.set_insert(new_selection);
@@ -759,7 +784,9 @@ pub fn do_motion_mode(
 ) {
     if let Some(cached_motion_mode) = cursor.motion_mode.take() {
         // If it's the same MotionMode discriminant, continue, count is cached in the old motion_mode.
-        if core::mem::discriminant(&cached_motion_mode) == core::mem::discriminant(&motion_mode) {
+        if core::mem::discriminant(&cached_motion_mode)
+            == core::mem::discriminant(&motion_mode)
+        {
             let offset = cursor.offset();
             action.exec_motion_mode(
                 ed,
@@ -875,7 +902,8 @@ mod tests {
         let (offset, horiz) = move_down(&ed, 1, &mut aff, None, Mode::Insert, 1);
         assert_eq!(offset, 4);
         assert!(matches!(horiz, ColPosition::Col(_)));
-        let (offset, horiz) = move_down(&ed, 4, &mut aff, Some(horiz), Mode::Insert, 1);
+        let (offset, horiz) =
+            move_down(&ed, 4, &mut aff, Some(horiz), Mode::Insert, 1);
         assert_eq!(offset, 5);
         assert!(matches!(horiz, ColPosition::Col(_)));
         let (offset, _) = move_down(&ed, 5, &mut aff, Some(horiz), Mode::Insert, 1);
@@ -895,7 +923,8 @@ mod tests {
         let (offset, horiz) = move_up(&ed, 7, &mut aff, None, Mode::Insert, 1);
         assert_eq!(offset, 5);
         assert!(matches!(horiz, ColPosition::Col(_)));
-        let (offset, horiz) = move_up(&ed, 5, &mut aff, Some(horiz), Mode::Insert, 1);
+        let (offset, horiz) =
+            move_up(&ed, 5, &mut aff, Some(horiz), Mode::Insert, 1);
         assert_eq!(offset, 4);
         assert!(matches!(horiz, ColPosition::Col(_)));
         let (offset, _) = move_up(&ed, 4, &mut aff, Some(horiz), Mode::Insert, 1);

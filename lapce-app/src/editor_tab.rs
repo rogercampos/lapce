@@ -21,13 +21,9 @@ use serde::{Deserialize, Serialize};
 use crate::{
     config::{LapceConfig, color::LapceColor, icon::LapceIcons},
     doc::{Doc, DocContent},
-    editor::{
-        EditorData, EditorInfo,
-        location::EditorLocation,
-    },
+    editor::{EditorData, EditorInfo, location::EditorLocation},
     id::{
-        EditorTabId, KeymapId, SettingsId, SplitId,
-        ThemeColorSettingsId, VoltViewId,
+        EditorTabId, KeymapId, SettingsId, SplitId, ThemeColorSettingsId, VoltViewId,
     },
     main_split::{Editors, MainSplitData},
     plugin::PluginData,
@@ -190,14 +186,10 @@ impl EditorTabChild {
                 let editor_data = editors.editor(editor_id);
                 let path = if let Some(editor_data) = editor_data {
                     let doc = editor_data.doc_signal().get();
-                    let (content, is_pristine) = (
-                        doc.content.get(),
-                        doc.buffer.with(|b| b.is_pristine()),
-                    );
+                    let (content, is_pristine) =
+                        (doc.content.get(), doc.buffer.with(|b| b.is_pristine()));
                     match content {
-                        DocContent::File { path, .. } => {
-                            Some((path, is_pristine))
-                        }
+                        DocContent::File { path, .. } => Some((path, is_pristine)),
                         DocContent::Local => None,
                         DocContent::History(_) => None,
                         DocContent::Scratch { name, .. } => {

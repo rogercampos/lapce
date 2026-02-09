@@ -46,7 +46,8 @@ impl SwashScaler {
             .hint(!IS_MACOS)
             .build();
 
-        let offset = Vector::new(cache_key.x_bin.as_float(), cache_key.y_bin.as_float());
+        let offset =
+            Vector::new(cache_key.x_bin.as_float(), cache_key.y_bin.as_float());
 
         Render::new(&[
             Source::ColorOutline(0),

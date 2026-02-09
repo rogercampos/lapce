@@ -1,6 +1,8 @@
 use std::{cell::Cell, rc::Rc};
 
-use floem_reactive::{batch, create_effect, create_rw_signal, SignalTrack, SignalUpdate};
+use floem_reactive::{
+    batch, create_effect, create_rw_signal, SignalTrack, SignalUpdate,
+};
 
 #[test]
 fn batch_simple() {

@@ -15,7 +15,8 @@ use winit::{
     window::{Window, WindowId},
 };
 
-static WINDOW_FOR_WINDOW_AND_ROOT_IDS: OnceLock<RwLock<WindowMapping>> = OnceLock::new();
+static WINDOW_FOR_WINDOW_AND_ROOT_IDS: OnceLock<RwLock<WindowMapping>> =
+    OnceLock::new();
 
 /// Add a mapping from `root_id` -> `window_id` -> `window` for the given triple.
 pub fn store_window_id_mapping(
@@ -93,16 +94,20 @@ pub fn with_window_id_and_window<F: FnOnce(&WindowId, &Arc<dyn Window>) -> T, T>
     f: F,
 ) -> Option<T> {
     view.root()
-        .and_then(|root_view_id| with_window_map(|m| m.with_window_id_and_window(root_view_id, f)))
+        .and_then(|root_view_id| {
+            with_window_map(|m| m.with_window_id_and_window(root_view_id, f))
+        })
         .unwrap_or(None)
 }
 
 pub fn is_known_root(id: &ViewId) -> bool {
-    with_window_map(|map| map.window_id_for_root_view_id.contains_key(id)).unwrap_or(false)
+    with_window_map(|map| map.window_id_for_root_view_id.contains_key(id))
+        .unwrap_or(false)
 }
 
 fn with_window_map_mut<F: FnMut(&mut WindowMapping)>(mut f: F) -> bool {
-    let map = WINDOW_FOR_WINDOW_AND_ROOT_IDS.get_or_init(|| RwLock::new(Default::default()));
+    let map = WINDOW_FOR_WINDOW_AND_ROOT_IDS
+        .get_or_init(|| RwLock::new(Default::default()));
     if let Ok(mut map) = map.write() {
         f(&mut map);
         true
@@ -112,7 +117,8 @@ fn with_window_map_mut<F: FnMut(&mut WindowMapping)>(mut f: F) -> bool {
 }
 
 fn with_window_map<F: FnOnce(&WindowMapping) -> T, T>(f: F) -> Option<T> {
-    let map = WINDOW_FOR_WINDOW_AND_ROOT_IDS.get_or_init(|| RwLock::new(Default::default()));
+    let map = WINDOW_FOR_WINDOW_AND_ROOT_IDS
+        .get_or_init(|| RwLock::new(Default::default()));
     if let Ok(map) = map.read() {
         Some(f(&map))
     } else {
@@ -120,7 +126,10 @@ fn with_window_map<F: FnOnce(&WindowMapping) -> T, T>(f: F) -> Option<T> {
     }
 }
 
-pub fn with_window<F: FnOnce(&Arc<dyn Window>) -> T, T>(window: &WindowId, f: F) -> Option<T> {
+pub fn with_window<F: FnOnce(&Arc<dyn Window>) -> T, T>(
+    window: &WindowId,
+    f: F,
+) -> Option<T> {
     with_window_map(|m| m.with_window(window, |w| f(w))).unwrap_or(None)
 }
 
@@ -155,7 +164,10 @@ pub fn monitor_bounds(id: &WindowId) -> Option<Rect> {
     .unwrap_or(None)
 }
 
-pub fn monitor_bounds_for_monitor(window: &Arc<dyn Window>, monitor: &MonitorHandle) -> Rect {
+pub fn monitor_bounds_for_monitor(
+    window: &Arc<dyn Window>,
+    monitor: &MonitorHandle,
+) -> Rect {
     let scale = 1.0 / window.scale_factor();
     let pos = monitor.position().unwrap_or_default();
     let sz = monitor
@@ -229,7 +241,9 @@ pub fn window_outer_screen_position(id: &WindowId) -> Option<Point> {
         m.with_window(id, |window| {
             window
                 .outer_position()
-                .map(|pos| Some(scale_point(window, Point::new(pos.x as f64, pos.y as f64))))
+                .map(|pos| {
+                    Some(scale_point(window, Point::new(pos.x as f64, pos.y as f64)))
+                })
                 .unwrap_or(None)
         })
         .unwrap_or(None)

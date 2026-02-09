@@ -127,7 +127,11 @@ pub trait Document: DocumentPhantom + ::std::any::Any {
 
     // TODO: I don't like passing `under_line` as a parameter but `Document` doesn't have styling
     // should we just move preedit + phantom text into `Styling`?
-    fn preedit_phantom(&self, under_line: Option<Color>, line: usize) -> Option<PhantomText> {
+    fn preedit_phantom(
+        &self,
+        under_line: Option<Color>,
+        line: usize,
+    ) -> Option<PhantomText> {
         let preedit = self.preedit().preedit.get_untracked()?;
 
         let rope_text = self.rope_text();
@@ -196,11 +200,20 @@ pub trait Document: DocumentPhantom + ::std::any::Any {
     ///     })
     /// ))
     /// ```
-    fn edit(&self, iter: &mut dyn Iterator<Item = (Selection, &str)>, edit_type: EditType);
+    fn edit(
+        &self,
+        iter: &mut dyn Iterator<Item = (Selection, &str)>,
+        edit_type: EditType,
+    );
 }
 
 pub trait DocumentPhantom {
-    fn phantom_text(&self, edid: EditorId, styling: &EditorStyle, line: usize) -> PhantomTextLine;
+    fn phantom_text(
+        &self,
+        edid: EditorId,
+        styling: &EditorStyle,
+        line: usize,
+    ) -> PhantomTextLine;
 
     /// Translate a column position into the position it would be before combining with
     /// the phantom text.
@@ -215,7 +228,11 @@ pub trait DocumentPhantom {
         phantom.before_col(col)
     }
 
-    fn has_multiline_phantom(&self, _edid: EditorId, _styling: &EditorStyle) -> bool {
+    fn has_multiline_phantom(
+        &self,
+        _edid: EditorId,
+        _styling: &EditorStyle,
+    ) -> bool {
         true
     }
 }
@@ -237,8 +254,12 @@ impl std::fmt::Display for WrapMethod {
         match self {
             WrapMethod::None => f.write_str("None"),
             WrapMethod::EditorWidth => f.write_str("Editor Width"),
-            WrapMethod::WrapColumn { col } => f.write_fmt(format_args!("Wrap at Column {col}")),
-            WrapMethod::WrapWidth { width } => f.write_fmt(format_args!("Wrap Width {width}")),
+            WrapMethod::WrapColumn { col } => {
+                f.write_fmt(format_args!("Wrap at Column {col}"))
+            }
+            WrapMethod::WrapWidth { width } => {
+                f.write_fmt(format_args!("Wrap Width {width}"))
+            }
         }
     }
 }
@@ -250,7 +271,9 @@ impl WrapMethod {
     pub fn is_constant(&self) -> bool {
         matches!(
             self,
-            WrapMethod::None | WrapMethod::WrapColumn { .. } | WrapMethod::WrapWidth { .. }
+            WrapMethod::None
+                | WrapMethod::WrapColumn { .. }
+                | WrapMethod::WrapWidth { .. }
         )
     }
 }
@@ -318,7 +341,12 @@ pub trait Styling {
 
     /// Which line the indentation line should be based off of
     /// This is used for lining it up under a scope.
-    fn indent_line(&self, _edid: EditorId, line: usize, _line_content: &str) -> usize {
+    fn indent_line(
+        &self,
+        _edid: EditorId,
+        line: usize,
+        _line_content: &str,
+    ) -> usize {
         line
     }
 
@@ -473,7 +501,11 @@ where
         self.doc.preedit()
     }
 
-    fn preedit_phantom(&self, under_line: Option<Color>, line: usize) -> Option<PhantomText> {
+    fn preedit_phantom(
+        &self,
+        under_line: Option<Color>,
+        line: usize,
+    ) -> Option<PhantomText> {
         self.doc.preedit_phantom(under_line, line)
     }
 
@@ -507,7 +539,11 @@ where
         self.doc.edit_single(selection, content, edit_type)
     }
 
-    fn edit(&self, iter: &mut dyn Iterator<Item = (Selection, &str)>, edit_type: EditType) {
+    fn edit(
+        &self,
+        iter: &mut dyn Iterator<Item = (Selection, &str)>,
+        edit_type: EditType,
+    ) {
         self.doc.edit(iter, edit_type)
     }
 }
@@ -516,7 +552,12 @@ where
     D: Document,
     F: Fn(&Editor, &Command, Option<usize>, Modifiers) -> CommandExecuted,
 {
-    fn phantom_text(&self, edid: EditorId, styling: &EditorStyle, line: usize) -> PhantomTextLine {
+    fn phantom_text(
+        &self,
+        edid: EditorId,
+        styling: &EditorStyle,
+        line: usize,
+    ) -> PhantomTextLine {
         self.doc.phantom_text(edid, styling, line)
     }
 
@@ -548,8 +589,14 @@ where
         is_vertical: bool,
         register: &mut Register,
     ) {
-        self.doc
-            .exec_motion_mode(ed, cursor, motion_mode, range, is_vertical, register)
+        self.doc.exec_motion_mode(
+            ed,
+            cursor,
+            motion_mode,
+            range,
+            is_vertical,
+            register,
+        )
     }
 
     fn do_edit(
@@ -811,7 +858,9 @@ impl SimpleStylingBuilder {
             italic_style: self.italic_style.unwrap_or(default.italic_style),
             stretch: self.stretch.unwrap_or(default.stretch),
             tab_width: self.tab_width.unwrap_or(default.tab_width),
-            atomic_soft_tabs: self.atomic_soft_tabs.unwrap_or(default.atomic_soft_tabs),
+            atomic_soft_tabs: self
+                .atomic_soft_tabs
+                .unwrap_or(default.atomic_soft_tabs),
         }
     }
 }

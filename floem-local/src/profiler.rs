@@ -3,8 +3,8 @@ use crate::event::{Event, EventListener, EventPropagation};
 use crate::inspector::header;
 use crate::view::IntoView;
 use crate::views::{
-    button, clip, container, dyn_container, empty, h_stack, label, scroll, stack, static_label,
-    text, v_stack, v_stack_from_iter, Decorators,
+    button, clip, container, dyn_container, empty, h_stack, label, scroll, stack,
+    static_label, text, v_stack, v_stack_from_iter, Decorators,
 };
 use floem_reactive::{create_rw_signal, RwSignal, Scope, SignalGet, SignalUpdate};
 use peniko::color::palette;
@@ -83,7 +83,9 @@ fn profile_view(profile: &Rc<Profile>) -> impl IntoView {
                 .map(|event| event.end.saturating_duration_since(event.start))
                 .sum();
             let duration = start
-                .and_then(|start| end.map(|end| end.saturating_duration_since(start)))
+                .and_then(|start| {
+                    end.map(|end| end.saturating_duration_since(start))
+                })
                 .unwrap_or_default();
             Rc::new(ProfileFrameData {
                 start,
@@ -120,10 +122,14 @@ fn profile_view(profile: &Rc<Profile>) -> impl IntoView {
                     .map(|selected| Rc::ptr_eq(&selected, &frame_))
                     .unwrap_or(false);
                 s.padding(5.0)
-                    .apply_if(selected, |s| s.background(Color::from_rgb8(213, 208, 216)))
+                    .apply_if(selected, |s| {
+                        s.background(Color::from_rgb8(213, 208, 216))
+                    })
                     .hover(move |s| {
                         s.background(Color::from_rgba8(228, 237, 216, 160))
-                            .apply_if(selected, |s| s.background(Color::from_rgb8(186, 180, 216)))
+                            .apply_if(selected, |s| {
+                                s.background(Color::from_rgb8(186, 180, 216))
+                            })
                     })
             })
         })
@@ -189,8 +195,12 @@ fn profile_view(profile: &Rc<Profile>) -> impl IntoView {
                     let width = len / frame.duration.as_secs_f64();
                     let event_ = event.clone();
                     clip(
-                        static_label(format!("{} ({:.4} ms)", event.name, len * 1000.0))
-                            .style(|s| s.padding(5.0)),
+                        static_label(format!(
+                            "{} ({:.4} ms)",
+                            event.name,
+                            len * 1000.0
+                        ))
+                        .style(|s| s.padding(5.0)),
                     )
                     .style(move |s| {
                         s.min_width(0)
@@ -199,7 +209,9 @@ fn profile_view(profile: &Rc<Profile>) -> impl IntoView {
                             .inset_left_pct(left * 100.0)
                             .border(0.3)
                             .border_color(Color::from_rgb8(129, 164, 192))
-                            .background(Color::from_rgb8(209, 222, 233).with_alpha(0.6))
+                            .background(
+                                Color::from_rgb8(209, 222, 233).with_alpha(0.6),
+                            )
                             .text_clip()
                             .hover(|s| {
                                 s.color(palette::css::WHITE)
@@ -210,10 +222,9 @@ fn profile_view(profile: &Rc<Profile>) -> impl IntoView {
                         hovered_event.set(Some(event_.clone()))
                     })
                 });
-                scroll(
-                    v_stack_from_iter(list)
-                        .style(move |s| s.min_width_pct(zoom.get() * 100.0).height_full()),
-                )
+                scroll(v_stack_from_iter(list).style(move |s| {
+                    s.min_width_pct(zoom.get() * 100.0).height_full()
+                }))
                 .style(|s| s.height_full().min_width(0).flex_basis(0).flex_grow(1.0))
                 .on_event(EventListener::PointerWheel, move |e| {
                     if let Event::PointerWheel(e) = e {
@@ -242,7 +253,8 @@ fn profile_view(profile: &Rc<Profile>) -> impl IntoView {
     let timeline = v_stack((header("Timeline"), timeline))
         .style(|s| s.min_width(0).flex_basis(0).flex_grow(1.0));
 
-    h_stack((frames, separator, timeline)).style(|s| s.height_full().width_full().max_width_full())
+    h_stack((frames, separator, timeline))
+        .style(|s| s.height_full().width_full().max_width_full())
 }
 
 thread_local! {
@@ -298,14 +310,16 @@ pub fn profiler(window_id: WindowId) -> impl IntoView {
     .style(|s| s.width_full().min_height(0).flex_basis(0).flex_grow(1.0));
 
     // FIXME: This needs an extra `container` or the `v_stack` ends up horizontal.
-    container(v_stack((button, separator, lower)).style(|s| s.width_full().height_full()))
-        .style(|s| s.width_full().height_full())
-        .on_event_cont(EventListener::WindowClosed, move |_| {
-            if profiling.get() {
-                add_app_update_event(AppUpdateEvent::ProfileWindow {
-                    window_id,
-                    end_profile: Some(profile.write_only()),
-                });
-            }
-        })
+    container(
+        v_stack((button, separator, lower)).style(|s| s.width_full().height_full()),
+    )
+    .style(|s| s.width_full().height_full())
+    .on_event_cont(EventListener::WindowClosed, move |_| {
+        if profiling.get() {
+            add_app_update_event(AppUpdateEvent::ProfileWindow {
+                window_id,
+                end_profile: Some(profile.write_only()),
+            });
+        }
+    })
 }

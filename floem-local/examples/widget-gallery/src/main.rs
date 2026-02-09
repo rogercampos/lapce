@@ -87,7 +87,10 @@ fn app_view() -> impl IntoView {
                         .padding(5.0)
                         .width(100.pct())
                         .height(36.0)
-                        .transition(Background, Transition::ease_in_out(100.millis()))
+                        .transition(
+                            Background,
+                            Transition::ease_in_out(100.millis()),
+                        )
                         .items_center()
                         .border_bottom(1.)
                         .border_color(palette::css::LIGHT_GRAY)

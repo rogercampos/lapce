@@ -36,12 +36,17 @@ pub fn checkbox_view() -> impl IntoView {
         ),
         form_item(
             "Custom Checkbox 2:",
-            Checkbox::custom_labeled_rw(is_checked, move || "Custom Check Mark", CROSS_SVG)
-                .style(|s| s.class(CheckboxClass, |s| s.color(palette::css::RED))),
+            Checkbox::custom_labeled_rw(
+                is_checked,
+                move || "Custom Check Mark",
+                CROSS_SVG,
+            )
+            .style(|s| s.class(CheckboxClass, |s| s.color(palette::css::RED))),
         ),
         form_item(
             "Disabled Labeled Checkbox:",
-            labeled_checkbox(move || is_checked.get(), || "Check me!").disabled(|| true),
+            labeled_checkbox(move || is_checked.get(), || "Check me!")
+                .disabled(|| true),
         ),
     ))
 }

@@ -21,11 +21,13 @@ pub fn virt_list_view() -> impl IntoView {
             enhanced_list().style(|s| s.grid_row(Line::from_line_index(2))),
         ),
         form_item(
-            "Horizontal Stack from Iterator".style(|s| s.grid_row(Line::from_line_index(4))),
+            "Horizontal Stack from Iterator"
+                .style(|s| s.grid_row(Line::from_line_index(4))),
             h_buttons_from_iter().style(|s| s.grid_row(Line::from_line_index(5))),
         ),
         form_item(
-            "Vertical Stack from Iterator".style(|s| s.grid_row(Line::from_line_index(4))),
+            "Vertical Stack from Iterator"
+                .style(|s| s.grid_row(Line::from_line_index(4))),
             v_buttons_from_iter().style(|s| s.grid_row(Line::from_line_index(5))),
         ),
     ))
@@ -55,10 +57,13 @@ fn enhanced_list() -> impl IntoView {
     let list_width = 180.0;
     let item_height = 32.0;
 
-    let checkmark = |checkbox_state| Checkbox::new_rw(checkbox_state).style(|s| s.margin_left(6));
+    let checkmark = |checkbox_state| {
+        Checkbox::new_rw(checkbox_state).style(|s| s.margin_left(6))
+    };
 
-    let label =
-        |item: i32| item.style(|s| s.margin_left(6).height(32.0).font_size(22.0).items_center());
+    let label = |item: i32| {
+        item.style(|s| s.margin_left(6).height(32.0).font_size(22.0).items_center())
+    };
 
     let x_mark = move |index| {
         svg(CROSS_SVG)
@@ -77,7 +82,9 @@ fn enhanced_list() -> impl IntoView {
                     .border_radius(16.0)
                     .padding(2.)
                     .margin_right(20.0)
-                    .hover(|s| s.color(palette::css::WHITE).background(palette::css::RED))
+                    .hover(|s| {
+                        s.color(palette::css::WHITE).background(palette::css::RED)
+                    })
             })
     };
 

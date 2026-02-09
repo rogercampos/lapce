@@ -7,8 +7,9 @@ pub fn virtual_stack_view() -> impl IntoView {
     let long_list: im::Vector<i32> = (0..1000000).collect();
     let long_list = RwSignal::new(long_list);
 
-    let button = button("Add an item")
-        .action(move || long_list.update(|list| list.push_back(list.len() as i32 + 1)));
+    let button = button("Add an item").action(move || {
+        long_list.update(|list| list.push_back(list.len() as i32 + 1))
+    });
 
     let virtual_stack = VirtualStack::new(move || long_list.get())
         .style(|s| s.flex_col().width_full())

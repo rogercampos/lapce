@@ -214,7 +214,11 @@ impl Buffer {
         self.set_pristine();
     }
 
-    pub fn reload(&mut self, content: Rope, set_pristine: bool) -> (Rope, RopeDelta, InvalLines) {
+    pub fn reload(
+        &mut self,
+        content: Rope,
+        set_pristine: bool,
+    ) -> (Rope, RopeDelta, InvalLines) {
         // Determine the line ending of the new text
         let line_ending = LineEndingDetermination::determine(&content);
         self.line_ending = line_ending.unwrap_or(self.line_ending);
@@ -232,7 +236,8 @@ impl Buffer {
     }
 
     pub fn detect_indent(&mut self, default: impl FnOnce() -> IndentStyle) {
-        self.indent_style = auto_detect_indent_style(&self.text).unwrap_or_else(default);
+        self.indent_style =
+            auto_detect_indent_style(&self.text).unwrap_or_else(default);
     }
 
     pub fn indent_style(&self) -> IndentStyle {
@@ -299,7 +304,9 @@ impl Buffer {
         self.add_delta(delta)
     }
 
-    pub fn normalize_line_endings(&mut self) -> Option<(Rope, RopeDelta, InvalLines)> {
+    pub fn normalize_line_endings(
+        &mut self,
+    ) -> Option<(Rope, RopeDelta, InvalLines)> {
         let Some(delta) = self.line_ending.normalize_delta(&self.text) else {
             // There were no changes needed
             return None;
@@ -364,7 +371,8 @@ impl Buffer {
 
     fn calculate_undo_group(&mut self) -> usize {
         let has_undos = !self.live_undos.is_empty();
-        let is_unbroken_group = !self.this_edit_type.breaks_undo_group(self.last_edit_type);
+        let is_unbroken_group =
+            !self.this_edit_type.breaks_undo_group(self.last_edit_type);
 
         if has_undos && is_unbroken_group {
             *self.live_undos.last().unwrap()
@@ -379,7 +387,11 @@ impl Buffer {
     }
 
     /// Returns `(Revision, new text, new tombstones, new deletes from union)`
-    fn mk_new_rev(&self, undo_group: usize, delta: RopeDelta) -> (Revision, Rope, Rope, Subset) {
+    fn mk_new_rev(
+        &self,
+        undo_group: usize,
+        delta: RopeDelta,
+    ) -> (Revision, Rope, Rope, Subset) {
         let (ins_delta, deletes) = delta.factor();
 
         let deletes_at_rev = &self.deletes_from_union;
@@ -392,9 +404,11 @@ impl Buffer {
             new_deletes = new_deletes.transform_expand(&new_inserts);
         }
         let cur_deletes_from_union = &self.deletes_from_union;
-        let text_ins_delta = union_ins_delta.transform_shrink(cur_deletes_from_union);
+        let text_ins_delta =
+            union_ins_delta.transform_shrink(cur_deletes_from_union);
         let text_with_inserts = text_ins_delta.apply(&self.text);
-        let rebased_deletes_from_union = cur_deletes_from_union.transform_expand(&new_inserts);
+        let rebased_deletes_from_union =
+            cur_deletes_from_union.transform_expand(&new_inserts);
 
         let undone = self.undone_groups.contains(&undo_group);
         let new_deletes_from_union = {
@@ -439,7 +453,8 @@ impl Buffer {
         for rev in &self.revs[rev_index + 1..] {
             if let Contents::Edit { ref inserts, .. } = rev.edit {
                 if !inserts.is_empty() {
-                    deletes_from_union = Cow::Owned(deletes_from_union.transform_union(inserts));
+                    deletes_from_union =
+                        Cow::Owned(deletes_from_union.transform_union(inserts));
                 }
             }
         }
@@ -491,7 +506,10 @@ impl Buffer {
         deletes_from_union
     }
 
-    fn find_first_undo_candidate_index(&self, toggled_groups: &BTreeSet<usize>) -> usize {
+    fn find_first_undo_candidate_index(
+        &self,
+        toggled_groups: &BTreeSet<usize>,
+    ) -> usize {
         // find the lowest toggled undo group number
         if let Some(lowest_group) = toggled_groups.iter().cloned().next() {
             for (i, rev) in self.revs.iter().enumerate().rev() {
@@ -528,11 +546,13 @@ impl Buffer {
             {
                 if groups.contains(undo_group) {
                     if !inserts.is_empty() {
-                        deletes_from_union = deletes_from_union.transform_union(inserts);
+                        deletes_from_union =
+                            deletes_from_union.transform_union(inserts);
                     }
                 } else {
                     if !inserts.is_empty() {
-                        deletes_from_union = deletes_from_union.transform_expand(inserts);
+                        deletes_from_union =
+                            deletes_from_union.transform_expand(inserts);
                     }
                     if !deletes.is_empty() {
                         deletes_from_union = deletes_from_union.union(deletes);
@@ -626,7 +646,9 @@ impl Buffer {
         (text, delta, inval_lines, cursor_before, cursor_after)
     }
 
-    pub fn do_undo(&mut self) -> Option<(Rope, RopeDelta, InvalLines, Option<CursorMode>)> {
+    pub fn do_undo(
+        &mut self,
+    ) -> Option<(Rope, RopeDelta, InvalLines, Option<CursorMode>)> {
         if self.cur_undo <= 1 {
             return None;
         }
@@ -640,7 +662,9 @@ impl Buffer {
         Some((text, delta, inval_lines, cursor_before))
     }
 
-    pub fn do_redo(&mut self) -> Option<(Rope, RopeDelta, InvalLines, Option<CursorMode>)> {
+    pub fn do_redo(
+        &mut self,
+    ) -> Option<(Rope, RopeDelta, InvalLines, Option<CursorMode>)> {
         if self.cur_undo >= self.live_undos.len() {
             return None;
         }
@@ -703,7 +727,11 @@ fn shuffle(
     new_deletes_from_union: &Subset,
 ) -> (Rope, Rope) {
     // Delta that deletes the right bits from the text
-    let del_delta = Delta::synthesize(tombstones, old_deletes_from_union, new_deletes_from_union);
+    let del_delta = Delta::synthesize(
+        tombstones,
+        old_deletes_from_union,
+        new_deletes_from_union,
+    );
     let new_text = del_delta.apply(text);
     (
         new_text,

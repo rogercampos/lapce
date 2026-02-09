@@ -6,8 +6,9 @@ use crate::{
 use std::{cell::RefCell, collections::HashMap, sync::Arc};
 
 use super::window_tracking::{
-    monitor_bounds, root_view_id, window_inner_screen_bounds, window_inner_screen_position,
-    window_outer_screen_bounds, window_outer_screen_position,
+    monitor_bounds, root_view_id, window_inner_screen_bounds,
+    window_inner_screen_position, window_outer_screen_bounds,
+    window_outer_screen_position,
 };
 use peniko::kurbo::{Point, Rect, Size};
 use winit::{
@@ -243,11 +244,13 @@ impl WindowIdExt for WindowId {
     }
 
     fn is_visible(&self) -> bool {
-        with_window(self, |window| window.is_visible().unwrap_or(false)).unwrap_or(false)
+        with_window(self, |window| window.is_visible().unwrap_or(false))
+            .unwrap_or(false)
     }
 
     fn is_minimized(&self) -> bool {
-        with_window(self, |window| window.is_minimized().unwrap_or(false)).unwrap_or(false)
+        with_window(self, |window| window.is_minimized().unwrap_or(false))
+            .unwrap_or(false)
     }
 
     fn is_maximized(&self) -> bool {
@@ -276,7 +279,8 @@ impl WindowIdExt for WindowId {
     }
 
     fn screen_layout(&self) -> Option<ScreenLayout> {
-        with_window(self, move |window| screen_layout_for_window(*self, window)).unwrap_or(None)
+        with_window(self, move |window| screen_layout_for_window(*self, window))
+            .unwrap_or(None)
     }
 
     fn scale(&self) -> f64 {
@@ -287,7 +291,8 @@ impl WindowIdExt for WindowId {
 /// Called by `ApplicationHandle` at the end of the event loop callback.
 pub(crate) fn process_window_updates(id: &WindowId) -> bool {
     let mut result = false;
-    if let Some(items) = WINDOW_UPDATE_MESSAGES.with_borrow_mut(|map| map.remove(id)) {
+    if let Some(items) = WINDOW_UPDATE_MESSAGES.with_borrow_mut(|map| map.remove(id))
+    {
         result = !items.is_empty();
         for update in items {
             match update {
@@ -306,8 +311,9 @@ pub(crate) fn process_window_updates(id: &WindowId) -> bool {
                 }
                 WindowUpdate::OuterBounds(bds) => {
                     with_window(id, |window| {
-                        let params =
-                            bounds_to_logical_outer_position_and_inner_size(window, bds, true);
+                        let params = bounds_to_logical_outer_position_and_inner_size(
+                            window, bds, true,
+                        );
                         window.set_outer_position(params.0.into());
                         // XXX log any returned error?
                         let _ = window.request_surface_size(params.1.into());
@@ -315,8 +321,9 @@ pub(crate) fn process_window_updates(id: &WindowId) -> bool {
                 }
                 WindowUpdate::InnerBounds(bds) => {
                     with_window(id, |window| {
-                        let params =
-                            bounds_to_logical_outer_position_and_inner_size(window, bds, false);
+                        let params = bounds_to_logical_outer_position_and_inner_size(
+                            window, bds, false,
+                        );
                         window.set_outer_position(params.0.into());
                         // XXX log any returned error?
                         let _ = window.request_surface_size(params.1.into());
@@ -345,13 +352,16 @@ pub(crate) fn process_window_updates(id: &WindowId) -> bool {
                 }
                 WindowUpdate::OuterLocation(outer) => {
                     with_window(id, |window| {
-                        window.set_outer_position(LogicalPosition::new(outer.x, outer.y).into());
+                        window.set_outer_position(
+                            LogicalPosition::new(outer.x, outer.y).into(),
+                        );
                     });
                 }
                 WindowUpdate::InnerSize(size) => {
                     with_window(id, |window| {
-                        window
-                            .request_surface_size(LogicalSize::new(size.width, size.height).into())
+                        window.request_surface_size(
+                            LogicalSize::new(size.width, size.height).into(),
+                        )
                     });
                 }
             }
@@ -407,7 +417,8 @@ fn bounds_to_logical_outer_position_and_inner_size(
         // We need to shift the x/y position we are requesting up and left (negatively)
         // to come up with an *outer* location that makes sense with the passed rectangle's
         // size as an *inner* size
-        let size_delta = delta_size(window.surface_size(), window.outer_size(), scale);
+        let size_delta =
+            delta_size(window.surface_size(), window.outer_size(), scale);
         let inner_to_outer_delta: (f64, f64) = if let Some(delta) =
             delta_position(window.surface_position(), window.outer_position(), scale)
         {
@@ -450,13 +461,18 @@ fn maybe_yield_with_repaint(window: &Arc<dyn Window>) {
     }
 }
 
-fn delta_size(inner: PhysicalSize<u32>, outer: PhysicalSize<u32>, window_scale: f64) -> (f64, f64) {
+fn delta_size(
+    inner: PhysicalSize<u32>,
+    outer: PhysicalSize<u32>,
+    window_scale: f64,
+) -> (f64, f64) {
     let inner = winit_phys_size_to_size(inner, window_scale);
     let outer = winit_phys_size_to_size(outer, window_scale);
     (outer.width - inner.width, outer.height - inner.height)
 }
 
-type PositionResult = Result<winit::dpi::PhysicalPosition<i32>, winit::error::RequestError>;
+type PositionResult =
+    Result<winit::dpi::PhysicalPosition<i32>, winit::error::RequestError>;
 
 fn delta_position(
     inner: PhysicalPosition<i32>,
@@ -489,6 +505,9 @@ fn winit_phys_position_to_point<I: Into<f64> + Pixel>(
     winit_position_to_point::<I>(pos.to_logical(window_scale))
 }
 
-fn winit_phys_size_to_size<I: Into<f64> + Pixel>(size: PhysicalSize<I>, window_scale: f64) -> Size {
+fn winit_phys_size_to_size<I: Into<f64> + Pixel>(
+    size: PhysicalSize<I>,
+    window_scale: f64,
+) -> Size {
     winit_size_to_size::<I>(size.to_logical(window_scale))
 }

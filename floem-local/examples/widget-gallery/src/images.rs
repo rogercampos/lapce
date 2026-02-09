@@ -20,7 +20,8 @@ pub fn img_view() -> impl IntoView {
         ),
         form_item(
             "PNG(resized):",
-            img(move || ferris_png.to_vec()).style(|s| s.width(230.px()).height(153.px())),
+            img(move || ferris_png.to_vec())
+                .style(|s| s.width(230.px()).height(153.px())),
         ),
         form_item(
             "SVG(from file):",
@@ -37,7 +38,8 @@ pub fn img_view() -> impl IntoView {
         form_item("JPG:", img(move || sunflower.to_vec())),
         form_item(
             "JPG(resized):",
-            img(move || sunflower.to_vec()).style(|s| s.width(320.px()).height(490.px())),
+            img(move || sunflower.to_vec())
+                .style(|s| s.width(320.px()).height(490.px())),
         ),
         //TODO: support percentages for width/height
         //     img(move || ferris_png.to_vec()).style(|s| s.width(90.pct()).height(90.pct()))

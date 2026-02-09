@@ -1,8 +1,8 @@
 use std::{cell::Cell, collections::VecDeque, sync::Arc};
 
 use floem_reactive::{
-    create_effect, create_rw_signal, untrack, with_scope, ReadSignal, RwSignal, Scope, SignalGet,
-    SignalUpdate, SignalWith, WriteSignal,
+    create_effect, create_rw_signal, untrack, with_scope, ReadSignal, RwSignal,
+    Scope, SignalGet, SignalUpdate, SignalWith, WriteSignal,
 };
 use parking_lot::{Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
@@ -163,7 +163,9 @@ pub fn update_signal_from_channel<T: Send + 'static>(
     });
 }
 
-pub fn create_signal_from_channel<T: Send + 'static>(rx: Receiver<T>) -> ReadSignal<Option<T>> {
+pub fn create_signal_from_channel<T: Send + 'static>(
+    rx: Receiver<T>,
+) -> ReadSignal<Option<T>> {
     let cx = Scope::new();
     let trigger = with_scope(cx, ExtSendTrigger::new);
 

@@ -52,7 +52,6 @@ impl LapceColor {
     pub const LAPCE_ICON_ACTIVE: &'static str = "lapce.icon.active";
     pub const LAPCE_ICON_INACTIVE: &'static str = "lapce.icon.inactive";
 
-
     pub const LAPCE_PLUGIN_NAME: &'static str = "lapce.plugin.name";
     pub const LAPCE_PLUGIN_DESCRIPTION: &'static str = "lapce.plugin.description";
     pub const LAPCE_PLUGIN_AUTHOR: &'static str = "lapce.plugin.author";

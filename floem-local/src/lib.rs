@@ -243,7 +243,8 @@ pub mod prelude {
     pub use crate::Renderer;
     pub use crate::{IntoView, View};
     pub use floem_reactive::{
-        create_rw_signal, create_signal, RwSignal, SignalGet, SignalTrack, SignalUpdate, SignalWith,
+        create_rw_signal, create_signal, RwSignal, SignalGet, SignalTrack,
+        SignalUpdate, SignalWith,
     };
     pub use peniko::color::palette;
     pub use peniko::Color;

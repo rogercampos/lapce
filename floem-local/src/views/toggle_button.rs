@@ -101,7 +101,11 @@ impl View for ToggleButton {
         "Toggle Button".into()
     }
 
-    fn update(&mut self, _cx: &mut crate::context::UpdateCx, state: Box<dyn std::any::Any>) {
+    fn update(
+        &mut self,
+        _cx: &mut crate::context::UpdateCx,
+        state: Box<dyn std::any::Any>,
+    ) {
         if let Ok(state) = state.downcast::<bool>() {
             if self.held == ToggleState::Nothing {
                 self.update_restrict_position(true);
@@ -175,7 +179,9 @@ impl View for ToggleButton {
                                 if let Some(ontoggle) = &self.ontoggle {
                                     ontoggle(true);
                                 }
-                            } else if (event.pos.x as f32) < self.width / 2. && self.state {
+                            } else if (event.pos.x as f32) < self.width / 2.
+                                && self.state
+                            {
                                 self.position = 0.;
                                 // self.held = ToggleState::Nothing;
                                 self.id.request_layout();
@@ -212,7 +218,9 @@ impl View for ToggleButton {
         self.width = size.width;
         let circle_radius = match self.style.circle_rad() {
             PxPct::Px(px) => px as f32,
-            PxPct::Pct(pct) => size.width.min(size.height) / 2. * (pct as f32 / 100.),
+            PxPct::Pct(pct) => {
+                size.width.min(size.height) / 2. * (pct as f32 / 100.)
+            }
         };
         self.radius = circle_radius;
         self.update_restrict_position(false);
@@ -229,7 +237,8 @@ impl View for ToggleButton {
     fn paint(&mut self, cx: &mut crate::context::PaintCx) {
         let layout = self.id.get_layout().unwrap_or_default();
         let size = Size::new(layout.size.width as f64, layout.size.height as f64);
-        let circle_point = Point::new(self.position as f64, size.to_rect().center().y);
+        let circle_point =
+            Point::new(self.position as f64, size.to_rect().center().y);
         let circle = crate::kurbo::Circle::new(circle_point, self.radius as f64);
         if let Some(color) = self.style.foreground() {
             cx.fill(&circle, &color, 0.);
@@ -240,7 +249,9 @@ impl ToggleButton {
     fn update_restrict_position(&mut self, end_pos: bool) {
         let inset = match self.style.inset() {
             PxPct::Px(px) => px as f32,
-            PxPct::Pct(pct) => (self.width * (pct as f32 / 100.)).min(self.width / 2.),
+            PxPct::Pct(pct) => {
+                (self.width * (pct as f32 / 100.)).min(self.width / 2.)
+            }
         };
 
         if self.held == ToggleState::Nothing || end_pos {
@@ -274,7 +285,9 @@ impl ToggleButton {
         .keyboard_navigable()
     }
 
-    pub fn new_rw(state: impl SignalGet<bool> + SignalUpdate<bool> + Copy + 'static) -> Self {
+    pub fn new_rw(
+        state: impl SignalGet<bool> + SignalUpdate<bool> + Copy + 'static,
+    ) -> Self {
         Self::new(move || state.get()).on_toggle(move |ns| state.set(ns))
     }
 

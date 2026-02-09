@@ -1287,7 +1287,6 @@ impl PluginCatalogRpcHandler {
     pub fn enable_volt(&self, volt: VoltInfo) -> Result<()> {
         self.catalog_notification(PluginCatalogNotification::EnableVolt(volt))
     }
-
 }
 
 #[derive(Serialize, Deserialize, Debug)]

@@ -27,7 +27,8 @@ use crate::{
 
 pub(crate) type AppEventCallback = dyn Fn(AppEvent);
 
-static EVENT_LOOP_PROXY: Mutex<Option<(EventLoopProxy, Sender<UserEvent>)>> = Mutex::new(None);
+static EVENT_LOOP_PROXY: Mutex<Option<(EventLoopProxy, Sender<UserEvent>)>> =
+    Mutex::new(None);
 
 thread_local! {
     pub(crate) static APP_UPDATE_EVENTS: RefCell<Vec<AppUpdateEvent>> = Default::default();
@@ -239,7 +240,9 @@ impl Application {
         config: Option<WindowConfig>,
     ) -> Self {
         self.initial_windows.push(WindowCreation {
-            view_fn: Box::new(move |window_id: WindowId| app_view(window_id).into_any()),
+            view_fn: Box::new(move |window_id: WindowId| {
+                app_view(window_id).into_any()
+            }),
             config,
         });
         self

@@ -80,7 +80,10 @@ pub struct PanZoomView {
 }
 
 impl PanZoomView {
-    pub fn on_pan_zoom(mut self, onpanzoom: impl Fn(kurbo::Affine) + 'static) -> Self {
+    pub fn on_pan_zoom(
+        mut self,
+        onpanzoom: impl Fn(kurbo::Affine) + 'static,
+    ) -> Self {
         self.onpanzoom = Some(Box::new(onpanzoom));
         self
     }
@@ -118,7 +121,9 @@ impl View for PanZoomView {
                 // Calculate and apply drag delta in viewport space
                 let delta = self.screen_to_viewport(previous_cursor_pos)
                     - self.screen_to_viewport(current_cursor_pos);
-                self.set_view_transform(kurbo::Affine::translate(delta) * self.view_transform);
+                self.set_view_transform(
+                    kurbo::Affine::translate(delta) * self.view_transform,
+                );
                 self.drag_cursor_pos = Some(current_cursor_pos);
 
                 self.id().request_paint();
@@ -156,7 +161,11 @@ impl View for PanZoomView {
         EventPropagation::Continue
     }
 
-    fn update(&mut self, _cx: &mut floem::context::UpdateCx, _state: Box<dyn std::any::Any>) {
+    fn update(
+        &mut self,
+        _cx: &mut floem::context::UpdateCx,
+        _state: Box<dyn std::any::Any>,
+    ) {
         let update = self.measure_drag_velocity();
 
         let mut repaint = false;
@@ -216,7 +225,8 @@ impl PanZoomView {
         };
         self.last_drag_cursor_pos = self.drag_cursor_pos;
 
-        let delta = self.screen_to_viewport(prev_cursor_pos) - self.screen_to_viewport(cursor_pos);
+        let delta = self.screen_to_viewport(prev_cursor_pos)
+            - self.screen_to_viewport(cursor_pos);
 
         // Calculate drag velocity
         let now = std::time::Instant::now();
@@ -249,13 +259,16 @@ impl PanZoomView {
         self.last_update = now;
 
         let delta = self.drag_velocity * dt;
-        self.set_view_transform(kurbo::Affine::translate(delta) * self.view_transform);
+        self.set_view_transform(
+            kurbo::Affine::translate(delta) * self.view_transform,
+        );
 
         let start_time = self.drag_end_time.unwrap_or(now);
         let elapsed = (now - start_time).as_secs_f64();
 
         // Apply exponential decay to the velocity
-        let decay_factor = (1.0 - elapsed / DRAG_END_ANIMATION_DURATION.as_secs_f64()).max(0.0);
+        let decay_factor =
+            (1.0 - elapsed / DRAG_END_ANIMATION_DURATION.as_secs_f64()).max(0.0);
         self.drag_velocity *= decay_factor;
 
         if self.drag_velocity.length() < 0.1 {
@@ -283,11 +296,13 @@ impl PanZoomView {
         let cursor_pos = self.cursor_pos.unwrap_or_default();
         let cursor_pos_viewport = self.screen_to_viewport(cursor_pos);
         let world_translation = self.view_transform * kurbo::Point::ZERO;
-        let view_transform_without_translation = self.view_transform.with_translation(Vec2::ZERO);
+        let view_transform_without_translation =
+            self.view_transform.with_translation(Vec2::ZERO);
 
-        let scale_around_cursor = kurbo::Affine::translate(cursor_pos_viewport.to_vec2())
-            * kurbo::Affine::scale(scale_factor)
-            * kurbo::Affine::translate(-cursor_pos_viewport.to_vec2());
+        let scale_around_cursor =
+            kurbo::Affine::translate(cursor_pos_viewport.to_vec2())
+                * kurbo::Affine::scale(scale_factor)
+                * kurbo::Affine::translate(-cursor_pos_viewport.to_vec2());
 
         self.set_view_transform(
             kurbo::Affine::translate(world_translation.to_vec2())

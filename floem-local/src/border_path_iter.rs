@@ -167,10 +167,12 @@ impl<'a> Iterator for BorderPathIter<'a> {
                             continue;
                         }
                         self.current_len += seg_len;
-                        self.current_iter = Some(Box::new(subseg.path_elements(self.tolerance)));
+                        self.current_iter =
+                            Some(Box::new(subseg.path_elements(self.tolerance)));
                     } else {
                         self.current_len += arc_len;
-                        self.current_iter = Some(Box::new(arc.path_elements(self.tolerance)))
+                        self.current_iter =
+                            Some(Box::new(arc.path_elements(self.tolerance)))
                     }
                     break;
                 }
@@ -199,10 +201,12 @@ impl<'a> Iterator for BorderPathIter<'a> {
                             continue;
                         }
                         self.current_len += seg_len;
-                        self.current_iter = Some(Box::new(subseg.path_elements(self.tolerance)));
+                        self.current_iter =
+                            Some(Box::new(subseg.path_elements(self.tolerance)));
                     } else {
                         self.current_len += seg_len;
-                        self.current_iter = Some(Box::new(path_seg.path_elements(self.tolerance)));
+                        self.current_iter =
+                            Some(Box::new(path_seg.path_elements(self.tolerance)));
                     }
                     break;
                 }

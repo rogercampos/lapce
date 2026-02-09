@@ -27,10 +27,15 @@ pub struct Todo {
 }
 static UNIQUE_COUNTER: AtomicU64 = AtomicU64::new(0);
 impl Todo {
-    pub fn new_from_db(db_id: i64, done: bool, description: impl Into<String>) -> Self {
+    pub fn new_from_db(
+        db_id: i64,
+        done: bool,
+        description: impl Into<String>,
+    ) -> Self {
         Self {
             db_id: Some(db_id),
-            unique_id: UNIQUE_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+            unique_id: UNIQUE_COUNTER
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed),
             done,
             description: description.into(),
         }
@@ -38,7 +43,8 @@ impl Todo {
     pub fn new(done: bool, description: impl Into<String>) -> Self {
         Self {
             db_id: None,
-            unique_id: UNIQUE_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+            unique_id: UNIQUE_COUNTER
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed),
             done,
             description: description.into(),
         }
@@ -76,7 +82,8 @@ impl IntoView for TodoState {
         });
 
         let (active, selected) = TODOS_STATE.with(|s| (s.active, s.selected));
-        let is_active = create_memo(move |_| active.with(|a| (a.active == Some(self))));
+        let is_active =
+            create_memo(move |_| active.with(|a| (a.active == Some(self))));
         let is_selected = create_memo(move |_| selected.with(|s| s.contains(&self)));
 
         let todo_action_menu = move || {
@@ -168,7 +175,9 @@ impl IntoView for TodoState {
             });
 
         // if this todo is being created after the app has already been initialized, focus the input
-        if Instant::now().duration_since(TODOS_STATE.with(|s| s.time_stated)) > 50.millis() {
+        if Instant::now().duration_since(TODOS_STATE.with(|s| s.time_stated))
+            > 50.millis()
+        {
             input_id.request_focus();
         }
         create_effect(move |_| {
@@ -222,7 +231,10 @@ impl IntoView for TodoState {
                     .min_height(0.)
                     .padding(5)
                     .border_radius(5.)
-                    .transition(MinHeight, Transition::new(600.millis(), Spring::snappy()))
+                    .transition(
+                        MinHeight,
+                        Transition::new(600.millis(), Spring::snappy()),
+                    )
                     .box_shadow_blur(0.)
                     .box_shadow_color(palette::css::BLACK.with_alpha(0.0))
                     .box_shadow_h_offset(0.)

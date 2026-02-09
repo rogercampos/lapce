@@ -51,11 +51,10 @@ use lsp_types::{
 };
 use parking_lot::Mutex;
 use psp_types::{
-    ExecuteProcess, ExecuteProcessParams, ExecuteProcessResult,
-    Request, SendLspNotification,
-    SendLspNotificationParams, SendLspRequest, SendLspRequestParams,
-    SendLspRequestResult, StartLspServer, StartLspServerParams,
-    StartLspServerResult,
+    ExecuteProcess, ExecuteProcessParams, ExecuteProcessResult, Request,
+    SendLspNotification, SendLspNotificationParams, SendLspRequest,
+    SendLspRequestParams, SendLspRequestResult, StartLspServer,
+    StartLspServerParams, StartLspServerResult,
 };
 use serde::Serialize;
 use serde_json::Value;

@@ -37,10 +37,13 @@ impl View for Clip {
         let size = self
             .id
             .get_layout()
-            .map(|layout| Size::new(layout.size.width as f64, layout.size.height as f64))
+            .map(|layout| {
+                Size::new(layout.size.width as f64, layout.size.height as f64)
+            })
             .unwrap_or_default();
 
-        let radii = crate::view::border_to_radii(&view_state.borrow().combined_style, size);
+        let radii =
+            crate::view::border_to_radii(&view_state.borrow().combined_style, size);
 
         if crate::view::radii_max(radii) > 0.0 {
             let rect = size.to_rect().to_rounded_rect(radii);

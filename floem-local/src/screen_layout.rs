@@ -7,7 +7,8 @@ use peniko::kurbo::{Point, Rect, Size};
 use winit::window::{Window, WindowId};
 
 use crate::window_tracking::{
-    monitor_bounds_for_monitor, rect_from_physical_bounds_for_window, with_window_id_and_window,
+    monitor_bounds_for_monitor, rect_from_physical_bounds_for_window,
+    with_window_id_and_window,
 };
 
 /// Create a `ScreenLayout` for a view.  This can fail if the view or an
@@ -23,15 +24,22 @@ pub fn try_create_screen_layout(view: &ViewId) -> Option<ScreenLayout> {
             window
                 .outer_position()
                 .map(|outer_position| {
-                    let monitor_bounds = monitor_bounds_for_monitor(window, &monitor);
+                    let monitor_bounds =
+                        monitor_bounds_for_monitor(window, &monitor);
                     let inner_size = window.surface_size();
                     let outer_size = window.outer_size();
 
-                    let window_bounds =
-                        rect_from_physical_bounds_for_window(window, outer_position, outer_size);
+                    let window_bounds = rect_from_physical_bounds_for_window(
+                        window,
+                        outer_position,
+                        outer_size,
+                    );
 
-                    let window_content_bounds =
-                        rect_from_physical_bounds_for_window(window, inner_position, inner_size);
+                    let window_content_bounds = rect_from_physical_bounds_for_window(
+                        window,
+                        inner_position,
+                        inner_size,
+                    );
 
                     let view_origin_in_window = find_window_origin(view);
                     let monitor_scale = window.scale_factor();
@@ -64,11 +72,17 @@ pub fn screen_layout_for_window(
                 let inner_size = window.surface_size();
                 let outer_size = window.outer_size();
 
-                let window_bounds =
-                    rect_from_physical_bounds_for_window(window, outer_position, outer_size);
+                let window_bounds = rect_from_physical_bounds_for_window(
+                    window,
+                    outer_position,
+                    outer_size,
+                );
 
-                let window_content_bounds =
-                    rect_from_physical_bounds_for_window(window, inner_position, inner_size);
+                let window_content_bounds = rect_from_physical_bounds_for_window(
+                    window,
+                    inner_position,
+                    inner_size,
+                );
 
                 let view_origin_in_window = None;
                 let monitor_scale = window.scale_factor();
@@ -125,7 +139,10 @@ impl ScreenLayout {
             monitor_scale: 1.0,
             monitor_bounds: scale_rect(self.monitor_scale, self.monitor_bounds),
             window_bounds: scale_rect(self.monitor_scale, self.window_bounds),
-            window_content_bounds: scale_rect(self.monitor_scale, self.window_content_bounds),
+            window_content_bounds: scale_rect(
+                self.monitor_scale,
+                self.window_content_bounds,
+            ),
             view_origin_in_window: self
                 .view_origin_in_window
                 .map(|origin| scale_point(self.monitor_scale, origin)),
@@ -181,7 +198,8 @@ impl ScreenLayout {
         relative_position: Option<Point>,
         target_size: Option<Size>,
     ) -> Point {
-        let mut result = Point::new(self.window_content_bounds.x0, self.window_content_bounds.y0);
+        let mut result =
+            Point::new(self.window_content_bounds.x0, self.window_content_bounds.y0);
         if let Some(offset) = relative_position {
             result.x += offset.x;
             result.y += offset.y;

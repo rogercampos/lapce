@@ -56,7 +56,10 @@ pub fn v_stack<VT: ViewTuple + 'static>(children: VT) -> Stack {
     create_stack(children.into_views(), Some(FlexDirection::Column))
 }
 
-fn from_iter<V>(iterator: impl IntoIterator<Item = V>, direction: Option<FlexDirection>) -> Stack
+fn from_iter<V>(
+    iterator: impl IntoIterator<Item = V>,
+    direction: Option<FlexDirection>,
+) -> Stack
 where
     V: IntoView + 'static,
 {

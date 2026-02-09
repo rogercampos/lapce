@@ -93,7 +93,8 @@ impl Easing for Step {
             }
             StepPosition::Both => {
                 let step_size = 1.0 / (self.num_steps - 1) as f64;
-                let adjusted_time = ((time / step_size).round() * step_size).min(1.0);
+                let adjusted_time =
+                    ((time / step_size).round() * step_size).min(1.0);
                 (adjusted_time / step_size).round() * step_size
             }
         }
@@ -145,7 +146,12 @@ pub struct Spring {
 }
 
 impl Spring {
-    pub const fn new(mass: f64, stiffness: f64, damping: f64, initial_velocity: f64) -> Self {
+    pub const fn new(
+        mass: f64,
+        stiffness: f64,
+        damping: f64,
+        initial_velocity: f64,
+    ) -> Self {
         Self {
             mass,
             stiffness,

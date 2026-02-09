@@ -33,7 +33,10 @@ impl<T> VirtualList<T> {
     }
 
     // For types that are hashable but need custom view
-    pub fn with_view<DF, I, V>(data_fn: DF, view_fn: impl Fn(T) -> V + 'static) -> Self
+    pub fn with_view<DF, I, V>(
+        data_fn: DF,
+        view_fn: impl Fn(T) -> V + 'static,
+    ) -> Self
     where
         DF: Fn() -> I + 'static,
         I: VirtualVector<T>,
@@ -52,7 +55,10 @@ impl<T> VirtualList<T> {
     }
 
     // For types that implement IntoView but need custom keys
-    pub fn with_key<DF, I, K>(data_fn: DF, key_fn: impl Fn(&T) -> K + 'static) -> Self
+    pub fn with_key<DF, I, K>(
+        data_fn: DF,
+        key_fn: impl Fn(&T) -> K + 'static,
+    ) -> Self
     where
         DF: Fn() -> I + 'static,
         I: VirtualVector<T>,
@@ -141,7 +147,11 @@ impl<T: 'static> VirtualList<T> {
 
 /// A view that supports virtual scrolling with item selection.
 /// Selection is done using arrow keys, home/end for top/bottom.
-pub fn virtual_list<T, DF, I, KF, K, VF, V>(data_fn: DF, key_fn: KF, view_fn: VF) -> VirtualList<T>
+pub fn virtual_list<T, DF, I, KF, K, VF, V>(
+    data_fn: DF,
+    key_fn: KF,
+    view_fn: VF,
+) -> VirtualList<T>
 where
     DF: Fn() -> I + 'static,
     I: VirtualVector<T>,
@@ -182,47 +192,46 @@ where
 
     let direction = stack.direction;
 
-    let stack =
-        stack
-            .class(ListClass)
-            .keyboard_navigable()
-            .on_event(EventListener::KeyDown, move |e| {
-                if let Event::KeyDown(key_event) = e {
-                    stack_id.request_style_recursive();
-                    match key_event.key.logical_key {
-                        Key::Named(NamedKey::Home) => {
-                            if length.get_untracked() > 0 {
-                                selection.set(Some(0));
-                                stack_id.update_state(0_usize); // Must be usize to match state type
-                            }
-                            EventPropagation::Stop
+    let stack = stack.class(ListClass).keyboard_navigable().on_event(
+        EventListener::KeyDown,
+        move |e| {
+            if let Event::KeyDown(key_event) = e {
+                stack_id.request_style_recursive();
+                match key_event.key.logical_key {
+                    Key::Named(NamedKey::Home) => {
+                        if length.get_untracked() > 0 {
+                            selection.set(Some(0));
+                            stack_id.update_state(0_usize); // Must be usize to match state type
                         }
-                        Key::Named(NamedKey::End) => {
-                            let len = length.get_untracked();
-                            if len > 0 {
-                                selection.set(Some(len - 1));
-                                stack_id.update_state(len - 1);
-                            }
-                            EventPropagation::Stop
-                        }
-                        Key::Named(
-                            named_key @ (NamedKey::ArrowUp
-                            | NamedKey::ArrowDown
-                            | NamedKey::ArrowLeft
-                            | NamedKey::ArrowRight),
-                        ) => handle_arrow_key(
-                            selection,
-                            length.get_untracked(),
-                            direction.get_untracked(),
-                            stack_id,
-                            named_key,
-                        ),
-                        _ => EventPropagation::Continue,
+                        EventPropagation::Stop
                     }
-                } else {
-                    EventPropagation::Continue
+                    Key::Named(NamedKey::End) => {
+                        let len = length.get_untracked();
+                        if len > 0 {
+                            selection.set(Some(len - 1));
+                            stack_id.update_state(len - 1);
+                        }
+                        EventPropagation::Stop
+                    }
+                    Key::Named(
+                        named_key @ (NamedKey::ArrowUp
+                        | NamedKey::ArrowDown
+                        | NamedKey::ArrowLeft
+                        | NamedKey::ArrowRight),
+                    ) => handle_arrow_key(
+                        selection,
+                        length.get_untracked(),
+                        direction.get_untracked(),
+                        stack_id,
+                        named_key,
+                    ),
+                    _ => EventPropagation::Continue,
                 }
-            });
+            } else {
+                EventPropagation::Continue
+            }
+        },
+    );
     VirtualList { stack, selection }
 }
 

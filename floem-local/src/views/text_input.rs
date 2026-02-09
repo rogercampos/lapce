@@ -4,7 +4,9 @@ use crate::id::ViewId;
 use crate::keyboard::{self, KeyEvent, Modifiers};
 use crate::pointer::{MouseButton, PointerButton, PointerInputEvent};
 use crate::reactive::{create_effect, RwSignal};
-use crate::style::{FontFamily, FontProps, PaddingLeft, SelectionStyle, TextAlignProp};
+use crate::style::{
+    FontFamily, FontProps, PaddingLeft, SelectionStyle, TextAlignProp,
+};
 use crate::style::{FontStyle, FontWeight, TextColor};
 use crate::unit::{PxPct, PxPctAuto};
 use crate::{prop_extractor, style_class, Clipboard};
@@ -261,7 +263,11 @@ impl TextInput {
 }
 
 impl TextInput {
-    fn move_cursor(&mut self, move_kind: Movement, direction: TextDirection) -> bool {
+    fn move_cursor(
+        &mut self,
+        move_kind: Movement,
+        direction: TextDirection,
+    ) -> bool {
         match (move_kind, direction) {
             (Movement::Glyph, TextDirection::Left) => {
                 if let Some(ref selection) = self.selection {
@@ -269,7 +275,8 @@ impl TextInput {
                     return true;
                 }
                 let untracked_buffer = self.buffer.get_untracked();
-                let mut grapheme_iter = untracked_buffer[..self.cursor_glyph_idx].graphemes(true);
+                let mut grapheme_iter =
+                    untracked_buffer[..self.cursor_glyph_idx].graphemes(true);
                 match grapheme_iter.next_back() {
                     None => false,
                     Some(prev_character) => {
@@ -284,7 +291,8 @@ impl TextInput {
                     self.cursor_glyph_idx = selection.end;
                     return true;
                 }
-                let mut grapheme_iter = untracked_buffer[self.cursor_glyph_idx..].graphemes(true);
+                let mut grapheme_iter =
+                    untracked_buffer[self.cursor_glyph_idx..].graphemes(true);
                 match grapheme_iter.next() {
                     None => false,
                     Some(next_character) => {
@@ -294,8 +302,11 @@ impl TextInput {
                 }
             }
             (Movement::Line, TextDirection::Right) => {
-                if self.cursor_glyph_idx < self.buffer.with_untracked(|buff| buff.len()) {
-                    self.cursor_glyph_idx = self.buffer.with_untracked(|buff| buff.len());
+                if self.cursor_glyph_idx
+                    < self.buffer.with_untracked(|buff| buff.len())
+                {
+                    self.cursor_glyph_idx =
+                        self.buffer.with_untracked(|buff| buff.len());
                     return true;
                 }
                 false
@@ -307,16 +318,18 @@ impl TextInput {
                 }
                 false
             }
-            (Movement::Word, TextDirection::Right) => self.buffer.with_untracked(|buff| {
-                for (idx, word) in buff.unicode_word_indices() {
-                    let word_end_idx = idx + word.len();
-                    if word_end_idx > self.cursor_glyph_idx {
-                        self.cursor_glyph_idx = word_end_idx;
-                        return true;
+            (Movement::Word, TextDirection::Right) => {
+                self.buffer.with_untracked(|buff| {
+                    for (idx, word) in buff.unicode_word_indices() {
+                        let word_end_idx = idx + word.len();
+                        if word_end_idx > self.cursor_glyph_idx {
+                            self.cursor_glyph_idx = word_end_idx;
+                            return true;
+                        }
                     }
-                }
-                false
-            }),
+                    false
+                })
+            }
             (Movement::Word, TextDirection::Left) if self.cursor_glyph_idx > 0 => {
                 self.buffer.with_untracked(|buff| {
                     let mut prev_word_idx = 0;
@@ -348,7 +361,9 @@ impl TextInput {
         let visible_range = clip_start_x..=clip_start_x + node_width;
 
         let mut clip_dir = ClipDirection::None;
-        if !visible_range.contains(&cursor_glyph_pos.point.x) && self.selection.is_none() {
+        if !visible_range.contains(&cursor_glyph_pos.point.x)
+            && self.selection.is_none()
+        {
             if cursor_x < *visible_range.start() {
                 clip_start_x = cursor_x;
                 clip_dir = ClipDirection::Backward;
@@ -381,7 +396,8 @@ impl TextInput {
         match clip_dir {
             ClipDirection::None => {}
             ClipDirection::Forward => {
-                self.clip_offset_x = self.clip_txt_buf.as_ref().unwrap().size().width - node_width
+                self.clip_offset_x =
+                    self.clip_txt_buf.as_ref().unwrap().size().width - node_width
             }
             ClipDirection::Backward => self.clip_offset_x = 0.0,
         }
@@ -471,12 +487,14 @@ impl TextInput {
 
         let selection_start_x =
             virtual_text.hit_position(selection.start).point.x - self.clip_start_x;
-        let selection_start_x = selection_start_x.max(node_layout.location.x as f64 - left_padding);
+        let selection_start_x =
+            selection_start_x.max(node_layout.location.x as f64 - left_padding);
 
-        let selection_end_x =
-            virtual_text.hit_position(selection.end).point.x + left_padding - self.clip_start_x;
-        let selection_end_x =
-            selection_end_x.min(selection_start_x + self.width as f64 + left_padding);
+        let selection_end_x = virtual_text.hit_position(selection.end).point.x
+            + left_padding
+            - self.clip_start_x;
+        let selection_end_x = selection_end_x
+            .min(selection_start_x + self.width as f64 + left_padding);
 
         let node_location = node_layout.location;
 
@@ -519,8 +537,9 @@ impl TextInput {
         let attrs_list = self.get_text_attrs();
         let align = self.style.text_align();
 
-        self.buffer
-            .with_untracked(|buff| text_layout.set_text(buff, attrs_list.clone(), align));
+        self.buffer.with_untracked(|buff| {
+            text_layout.set_text(buff, attrs_list.clone(), align)
+        });
 
         let glyph_max_size = self.get_font_glyph_max_size();
         self.height = glyph_max_size.height as f32;
@@ -567,18 +586,20 @@ impl TextInput {
         }
 
         let input_font_family = self.font.family().as_ref().map(|font_family| {
-            let family: Vec<FamilyOwned> = FamilyOwned::parse_list(font_family).collect();
+            let family: Vec<FamilyOwned> =
+                FamilyOwned::parse_list(font_family).collect();
             family
         });
 
-        let placeholder_font_family =
-            self.placeholder_style
-                .font_family()
-                .as_ref()
-                .map(|font_family| {
-                    let family: Vec<FamilyOwned> = FamilyOwned::parse_list(font_family).collect();
-                    family
-                });
+        let placeholder_font_family = self
+            .placeholder_style
+            .font_family()
+            .as_ref()
+            .map(|font_family| {
+                let family: Vec<FamilyOwned> =
+                    FamilyOwned::parse_list(font_family).collect();
+                family
+            });
 
         // Inherit the font family of the text input unless overridden by the placeholder
         if let Some(font_family) = placeholder_font_family.as_ref() {
@@ -591,7 +612,8 @@ impl TextInput {
     }
 
     pub fn get_text_attrs(&self) -> AttrsList {
-        let mut attrs = Attrs::new().color(self.style.color().unwrap_or(palette::css::BLACK));
+        let mut attrs =
+            Attrs::new().color(self.style.color().unwrap_or(palette::css::BLACK));
 
         attrs = attrs.font_size(self.font_size());
 
@@ -599,7 +621,8 @@ impl TextInput {
             attrs = attrs.style(font_style);
         }
         let font_family = self.font.family().as_ref().map(|font_family| {
-            let family: Vec<FamilyOwned> = FamilyOwned::parse_list(font_family).collect();
+            let family: Vec<FamilyOwned> =
+                FamilyOwned::parse_list(font_family).collect();
             family
         });
         if let Some(font_family) = font_family.as_ref() {
@@ -634,7 +657,11 @@ impl TextInput {
         self.selection = Some(0..len);
     }
 
-    fn handle_modifier_cmd(&mut self, event: &KeyEvent, character: &SmolStr) -> bool {
+    fn handle_modifier_cmd(
+        &mut self,
+        event: &KeyEvent,
+        character: &SmolStr,
+    ) -> bool {
         if event.modifiers.is_empty() || event.modifiers == Modifiers::SHIFT {
             return false;
         }
@@ -690,15 +717,20 @@ impl TextInput {
 
                 if let Some(selection) = &self.selection {
                     self.buffer.update(|buf| {
-                        replace_range(buf, selection.clone(), Some(&clipboard_content))
+                        replace_range(
+                            buf,
+                            selection.clone(),
+                            Some(&clipboard_content),
+                        )
                     });
 
-                    self.cursor_glyph_idx +=
-                        clipboard_content.len() - selection.len().min(clipboard_content.len());
+                    self.cursor_glyph_idx += clipboard_content.len()
+                        - selection.len().min(clipboard_content.len());
                     self.selection = None;
                 } else {
-                    self.buffer
-                        .update(|buf| buf.insert_str(self.cursor_glyph_idx, &clipboard_content));
+                    self.buffer.update(|buf| {
+                        buf.insert_str(self.cursor_glyph_idx, &clipboard_content)
+                    });
                     self.cursor_glyph_idx += clipboard_content.len();
                 }
 
@@ -751,7 +783,11 @@ impl TextInput {
                     }
 
                     self.buffer.update(|buf| {
-                        replace_range(buf, self.cursor_glyph_idx..prev_cursor_idx, None);
+                        replace_range(
+                            buf,
+                            self.cursor_glyph_idx..prev_cursor_idx,
+                            None,
+                        );
                     });
                     true
                 }
@@ -814,7 +850,9 @@ impl TextInput {
             Key::Named(NamedKey::Home) => {
                 if event.modifiers.contains(Modifiers::SHIFT) {
                     match &self.selection {
-                        Some(selection_value) => self.update_selection(0, selection_value.end),
+                        Some(selection_value) => {
+                            self.update_selection(0, selection_value.end)
+                        }
                         None => self.update_selection(0, self.cursor_glyph_idx),
                     }
                 } else {
@@ -837,7 +875,9 @@ impl TextInput {
                         event.modifiers,
                         TextDirection::Left,
                     );
-                } else if !event.modifiers.contains(Modifiers::SHIFT) && self.selection.is_some() {
+                } else if !event.modifiers.contains(Modifiers::SHIFT)
+                    && self.selection.is_some()
+                {
                     self.selection = None;
                 }
 
@@ -858,7 +898,9 @@ impl TextInput {
                         event.modifiers,
                         TextDirection::Right,
                     );
-                } else if !event.modifiers.contains(Modifiers::SHIFT) && self.selection.is_some() {
+                } else if !event.modifiers.contains(Modifiers::SHIFT)
+                    && self.selection.is_some()
+                {
                     self.selection = None;
                 }
 
@@ -956,11 +998,16 @@ impl TextInput {
             .cloned()
             .unwrap_or_default();
         let node_location = layout.location;
-        let text_start_point = Point::new(node_location.x as f64, node_location.y as f64);
+        let text_start_point =
+            Point::new(node_location.x as f64, node_location.y as f64);
         cx.draw_text(placeholder_buff, text_start_point);
     }
 
-    fn paint_selection_rect(&self, &node_layout: &Layout, cx: &mut crate::context::PaintCx<'_>) {
+    fn paint_selection_rect(
+        &self,
+        &node_layout: &Layout,
+        cx: &mut crate::context::PaintCx<'_>,
+    ) {
         let view_state = self.id.state();
         let view_state = view_state.borrow();
         let style = &view_state.combined_style;
@@ -983,7 +1030,11 @@ impl TextInput {
     }
 }
 
-fn replace_range(buff: &mut String, del_range: Range<usize>, replacement: Option<&str>) {
+fn replace_range(
+    buff: &mut String,
+    del_range: Range<usize>,
+    replacement: Option<&str>,
+) {
     assert!(del_range.start <= del_range.end);
     if !buff.is_char_boundary(del_range.end) {
         eprintln!("[Floem] Tried to delete range with invalid end: {del_range:?}");
@@ -1062,7 +1113,8 @@ impl View for TextInput {
             if self.is_focused != is_focused || value != self.buffer.last_buffer {
                 if is_focused && !cx.app_state.is_active(&self.id) {
                     self.selection = None;
-                    self.cursor_glyph_idx = self.buffer.with_untracked(|buf| buf.len());
+                    self.cursor_glyph_idx =
+                        self.buffer.with_untracked(|buf| buf.len());
                 }
                 self.is_focused = is_focused;
                 self.id.request_layout();
@@ -1072,7 +1124,11 @@ impl View for TextInput {
         }
     }
 
-    fn event_before_children(&mut self, cx: &mut EventCx, event: &Event) -> EventPropagation {
+    fn event_before_children(
+        &mut self,
+        cx: &mut EventCx,
+        event: &Event,
+    ) -> EventPropagation {
         let buff_len = self.buffer.with_untracked(|buff| buff.len());
         // Workaround for cursor going out of bounds when text buffer is modified externally
         // TODO: find a better way to handle this
@@ -1097,7 +1153,8 @@ impl View for TextInput {
                 } else if event.count == 3 {
                     self.handle_triple_click();
                 } else {
-                    self.cursor_glyph_idx = self.get_box_position(event.pos.x, event.pos.y);
+                    self.cursor_glyph_idx =
+                        self.get_box_position(event.pos.x, event.pos.y);
                     self.selection = None;
                 }
                 true
@@ -1113,7 +1170,8 @@ impl View for TextInput {
                         self.scroll(event.pos.x - self.width as f64);
                     }
 
-                    let selection_stop = self.get_box_position(event.pos.x, event.pos.y);
+                    let selection_stop =
+                        self.get_box_position(event.pos.x, event.pos.y);
                     self.update_selection(self.cursor_glyph_idx, selection_stop);
                 }
                 false
@@ -1219,7 +1277,9 @@ impl View for TextInput {
             };
 
             let taffy_node_width = match style_width {
-                PxPctAuto::Px(_) | PxPctAuto::Auto => PxPctAuto::Px(self.width as f64),
+                PxPctAuto::Px(_) | PxPctAuto::Auto => {
+                    PxPctAuto::Px(self.width as f64)
+                }
                 // the pct is already applied to the text input view, so text node should be 100% of parent
                 PxPctAuto::Pct(_) => PxPctAuto::Pct(100.),
             };
@@ -1234,7 +1294,10 @@ impl View for TextInput {
         })
     }
 
-    fn compute_layout(&mut self, _cx: &mut crate::context::ComputeLayoutCx) -> Option<Rect> {
+    fn compute_layout(
+        &mut self,
+        _cx: &mut crate::context::ComputeLayoutCx,
+    ) -> Option<Rect> {
         self.update_text_layout();
 
         let text_buf = self.text_buf.as_ref().unwrap();
@@ -1289,7 +1352,10 @@ impl View for TextInput {
             if let Some(clip_txt) = self.clip_txt_buf.as_mut() {
                 cx.draw_text(
                     clip_txt,
-                    Point::new(text_start_point.x - self.clip_offset_x, text_start_point.y),
+                    Point::new(
+                        text_start_point.x - self.clip_offset_x,
+                        text_start_point.y,
+                    ),
                 );
             } else {
                 cx.draw_text(self.text_buf.as_ref().unwrap(), text_start_point);

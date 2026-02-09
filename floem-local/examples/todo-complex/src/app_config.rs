@@ -51,8 +51,11 @@ impl std::default::Default for AppConfig {
     }
 }
 
-pub fn launch_with_track<V: IntoView + 'static>(app_view: impl FnOnce() -> V + 'static) {
-    let config: AppConfig = confy::load("my_app", "floem-defaults").unwrap_or_default();
+pub fn launch_with_track<V: IntoView + 'static>(
+    app_view: impl FnOnce() -> V + 'static,
+) {
+    let config: AppConfig =
+        confy::load("my_app", "floem-defaults").unwrap_or_default();
 
     let app = Application::new();
 

@@ -116,7 +116,10 @@ impl TimerToken {
 }
 
 /// Execute a callback after a specified duration
-pub fn exec_after(duration: Duration, action: impl FnOnce(TimerToken) + 'static) -> TimerToken {
+pub fn exec_after(
+    duration: Duration,
+    action: impl FnOnce(TimerToken) + 'static,
+) -> TimerToken {
     let view = get_current_view();
     let action = move |token| {
         let current_view = get_current_view();
@@ -140,8 +143,11 @@ pub fn exec_after(duration: Duration, action: impl FnOnce(TimerToken) + 'static)
 /// Debounce an action
 ///
 /// This tracks a signal and checks if the inner value has changed by checking it's hash and will run the action only once an **uninterrupted** duration has passed
-pub fn debounce_action<T, F>(signal: impl SignalWith<T> + 'static, duration: Duration, action: F)
-where
+pub fn debounce_action<T, F>(
+    signal: impl SignalWith<T> + 'static,
+    duration: Duration,
+    action: F,
+) where
     T: std::hash::Hash + 'static,
     F: Fn() + Clone + 'static,
 {

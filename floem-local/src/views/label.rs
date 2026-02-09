@@ -8,8 +8,8 @@ use crate::{
     prop_extractor,
     style::{
         CursorColor, CustomStylable, CustomStyle, FontProps, LineHeight, Selectable,
-        SelectionCornerRadius, SelectionStyle, Style, TextAlignProp, TextColor, TextOverflow,
-        TextOverflowProp,
+        SelectionCornerRadius, SelectionStyle, Style, TextAlignProp, TextColor,
+        TextOverflow, TextOverflowProp,
     },
     style_class,
     text::{Attrs, AttrsList, FamilyOwned, TextLayout},
@@ -134,13 +134,19 @@ pub fn label<S: Display + 'static>(label: impl Fn() -> S + 'static) -> Label {
         move || label().to_string(),
         move |new_label| id.update_state(new_label),
     );
-    Label::new(id, initial_label).on_event_cont(EventListener::FocusLost, move |_| {
-        id.request_layout();
-    })
+    Label::new(id, initial_label).on_event_cont(
+        EventListener::FocusLost,
+        move |_| {
+            id.request_layout();
+        },
+    )
 }
 
 impl Label {
-    pub fn on_text_overflow(mut self, is_text_overflown_fn: impl Fn(bool) + 'static) -> Self {
+    pub fn on_text_overflow(
+        mut self,
+        is_text_overflown_fn: impl Fn(bool) + 'static,
+    ) -> Self {
         self.text_overflow_listener = Some(TextOverflowListener {
             on_change_fn: Box::new(is_text_overflown_fn),
             last_is_overflown: None,
@@ -149,7 +155,8 @@ impl Label {
     }
 
     fn get_attrs_list(&self) -> AttrsList {
-        let mut attrs = Attrs::new().color(self.style.color().unwrap_or(palette::css::BLACK));
+        let mut attrs =
+            Attrs::new().color(self.style.color().unwrap_or(palette::css::BLACK));
         if let Some(font_size) = self.font.size() {
             attrs = attrs.font_size(font_size);
         }
@@ -157,7 +164,8 @@ impl Label {
             attrs = attrs.style(font_style);
         }
         let font_family = self.font.family().as_ref().map(|font_family| {
-            let family: Vec<FamilyOwned> = FamilyOwned::parse_list(font_family).collect();
+            let family: Vec<FamilyOwned> =
+                FamilyOwned::parse_list(font_family).collect();
             family
         });
         if let Some(font_family) = font_family.as_ref() {
@@ -207,8 +215,10 @@ impl Label {
             SelectionState::None => {
                 self.selection_range = None;
             }
-            SelectionState::Selecting(start, end) | SelectionState::Selected(start, end) => {
-                let mut start_cursor = self.get_hit_point(start).expect("Start position is valid");
+            SelectionState::Selecting(start, end)
+            | SelectionState::Selected(start, end) => {
+                let mut start_cursor =
+                    self.get_hit_point(start).expect("Start position is valid");
                 if let Some(mut end_cursor) = self.get_hit_point(end) {
                     if start_cursor.line > end_cursor.line
                         || (start_cursor.line == end_cursor.line
@@ -224,7 +234,11 @@ impl Label {
         }
     }
 
-    fn handle_modifier_cmd(&mut self, event: &KeyEvent, character: &SmolStr) -> bool {
+    fn handle_modifier_cmd(
+        &mut self,
+        event: &KeyEvent,
+        character: &SmolStr,
+    ) -> bool {
         if event.modifiers.is_empty() {
             return false;
         }
@@ -235,8 +249,10 @@ impl Label {
             TextCommand::Copy => {
                 if let Some((start_c, end_c)) = &self.selection_range {
                     if let Some(ref text_layout) = self.text_layout {
-                        let start_line_idx = text_layout.lines_range()[start_c.line].start;
-                        let end_line_idx = text_layout.lines_range()[end_c.line].start;
+                        let start_line_idx =
+                            text_layout.lines_range()[start_c.line].start;
+                        let end_line_idx =
+                            text_layout.lines_range()[end_c.line].start;
                         let start_idx = start_line_idx + start_c.index;
                         let end_idx = end_line_idx + end_c.index;
                         let selection_txt = self.label[start_idx..end_idx].into();
@@ -274,8 +290,9 @@ impl Label {
                     let end_x = width + start_x;
                     let start_y = location.y as f64 + run.line_top as f64;
                     let end_y = start_y + run.line_height as f64;
-                    let rect = Rect::new(start_x.into(), start_y, end_x.into(), end_y)
-                        .to_rounded_rect(ss.corner_radius());
+                    let rect =
+                        Rect::new(start_x.into(), start_y, end_x.into(), end_y)
+                            .to_rounded_rect(ss.corner_radius());
                     paint_cx.fill(&rect, &selection_color, 0.0);
                 }
             }
@@ -331,14 +348,15 @@ impl View for Label {
                         self.id.request_layout();
                     }
                 } else {
-                    let (SelectionState::Selecting(start, _) | SelectionState::Ready(start)) =
-                        self.selection_state
+                    let (SelectionState::Selecting(start, _)
+                    | SelectionState::Ready(start)) = self.selection_state
                     else {
                         return EventPropagation::Continue;
                     };
                     // this check is here to make it so that text selection doesn't eat pointer events on very small move events
                     if start.distance(pme.pos).abs() > 2. {
-                        self.selection_state = SelectionState::Selecting(start, pme.pos);
+                        self.selection_state =
+                            SelectionState::Selecting(start, pme.pos);
                         self.id.request_active();
                         self.id.request_focus();
                         self.id.request_layout();
@@ -417,7 +435,10 @@ impl View for Label {
         })
     }
 
-    fn compute_layout(&mut self, _cx: &mut crate::context::ComputeLayoutCx) -> Option<Rect> {
+    fn compute_layout(
+        &mut self,
+        _cx: &mut crate::context::ComputeLayoutCx,
+    ) -> Option<Rect> {
         if self.label.is_empty() {
             return None;
         }
@@ -445,11 +466,16 @@ impl View for Label {
             if width > available_width {
                 if self.available_width != Some(available_width) {
                     let mut dots_text = TextLayout::new();
-                    dots_text.set_text("...", self.get_attrs_list(), self.style.text_align());
+                    dots_text.set_text(
+                        "...",
+                        self.get_attrs_list(),
+                        self.style.text_align(),
+                    );
 
                     let dots_width = dots_text.size().width as f32;
                     let width_left = available_width - dots_width;
-                    let hit_point = text_layout.hit_point(Point::new(width_left as f64, 0.0));
+                    let hit_point =
+                        text_layout.hit_point(Point::new(width_left as f64, 0.0));
                     let index = hit_point.index;
 
                     let new_text = if index > 0 {

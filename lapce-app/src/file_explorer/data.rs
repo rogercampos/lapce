@@ -458,11 +458,11 @@ impl FileExplorerData {
         if self.is_dir(path) {
             EventPropagation::Continue
         } else if config.get_untracked().core.file_explorer_double_click {
-            self.common.internal_command.send(
-                InternalCommand::OpenFile {
+            self.common
+                .internal_command
+                .send(InternalCommand::OpenFile {
                     path: path.to_path_buf(),
-                },
-            );
+                });
             EventPropagation::Stop
         } else {
             EventPropagation::Stop

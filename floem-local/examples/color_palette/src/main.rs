@@ -180,20 +180,28 @@ fn rgb_view() -> impl IntoView {
 
     (
         (
-            create_color_sliders("Red", RwSignal::new(r.get() as f32), move |new_r| {
-                r.set(new_r as i32)
-            }),
-            create_color_sliders("Green", RwSignal::new(g.get() as f32), move |new_g| {
-                g.set(new_g as i32)
-            }),
-            create_color_sliders("Blue", RwSignal::new(b.get() as f32), move |new_b| {
-                b.set(new_b as i32)
-            }),
+            create_color_sliders(
+                "Red",
+                RwSignal::new(r.get() as f32),
+                move |new_r| r.set(new_r as i32),
+            ),
+            create_color_sliders(
+                "Green",
+                RwSignal::new(g.get() as f32),
+                move |new_g| g.set(new_g as i32),
+            ),
+            create_color_sliders(
+                "Blue",
+                RwSignal::new(b.get() as f32),
+                move |new_b| b.set(new_b as i32),
+            ),
         )
             .style(|s| s.flex_col().gap(3)),
         (
-            dyn_view(move || format!("rgb: ({}, {}, {})", r.get(), g.get(), b.get(),))
-                .style(|s| s.width(50).font_size(18)),
+            dyn_view(move || {
+                format!("rgb: ({}, {}, {})", r.get(), g.get(), b.get(),)
+            })
+            .style(|s| s.width(50).font_size(18)),
             empty().style(move |s| {
                 s.background(Color::from_rgb8(
                     r.get() as u8,
@@ -218,8 +226,9 @@ fn palette() -> impl IntoView {
                             .size(235, 185)
                             .position(Position::Relative)
                     }),
-                    label(move || "#C2FFC7".to_string())
-                        .style(|s| s.position(Position::Absolute).padding(10).font_size(18)),
+                    label(move || "#C2FFC7".to_string()).style(|s| {
+                        s.position(Position::Absolute).padding(10).font_size(18)
+                    }),
                 )
                     .style(|s| s.flex_col().items_center().gap(2)),
                 (
@@ -228,8 +237,9 @@ fn palette() -> impl IntoView {
                             .size(235, 185)
                             .position(Position::Relative)
                     }),
-                    label(move || "#9EDF9C".to_string())
-                        .style(|s| s.position(Position::Absolute).padding(10).font_size(18)),
+                    label(move || "#9EDF9C".to_string()).style(|s| {
+                        s.position(Position::Absolute).padding(10).font_size(18)
+                    }),
                 )
                     .style(|s| s.flex_col().items_center().gap(2)),
                 (
@@ -238,8 +248,9 @@ fn palette() -> impl IntoView {
                             .size(235, 185)
                             .position(Position::Relative)
                     }),
-                    label(move || "#62825D".to_string())
-                        .style(|s| s.position(Position::Absolute).padding(10).font_size(18)),
+                    label(move || "#62825D".to_string()).style(|s| {
+                        s.position(Position::Absolute).padding(10).font_size(18)
+                    }),
                 )
                     .style(|s| s.flex_col().items_center().gap(2)),
                 (
@@ -248,8 +259,9 @@ fn palette() -> impl IntoView {
                             .size(235, 185)
                             .position(Position::Relative)
                     }),
-                    label(move || "#526E48".to_string())
-                        .style(|s| s.position(Position::Absolute).padding(10).font_size(18)),
+                    label(move || "#526E48".to_string()).style(|s| {
+                        s.position(Position::Absolute).padding(10).font_size(18)
+                    }),
                 )
                     .style(|s| s.flex_col().items_center().gap(2)),
             )
@@ -261,8 +273,9 @@ fn palette() -> impl IntoView {
                             .size(235, 185)
                             .position(Position::Relative)
                     }),
-                    label(move || "#DFF2EB".to_string())
-                        .style(|s| s.position(Position::Absolute).padding(10).font_size(18)),
+                    label(move || "#DFF2EB".to_string()).style(|s| {
+                        s.position(Position::Absolute).padding(10).font_size(18)
+                    }),
                 )
                     .style(|s| s.flex_col().items_center().gap(2)),
                 (
@@ -271,8 +284,9 @@ fn palette() -> impl IntoView {
                             .size(235, 185)
                             .position(Position::Relative)
                     }),
-                    label(move || "#B9E5E8".to_string())
-                        .style(|s| s.position(Position::Absolute).padding(10).font_size(18)),
+                    label(move || "#B9E5E8".to_string()).style(|s| {
+                        s.position(Position::Absolute).padding(10).font_size(18)
+                    }),
                 )
                     .style(|s| s.flex_col().items_center().gap(2)),
                 (
@@ -281,8 +295,9 @@ fn palette() -> impl IntoView {
                             .size(235, 185)
                             .position(Position::Relative)
                     }),
-                    label(move || "#7AB2D3".to_string())
-                        .style(|s| s.position(Position::Absolute).padding(10).font_size(18)),
+                    label(move || "#7AB2D3".to_string()).style(|s| {
+                        s.position(Position::Absolute).padding(10).font_size(18)
+                    }),
                 )
                     .style(|s| s.flex_col().items_center().gap(2)),
                 (
@@ -291,8 +306,9 @@ fn palette() -> impl IntoView {
                             .size(235, 185)
                             .position(Position::Relative)
                     }),
-                    label(move || "#4A628A".to_string())
-                        .style(|s| s.position(Position::Absolute).padding(10).font_size(18)),
+                    label(move || "#4A628A".to_string()).style(|s| {
+                        s.position(Position::Absolute).padding(10).font_size(18)
+                    }),
                 )
                     .style(|s| s.flex_col().items_center().gap(2)),
             )
@@ -304,8 +320,9 @@ fn palette() -> impl IntoView {
                             .size(235, 185)
                             .position(Position::Relative)
                     }),
-                    label(move || "#740938".to_string())
-                        .style(|s| s.position(Position::Absolute).padding(10).font_size(18)),
+                    label(move || "#740938".to_string()).style(|s| {
+                        s.position(Position::Absolute).padding(10).font_size(18)
+                    }),
                 )
                     .style(|s| s.flex_col().items_center().gap(2)),
                 (
@@ -314,8 +331,9 @@ fn palette() -> impl IntoView {
                             .size(235, 185)
                             .position(Position::Relative)
                     }),
-                    label(move || "#AF1740".to_string())
-                        .style(|s| s.position(Position::Absolute).padding(10).font_size(18)),
+                    label(move || "#AF1740".to_string()).style(|s| {
+                        s.position(Position::Absolute).padding(10).font_size(18)
+                    }),
                 )
                     .style(|s| s.flex_col().items_center().gap(2)),
                 (
@@ -324,8 +342,9 @@ fn palette() -> impl IntoView {
                             .size(235, 185)
                             .position(Position::Relative)
                     }),
-                    label(move || "#CC2B52".to_string())
-                        .style(|s| s.position(Position::Absolute).padding(10).font_size(18)),
+                    label(move || "#CC2B52".to_string()).style(|s| {
+                        s.position(Position::Absolute).padding(10).font_size(18)
+                    }),
                 )
                     .style(|s| s.flex_col().items_center().gap(2)),
                 (
@@ -334,8 +353,9 @@ fn palette() -> impl IntoView {
                             .size(235, 185)
                             .position(Position::Relative)
                     }),
-                    label(move || "#DE7C7D".to_string())
-                        .style(|s| s.position(Position::Absolute).padding(10).font_size(18)),
+                    label(move || "#DE7C7D".to_string()).style(|s| {
+                        s.position(Position::Absolute).padding(10).font_size(18)
+                    }),
                 )
                     .style(|s| s.flex_col().items_center().gap(2)),
             )
@@ -347,8 +367,9 @@ fn palette() -> impl IntoView {
                             .size(235, 185)
                             .position(Position::Relative)
                     }),
-                    label(move || "#FFF5E4".to_string())
-                        .style(|s| s.position(Position::Absolute).padding(10).font_size(18)),
+                    label(move || "#FFF5E4".to_string()).style(|s| {
+                        s.position(Position::Absolute).padding(10).font_size(18)
+                    }),
                 )
                     .style(|s| s.flex_col().items_center().gap(2)),
                 (
@@ -357,8 +378,9 @@ fn palette() -> impl IntoView {
                             .size(235, 185)
                             .position(Position::Relative)
                     }),
-                    label(move || "#FFE3E1".to_string())
-                        .style(|s| s.position(Position::Absolute).padding(10).font_size(18)),
+                    label(move || "#FFE3E1".to_string()).style(|s| {
+                        s.position(Position::Absolute).padding(10).font_size(18)
+                    }),
                 )
                     .style(|s| s.flex_col().items_center().gap(2)),
                 (
@@ -367,8 +389,9 @@ fn palette() -> impl IntoView {
                             .size(235, 185)
                             .position(Position::Relative)
                     }),
-                    label(move || "#FFD1D1".to_string())
-                        .style(|s| s.position(Position::Absolute).padding(10).font_size(18)),
+                    label(move || "#FFD1D1".to_string()).style(|s| {
+                        s.position(Position::Absolute).padding(10).font_size(18)
+                    }),
                 )
                     .style(|s| s.flex_col().items_center().gap(2)),
                 (
@@ -377,8 +400,9 @@ fn palette() -> impl IntoView {
                             .size(235, 185)
                             .position(Position::Relative)
                     }),
-                    label(move || "#FF9494".to_string())
-                        .style(|s| s.position(Position::Absolute).padding(10).font_size(18)),
+                    label(move || "#FF9494".to_string()).style(|s| {
+                        s.position(Position::Absolute).padding(10).font_size(18)
+                    }),
                 )
                     .style(|s| s.flex_col().items_center().gap(2)),
             )
@@ -393,8 +417,9 @@ fn palette() -> impl IntoView {
                             .size(235, 185)
                             .position(Position::Relative)
                     }),
-                    label(move || "#CB9DF0".to_string())
-                        .style(|s| s.position(Position::Absolute).padding(10).font_size(18)),
+                    label(move || "#CB9DF0".to_string()).style(|s| {
+                        s.position(Position::Absolute).padding(10).font_size(18)
+                    }),
                 )
                     .style(|s| s.flex_col().items_center().gap(2)),
                 (
@@ -403,8 +428,9 @@ fn palette() -> impl IntoView {
                             .size(235, 185)
                             .position(Position::Relative)
                     }),
-                    label(move || "#F0C1E1".to_string())
-                        .style(|s| s.position(Position::Absolute).padding(10).font_size(18)),
+                    label(move || "#F0C1E1".to_string()).style(|s| {
+                        s.position(Position::Absolute).padding(10).font_size(18)
+                    }),
                 )
                     .style(|s| s.flex_col().items_center().gap(2)),
                 (
@@ -413,8 +439,9 @@ fn palette() -> impl IntoView {
                             .size(235, 185)
                             .position(Position::Relative)
                     }),
-                    label(move || "#FDDBBB".to_string())
-                        .style(|s| s.position(Position::Absolute).padding(10).font_size(18)),
+                    label(move || "#FDDBBB".to_string()).style(|s| {
+                        s.position(Position::Absolute).padding(10).font_size(18)
+                    }),
                 )
                     .style(|s| s.flex_col().items_center().gap(2)),
                 (
@@ -423,8 +450,9 @@ fn palette() -> impl IntoView {
                             .size(235, 185)
                             .position(Position::Relative)
                     }),
-                    label(move || "#FFF9BF".to_string())
-                        .style(|s| s.position(Position::Absolute).padding(10).font_size(18)),
+                    label(move || "#FFF9BF".to_string()).style(|s| {
+                        s.position(Position::Absolute).padding(10).font_size(18)
+                    }),
                 )
                     .style(|s| s.flex_col().items_center().gap(2)),
             )
@@ -436,8 +464,9 @@ fn palette() -> impl IntoView {
                             .size(235, 185)
                             .position(Position::Relative)
                     }),
-                    label(move || "#2E073F".to_string())
-                        .style(|s| s.position(Position::Absolute).padding(10).font_size(18)),
+                    label(move || "#2E073F".to_string()).style(|s| {
+                        s.position(Position::Absolute).padding(10).font_size(18)
+                    }),
                 )
                     .style(|s| s.flex_col().items_center().gap(2)),
                 (
@@ -446,8 +475,9 @@ fn palette() -> impl IntoView {
                             .size(235, 185)
                             .position(Position::Relative)
                     }),
-                    label(move || "#7A1CAC".to_string())
-                        .style(|s| s.position(Position::Absolute).padding(10).font_size(18)),
+                    label(move || "#7A1CAC".to_string()).style(|s| {
+                        s.position(Position::Absolute).padding(10).font_size(18)
+                    }),
                 )
                     .style(|s| s.flex_col().items_center().gap(2)),
                 (
@@ -456,8 +486,9 @@ fn palette() -> impl IntoView {
                             .size(235, 185)
                             .position(Position::Relative)
                     }),
-                    label(move || "#AD49E1".to_string())
-                        .style(|s| s.position(Position::Absolute).padding(10).font_size(18)),
+                    label(move || "#AD49E1".to_string()).style(|s| {
+                        s.position(Position::Absolute).padding(10).font_size(18)
+                    }),
                 )
                     .style(|s| s.flex_col().items_center().gap(2)),
                 (
@@ -466,8 +497,9 @@ fn palette() -> impl IntoView {
                             .size(235, 185)
                             .position(Position::Relative)
                     }),
-                    label(move || "#EBD3F8".to_string())
-                        .style(|s| s.position(Position::Absolute).padding(10).font_size(18)),
+                    label(move || "#EBD3F8".to_string()).style(|s| {
+                        s.position(Position::Absolute).padding(10).font_size(18)
+                    }),
                 )
                     .style(|s| s.flex_col().items_center().gap(2)),
             )
@@ -479,8 +511,9 @@ fn palette() -> impl IntoView {
                             .size(235, 185)
                             .position(Position::Relative)
                     }),
-                    label(move || "#6F4E37".to_string())
-                        .style(|s| s.position(Position::Absolute).padding(10).font_size(18)),
+                    label(move || "#6F4E37".to_string()).style(|s| {
+                        s.position(Position::Absolute).padding(10).font_size(18)
+                    }),
                 )
                     .style(|s| s.flex_col().items_center().gap(2)),
                 (
@@ -489,8 +522,9 @@ fn palette() -> impl IntoView {
                             .size(235, 185)
                             .position(Position::Relative)
                     }),
-                    label(move || "#A67B5B".to_string())
-                        .style(|s| s.position(Position::Absolute).padding(10).font_size(18)),
+                    label(move || "#A67B5B".to_string()).style(|s| {
+                        s.position(Position::Absolute).padding(10).font_size(18)
+                    }),
                 )
                     .style(|s| s.flex_col().items_center().gap(2)),
                 (
@@ -499,8 +533,9 @@ fn palette() -> impl IntoView {
                             .size(235, 185)
                             .position(Position::Relative)
                     }),
-                    label(move || "#ECB176".to_string())
-                        .style(|s| s.position(Position::Absolute).padding(10).font_size(18)),
+                    label(move || "#ECB176".to_string()).style(|s| {
+                        s.position(Position::Absolute).padding(10).font_size(18)
+                    }),
                 )
                     .style(|s| s.flex_col().items_center().gap(2)),
                 (
@@ -509,8 +544,9 @@ fn palette() -> impl IntoView {
                             .size(235, 185)
                             .position(Position::Relative)
                     }),
-                    label(move || "#FED8B1".to_string())
-                        .style(|s| s.position(Position::Absolute).padding(10).font_size(18)),
+                    label(move || "#FED8B1".to_string()).style(|s| {
+                        s.position(Position::Absolute).padding(10).font_size(18)
+                    }),
                 )
                     .style(|s| s.flex_col().items_center().gap(2)),
             )
@@ -522,8 +558,9 @@ fn palette() -> impl IntoView {
                             .size(235, 185)
                             .position(Position::Relative)
                     }),
-                    label(move || "#CCD5AE".to_string())
-                        .style(|s| s.position(Position::Absolute).padding(10).font_size(18)),
+                    label(move || "#CCD5AE".to_string()).style(|s| {
+                        s.position(Position::Absolute).padding(10).font_size(18)
+                    }),
                 )
                     .style(|s| s.flex_col().items_center().gap(2)),
                 (
@@ -532,8 +569,9 @@ fn palette() -> impl IntoView {
                             .size(235, 185)
                             .position(Position::Relative)
                     }),
-                    label(move || "#E0E5B6".to_string())
-                        .style(|s| s.position(Position::Absolute).padding(10).font_size(18)),
+                    label(move || "#E0E5B6".to_string()).style(|s| {
+                        s.position(Position::Absolute).padding(10).font_size(18)
+                    }),
                 )
                     .style(|s| s.flex_col().items_center().gap(2)),
                 (
@@ -542,8 +580,9 @@ fn palette() -> impl IntoView {
                             .size(235, 185)
                             .position(Position::Relative)
                     }),
-                    label(move || "#FAEDCE".to_string())
-                        .style(|s| s.position(Position::Absolute).padding(10).font_size(18)),
+                    label(move || "#FAEDCE".to_string()).style(|s| {
+                        s.position(Position::Absolute).padding(10).font_size(18)
+                    }),
                 )
                     .style(|s| s.flex_col().items_center().gap(2)),
                 (
@@ -552,8 +591,9 @@ fn palette() -> impl IntoView {
                             .size(235, 185)
                             .position(Position::Relative)
                     }),
-                    label(move || "#FEFAE0".to_string())
-                        .style(|s| s.position(Position::Absolute).padding(10).font_size(18)),
+                    label(move || "#FEFAE0".to_string()).style(|s| {
+                        s.position(Position::Absolute).padding(10).font_size(18)
+                    }),
                 )
                     .style(|s| s.flex_col().items_center().gap(2)),
             )

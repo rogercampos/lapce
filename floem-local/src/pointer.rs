@@ -39,8 +39,12 @@ impl Hash for PointerButton {
 impl From<ButtonSource> for PointerButton {
     fn from(value: ButtonSource) -> Self {
         match value {
-            ButtonSource::Mouse(mouse_button) => PointerButton::Mouse(mouse_button.into()),
-            ButtonSource::Touch { finger_id, force } => PointerButton::Touch { finger_id, force },
+            ButtonSource::Mouse(mouse_button) => {
+                PointerButton::Mouse(mouse_button.into())
+            }
+            ButtonSource::Touch { finger_id, force } => {
+                PointerButton::Touch { finger_id, force }
+            }
             ButtonSource::Unknown(n) => PointerButton::Unknown(n),
         }
     }

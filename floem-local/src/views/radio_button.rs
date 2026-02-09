@@ -13,7 +13,10 @@ style_class!(pub RadioButtonDotClass);
 style_class!(pub RadioButtonDotSelectedClass);
 style_class!(pub LabeledRadioButtonClass);
 
-fn radio_button_svg<T>(represented_value: T, actual_value: impl SignalGet<T> + 'static) -> impl View
+fn radio_button_svg<T>(
+    represented_value: T,
+    actual_value: impl SignalGet<T> + 'static,
+) -> impl View
 where
     T: Eq + PartialEq + Clone + 'static,
 {
@@ -38,11 +41,15 @@ impl RadioButton {
     /// This method is useful when you want a radio button whose state is determined by a closure.
     /// The state can be dynamically updated by the closure, and the radio button will reflect these changes.
     #[allow(clippy::new_ret_no_self)]
-    pub fn new<T>(represented_value: T, actual_value: impl Fn() -> T + 'static) -> ValueContainer<T>
+    pub fn new<T>(
+        represented_value: T,
+        actual_value: impl Fn() -> T + 'static,
+    ) -> ValueContainer<T>
     where
         T: Eq + PartialEq + Clone + 'static,
     {
-        let (inbound_signal, outbound_signal) = create_value_container_signals(actual_value);
+        let (inbound_signal, outbound_signal) =
+            create_value_container_signals(actual_value);
 
         value_container(
             radio_button_svg(represented_value.clone(), inbound_signal.read_only())
@@ -100,11 +107,15 @@ impl RadioButton {
     where
         T: Eq + PartialEq + Clone + 'static,
     {
-        let (inbound_signal, outbound_signal) = create_value_container_signals(actual_value);
+        let (inbound_signal, outbound_signal) =
+            create_value_container_signals(actual_value);
 
         value_container(
             h_stack((
-                radio_button_svg(represented_value.clone(), inbound_signal.read_only()),
+                radio_button_svg(
+                    represented_value.clone(),
+                    inbound_signal.read_only(),
+                ),
                 views::label(label),
             ))
             .class(LabeledRadioButtonClass)
@@ -236,17 +247,19 @@ mod test {
     #[test]
     fn test_radio_button_new_get() {
         let actual_value = create_rw_signal(String::from("Option1"));
-        let _radio_button = RadioButton::new_get("Option1".to_string(), actual_value);
+        let _radio_button =
+            RadioButton::new_get("Option1".to_string(), actual_value);
         assert_eq!(actual_value.get(), "Option1");
     }
 
     #[test]
     fn test_radio_button_new_labeled_get() {
         let actual_value = create_rw_signal(String::from("OptionA"));
-        let _labeled_radio_button =
-            RadioButton::new_labeled_get("OptionA".to_string(), actual_value, || {
-                "Label for Option A"
-            });
+        let _labeled_radio_button = RadioButton::new_labeled_get(
+            "OptionA".to_string(),
+            actual_value,
+            || "Label for Option A",
+        );
 
         assert_eq!(actual_value.get(), "OptionA");
     }

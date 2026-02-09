@@ -55,7 +55,10 @@ pub fn open_file(
 }
 
 /// Open a system file save dialog
-pub fn save_as(options: FileDialogOptions, file_info_action: impl Fn(Option<FileInfo>) + 'static) {
+pub fn save_as(
+    options: FileDialogOptions,
+    file_info_action: impl Fn(Option<FileInfo>) + 'static,
+) {
     let send = create_ext_action(Scope::new(), move |path: Option<PathBuf>| {
         file_info_action(path.map(|path| FileInfo {
             path: vec![path],

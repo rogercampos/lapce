@@ -4,8 +4,8 @@ use floem::{
     peniko::{color::palette, Color},
     reactive::{create_signal, SignalGet, SignalUpdate},
     style::{
-        Background, BorderBottomColor, BorderLeftColor, BorderRightColor, BorderTopColor, Outline,
-        OutlineColor, Style, TextColor, Transition,
+        Background, BorderBottomColor, BorderLeftColor, BorderRightColor,
+        BorderTopColor, Outline, OutlineColor, Style, TextColor, Transition,
     },
     style_class,
     unit::DurationUnitExt,

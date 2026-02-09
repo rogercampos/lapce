@@ -1,5 +1,16 @@
 use std::{rc::Rc, sync::Arc};
 
+use crate::{
+    command::LapceCommand,
+    config::{LapceConfig, color::LapceColor},
+    keypress::{
+        KeyPressData,
+        keymap::{KeyMap, KeyMapPress},
+    },
+    main_split::Editors,
+    text_input::TextInputBuilder,
+    window_tab::CommonData,
+};
 use floem::{
     View,
     event::{Event, EventListener},
@@ -11,17 +22,6 @@ use floem::{
     views::{
         Decorators, container, dyn_stack, label, scroll, stack, text, virtual_stack,
     },
-};
-use crate::{
-    command::LapceCommand,
-    config::{LapceConfig, color::LapceColor},
-    keypress::{
-        KeyPressData,
-        keymap::{KeyMap, KeyMapPress},
-    },
-    main_split::Editors,
-    text_input::TextInputBuilder,
-    window_tab::CommonData,
 };
 
 #[derive(Clone)]

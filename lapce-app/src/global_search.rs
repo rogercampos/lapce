@@ -13,7 +13,10 @@ use lapce_xi_rope::Rope;
 
 use crate::{
     command::{CommandExecuted, CommandKind, InternalCommand},
-    editor::{EditorData, EditorViewKind, location::{EditorLocation, EditorPosition}},
+    editor::{
+        EditorData, EditorViewKind,
+        location::{EditorLocation, EditorPosition},
+    },
     keypress::{KeyPressFocus, condition::Condition},
     main_split::MainSplitData,
     window_tab::CommonData,
@@ -297,16 +300,16 @@ impl GlobalSearchData {
 
     fn select(&self) {
         if let Some((path, line, _, _)) = self.selected_match.get_untracked() {
-            self.common.internal_command.send(
-                InternalCommand::JumpToLocation {
+            self.common
+                .internal_command
+                .send(InternalCommand::JumpToLocation {
                     location: EditorLocation {
                         path,
                         position: Some(EditorPosition::Line(line.saturating_sub(1))),
                         scroll_offset: None,
                         same_editor_tab: false,
                     },
-                },
-            );
+                });
         }
     }
 

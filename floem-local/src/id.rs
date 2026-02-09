@@ -18,7 +18,9 @@ use crate::{
     menu::Menu,
     style::{DisplayProp, Style, StyleClassRef, StyleSelector},
     unit::PxPct,
-    update::{UpdateMessage, CENTRAL_DEFERRED_UPDATE_MESSAGES, CENTRAL_UPDATE_MESSAGES},
+    update::{
+        UpdateMessage, CENTRAL_DEFERRED_UPDATE_MESSAGES, CENTRAL_UPDATE_MESSAGES,
+    },
     view::{IntoView, View},
     view_state::{ChangeFlags, StackOffset, ViewState},
     view_storage::VIEW_STORAGE,
@@ -92,7 +94,9 @@ impl ViewId {
                     .entry(*self)
                     .unwrap()
                     .or_insert_with(|| {
-                        Rc::new(RefCell::new(ViewState::new(&mut s.taffy.borrow_mut())))
+                        Rc::new(RefCell::new(ViewState::new(
+                            &mut s.taffy.borrow_mut(),
+                        )))
                     })
                     .clone()
             }
@@ -128,8 +132,10 @@ impl ViewId {
                 let child_view_id = child_view.id();
                 children_ids.push(child_view_id);
                 s.parent.insert(child_view_id, Some(*self));
-                s.views
-                    .insert(child_view_id, Rc::new(RefCell::new(child_view.into_any())));
+                s.views.insert(
+                    child_view_id,
+                    Rc::new(RefCell::new(child_view.into_any())),
+                );
             }
             s.children.insert(*self, children_ids);
         });
@@ -145,8 +151,10 @@ impl ViewId {
                 let child_view_id = child_view.id();
                 children_ids.push(child_view_id);
                 s.parent.insert(child_view_id, Some(*self));
-                s.views
-                    .insert(child_view_id, Rc::new(RefCell::new(child_view.into_any())));
+                s.views.insert(
+                    child_view_id,
+                    Rc::new(RefCell::new(child_view.into_any())),
+                );
             }
             s.children.insert(*self, children_ids);
         });
@@ -181,12 +189,14 @@ impl ViewId {
 
     /// Get the list of `ViewId`s that are associated with the children views of this `ViewId`
     pub fn children(&self) -> Vec<ViewId> {
-        VIEW_STORAGE.with_borrow(|s| s.children.get(*self).cloned().unwrap_or_default())
+        VIEW_STORAGE
+            .with_borrow(|s| s.children.get(*self).cloned().unwrap_or_default())
     }
 
     /// Get access to the list of `ViewId`s that are associated with the children views of this `ViewId`
     pub fn with_children<R>(&self, children: impl Fn(&[ViewId]) -> R) -> R {
-        VIEW_STORAGE.with_borrow(|s| children(s.children.get(*self).map_or(&[], |v| v)))
+        VIEW_STORAGE
+            .with_borrow(|s| children(s.children.get(*self).map_or(&[], |v| v)))
     }
 
     /// Get the `ViewId` that has been set as this `ViewId`'s parent
@@ -246,10 +256,14 @@ impl ViewId {
             PxPct::Pct(pct) => pct * abs,
         };
         rect.inset(-Insets {
-            x0: props.border_left().0.width + pixels(props.padding_left(), rect.width()),
-            x1: props.border_right().0.width + pixels(props.padding_right(), rect.width()),
-            y0: props.border_top().0.width + pixels(props.padding_top(), rect.height()),
-            y1: props.border_bottom().0.width + pixels(props.padding_bottom(), rect.height()),
+            x0: props.border_left().0.width
+                + pixels(props.padding_left(), rect.width()),
+            x1: props.border_right().0.width
+                + pixels(props.padding_right(), rect.width()),
+            y0: props.border_top().0.width
+                + pixels(props.padding_top(), rect.height()),
+            y1: props.border_bottom().0.width
+                + pixels(props.padding_bottom(), rect.height()),
         })
     }
 
@@ -270,7 +284,8 @@ impl ViewId {
 
             node = parent?;
 
-            layout.location = layout.location + taffy.borrow().layout(node).ok()?.location;
+            layout.location =
+                layout.location + taffy.borrow().layout(node).ok()?.location;
         }
 
         Some(layout)
@@ -396,7 +411,11 @@ impl ViewId {
         self.add_update_message(UpdateMessage::ViewTransitionAnimComplete(*self));
     }
 
-    pub(crate) fn update_animation(&self, offset: StackOffset<Animation>, animation: Animation) {
+    pub(crate) fn update_animation(
+        &self,
+        offset: StackOffset<Animation>,
+        animation: Animation,
+    ) {
         let state = self.state();
         state.borrow_mut().animations.set(offset, animation);
         self.request_style();
@@ -430,7 +449,11 @@ impl ViewId {
     }
 
     /// Add an callback on an action for a given `EventListener`
-    pub fn add_event_listener(&self, listener: EventListener, action: Box<EventCallback>) {
+    pub fn add_event_listener(
+        &self,
+        listener: EventListener,
+        action: Box<EventCallback>,
+    ) {
         let state = self.state();
         state.borrow_mut().add_event_listener(listener, action);
     }
@@ -479,7 +502,11 @@ impl ViewId {
         self.request_style_recursive();
     }
 
-    pub(crate) fn update_style_selector(&self, selector: StyleSelector, style: Style) {
+    pub(crate) fn update_style_selector(
+        &self,
+        selector: StyleSelector,
+        style: Style,
+    ) {
         if let StyleSelector::Dragging = selector {
             let state = self.state();
             state.borrow_mut().dragging_style = Some(style);
@@ -536,7 +563,9 @@ impl ViewId {
 
     /// Mark this view as a view that can **not** be navigated to using the keyboard
     pub fn remove_keyboard_navigatable(&self) {
-        self.add_update_message(UpdateMessage::RemoveKeyboardNavigable { id: *self });
+        self.add_update_message(UpdateMessage::RemoveKeyboardNavigable {
+            id: *self,
+        });
     }
 
     /// Disables the default view behavior for the specified event.

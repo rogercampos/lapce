@@ -156,7 +156,9 @@ pub fn img(image: impl Fn() -> Vec<u8> + 'static) -> Img {
     let image = image::load_from_memory(&image()).ok();
     let width = image.as_ref().map_or(0, |img| img.width());
     let height = image.as_ref().map_or(0, |img| img.height());
-    let data = Arc::new(image.map_or(Default::default(), |img| img.into_rgba8().into_vec()));
+    let data = Arc::new(
+        image.map_or(Default::default(), |img| img.into_rgba8().into_vec()),
+    );
     let blob = Blob::new(data);
     let image = peniko::Image::new(blob, peniko::ImageFormat::Rgba8, width, height);
     img_dynamic(move || image.clone())
@@ -184,7 +186,9 @@ pub fn img_from_path(image: impl Fn() -> PathBuf + 'static) -> Img {
     let image = image::open(image()).ok();
     let width = image.as_ref().map_or(0, |img| img.width());
     let height = image.as_ref().map_or(0, |img| img.height());
-    let data = Arc::new(image.map_or(Default::default(), |img| img.into_rgba8().into_vec()));
+    let data = Arc::new(
+        image.map_or(Default::default(), |img| img.into_rgba8().into_vec()),
+    );
     let blob = Blob::new(data);
     let image = peniko::Image::new(blob, peniko::ImageFormat::Rgba8, width, height);
     img_dynamic(move || image.clone())
@@ -212,7 +216,11 @@ impl View for Img {
         "Img".into()
     }
 
-    fn update(&mut self, _cx: &mut crate::context::UpdateCx, state: Box<dyn std::any::Any>) {
+    fn update(
+        &mut self,
+        _cx: &mut crate::context::UpdateCx,
+        state: Box<dyn std::any::Any>,
+    ) {
         if let Ok(img) = state.downcast::<peniko::Image>() {
             let mut hasher = Sha256::new();
             hasher.update(img.data.data());

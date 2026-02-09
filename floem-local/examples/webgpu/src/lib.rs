@@ -48,7 +48,8 @@ pub fn run() {
         font_db.load_font_data(Vec::from(DEJAVU_SERIF));
     }
 
-    let window_config = WindowConfig::default().with_web_config(|w| w.canvas_id("the-canvas"));
+    let window_config =
+        WindowConfig::default().with_web_config(|w| w.canvas_id("the-canvas"));
 
     Application::new()
         .window(move |_| app_view(), Some(window_config))

@@ -3,7 +3,8 @@ use std::time::{Duration, Instant};
 use floem::{
     action::exec_after,
     reactive::{
-        create_effect, create_rw_signal, DerivedRwSignal, SignalGet, SignalTrack, SignalUpdate,
+        create_effect, create_rw_signal, DerivedRwSignal, SignalGet, SignalTrack,
+        SignalUpdate,
     },
     unit::{Pct, UnitExt},
     views::{button, container, label, slider, stack, text, v_stack, Decorators},
@@ -21,7 +22,8 @@ fn app_view() -> impl IntoView {
     let duration_slider = thin_slider(target_duration);
 
     let elapsed_time = create_rw_signal(Duration::ZERO);
-    let is_active = move || elapsed_time.get().as_secs_f64() < target_duration.get().0;
+    let is_active =
+        move || elapsed_time.get().as_secs_f64() < target_duration.get().0;
 
     let elapsed_time_label = label(move || {
         format!(
@@ -54,10 +56,12 @@ fn app_view() -> impl IntoView {
     );
     let elapsed_time_bar = gauge(progress);
 
-    let reset_button = button("Reset").action(move || elapsed_time.set(Duration::ZERO));
+    let reset_button =
+        button("Reset").action(move || elapsed_time.set(Duration::ZERO));
 
     let view = v_stack((
-        stack((text("Elapsed Time: "), elapsed_time_bar)).style(|s| s.justify_between()),
+        stack((text("Elapsed Time: "), elapsed_time_bar))
+            .style(|s| s.justify_between()),
         elapsed_time_label,
         stack((text("Duration: "), duration_slider)).style(|s| s.justify_between()),
         reset_button,

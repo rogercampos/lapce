@@ -163,7 +163,8 @@ impl CapturedData {
             DataType::Internal { expanded, children } => {
                 if expanded.get() {
                     for child in children {
-                        let child_children = child.get_children(next, min, max, level + 1);
+                        let child_children =
+                            child.get_children(next, min, max, level + 1);
                         if !child_children.is_empty() {
                             children_data.extend(child_children);
                         }

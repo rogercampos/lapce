@@ -37,9 +37,17 @@ fn app_view() -> impl IntoView {
             palette::css::HOT_PINK,
             String::from("Nested context 1"),
             || {
-                context_container(palette::css::BLUE, String::from("Nested context 2"), || {
-                    context_container(palette::css::GREEN, String::from("Nested context 3"), empty)
-                })
+                context_container(
+                    palette::css::BLUE,
+                    String::from("Nested context 2"),
+                    || {
+                        context_container(
+                            palette::css::GREEN,
+                            String::from("Nested context 3"),
+                            empty,
+                        )
+                    },
+                )
             },
         ),
     ))

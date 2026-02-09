@@ -129,7 +129,9 @@ impl std::fmt::Display for GpuResourceError {
             GpuResourceError::AdapterNotFoundError => {
                 write!(f, "Failed to find a suitable GPU adapter")
             }
-            GpuResourceError::DeviceRequestError(err) => write!(f, "Device request error: {err}"),
+            GpuResourceError::DeviceRequestError(err) => {
+                write!(f, "Device request error: {err}")
+            }
         }
     }
 }

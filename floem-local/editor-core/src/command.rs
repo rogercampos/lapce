@@ -3,7 +3,15 @@ use strum_macros::{Display, EnumIter, EnumMessage, EnumString, IntoStaticStr};
 use crate::movement::{LinePosition, Movement};
 
 #[derive(
-    Display, EnumString, EnumIter, Clone, PartialEq, Eq, Debug, EnumMessage, IntoStaticStr,
+    Display,
+    EnumString,
+    EnumIter,
+    Clone,
+    PartialEq,
+    Eq,
+    Debug,
+    EnumMessage,
+    IntoStaticStr,
 )]
 pub enum EditCommand {
     #[strum(message = "Move Line Up")]
@@ -150,7 +158,15 @@ impl EditCommand {
 }
 
 #[derive(
-    Display, EnumString, EnumIter, Clone, PartialEq, Eq, Debug, EnumMessage, IntoStaticStr,
+    Display,
+    EnumString,
+    EnumIter,
+    Clone,
+    PartialEq,
+    Eq,
+    Debug,
+    EnumMessage,
+    IntoStaticStr,
 )]
 pub enum MoveCommand {
     #[strum(message = "Down")]
@@ -254,7 +270,15 @@ impl MoveCommand {
 }
 
 #[derive(
-    Display, EnumString, EnumIter, Clone, PartialEq, Eq, Debug, EnumMessage, IntoStaticStr,
+    Display,
+    EnumString,
+    EnumIter,
+    Clone,
+    PartialEq,
+    Eq,
+    Debug,
+    EnumMessage,
+    IntoStaticStr,
 )]
 pub enum ScrollCommand {
     #[strum(message = "Page Up")]
@@ -281,7 +305,15 @@ pub enum ScrollCommand {
 }
 
 #[derive(
-    Display, EnumString, EnumIter, Clone, PartialEq, Eq, Debug, EnumMessage, IntoStaticStr,
+    Display,
+    EnumString,
+    EnumIter,
+    Clone,
+    PartialEq,
+    Eq,
+    Debug,
+    EnumMessage,
+    IntoStaticStr,
 )]
 pub enum FocusCommand {
     #[strum(message = "Split Vertical")]
@@ -465,7 +497,15 @@ pub enum FocusCommand {
 }
 
 #[derive(
-    Display, EnumString, EnumIter, Clone, PartialEq, Eq, Debug, EnumMessage, IntoStaticStr,
+    Display,
+    EnumString,
+    EnumIter,
+    Clone,
+    PartialEq,
+    Eq,
+    Debug,
+    EnumMessage,
+    IntoStaticStr,
 )]
 pub enum MotionModeCommand {
     #[strum(message = "Motion Mode Delete")]
@@ -483,7 +523,15 @@ pub enum MotionModeCommand {
 }
 
 #[derive(
-    Display, EnumString, EnumIter, Clone, PartialEq, Eq, Debug, EnumMessage, IntoStaticStr,
+    Display,
+    EnumString,
+    EnumIter,
+    Clone,
+    PartialEq,
+    Eq,
+    Debug,
+    EnumMessage,
+    IntoStaticStr,
 )]
 pub enum MultiSelectionCommand {
     #[strum(message = "Select Undo")]

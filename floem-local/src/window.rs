@@ -55,7 +55,9 @@ impl Default for WindowConfig {
             window_icon: None,
             title: std::env::current_exe()
                 .ok()
-                .and_then(|p| p.file_name().map(|f| f.to_string_lossy().into_owned()))
+                .and_then(|p| {
+                    p.file_name().map(|f| f.to_string_lossy().into_owned())
+                })
                 .unwrap_or("Floem Window".to_string()),
             enabled_buttons: WindowButtons::all(),
             resizable: true,
@@ -233,7 +235,10 @@ impl WindowConfig {
     /// Set up web specific configuration.
     /// The passed closure will only be called on the web.
     #[allow(unused_variables, unused_mut)] // build will complain on non-web platforms otherwise
-    pub fn with_web_config(mut self, f: impl FnOnce(WebWindowConfig) -> WebWindowConfig) -> Self {
+    pub fn with_web_config(
+        mut self,
+        f: impl FnOnce(WebWindowConfig) -> WebWindowConfig,
+    ) -> Self {
         #[cfg(target_arch = "wasm32")]
         if let Some(existing_config) = self.web_config {
             self.web_config = Some(f(existing_config))
@@ -387,8 +392,12 @@ pub enum MacOsOptionAsAlt {
 impl From<MacOsOptionAsAlt> for winit::platform::macos::OptionAsAlt {
     fn from(opts: MacOsOptionAsAlt) -> winit::platform::macos::OptionAsAlt {
         match opts {
-            MacOsOptionAsAlt::OnlyLeft => winit::platform::macos::OptionAsAlt::OnlyLeft,
-            MacOsOptionAsAlt::OnlyRight => winit::platform::macos::OptionAsAlt::OnlyRight,
+            MacOsOptionAsAlt::OnlyLeft => {
+                winit::platform::macos::OptionAsAlt::OnlyLeft
+            }
+            MacOsOptionAsAlt::OnlyRight => {
+                winit::platform::macos::OptionAsAlt::OnlyRight
+            }
             MacOsOptionAsAlt::Both => winit::platform::macos::OptionAsAlt::Both,
             MacOsOptionAsAlt::None => winit::platform::macos::OptionAsAlt::None,
         }

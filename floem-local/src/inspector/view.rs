@@ -2,19 +2,20 @@ use crate::app::{add_app_update_event, AppUpdateEvent};
 use crate::event::{Event, EventListener, EventPropagation};
 use crate::inspector::data::{CapturedData, CapturedDatas};
 use crate::inspector::{
-    add_event, find_view, header, selected_view, stats, update_select_view_id, Capture,
-    CaptureView, CAPTURE, RUNNING,
+    add_event, find_view, header, selected_view, stats, update_select_view_id,
+    Capture, CaptureView, CAPTURE, RUNNING,
 };
 use crate::prelude::{
-    button, container, dyn_container, empty, h_stack, img_dynamic, scroll, stack, static_label,
-    tab, text, text_input, v_stack, virtual_stack,
+    button, container, dyn_container, empty, h_stack, img_dynamic, scroll, stack,
+    static_label, tab, text, text_input, v_stack, virtual_stack,
 };
 use crate::profiler::profiler;
 use crate::views::Decorators;
 use crate::window::WindowConfig;
 use crate::{keyboard, new_window, IntoView, View, ViewId};
 use floem_reactive::{
-    create_effect, create_rw_signal, create_signal, RwSignal, SignalGet, SignalUpdate,
+    create_effect, create_rw_signal, create_signal, RwSignal, SignalGet,
+    SignalUpdate,
 };
 use peniko::color::palette;
 use peniko::Color;
@@ -40,10 +41,17 @@ pub fn capture(window_id: WindowId) {
                                 .border_right(1.)
                                 .border_color(palette::css::BLACK.with_alpha(0.2))
                                 .hover(move |s| {
-                                    s.background(Color::from_rgba8(228, 237, 216, 160))
-                                        .apply_if(selected.get() == index, |s| {
-                                            s.background(Color::from_rgb8(186, 180, 216))
-                                        })
+                                    s.background(Color::from_rgba8(
+                                        228, 237, 216, 160,
+                                    ))
+                                    .apply_if(
+                                        selected.get() == index,
+                                        |s| {
+                                            s.background(Color::from_rgb8(
+                                                186, 180, 216,
+                                            ))
+                                        },
+                                    )
                                 })
                                 .apply_if(selected.get() == index, |s| {
                                     s.background(Color::from_rgb8(213, 208, 216))
@@ -62,7 +70,8 @@ pub fn capture(window_id: WindowId) {
                         0 => dyn_container(
                             move || capture.get(),
                             move |capture_value| {
-                                inspector_view(window_id, capture, &capture_value).into_any()
+                                inspector_view(window_id, capture, &capture_value)
+                                    .into_any()
                             },
                         )
                         .style(|s| s.width_full().height_full())
@@ -85,7 +94,8 @@ pub fn capture(window_id: WindowId) {
                     .style(|s| s.width_full().height_full())
                     .on_event(EventListener::KeyUp, move |e| {
                         if let Event::KeyUp(e) = e {
-                            if e.key.logical_key == keyboard::Key::Named(NamedKey::F11)
+                            if e.key.logical_key
+                                == keyboard::Key::Named(NamedKey::F11)
                                 && e.modifiers.shift()
                             {
                                 id.inspect();
@@ -151,7 +161,8 @@ fn capture_view(
         selected: create_rw_signal(None),
         highlighted: create_rw_signal(None),
     };
-    let datas = create_rw_signal(CapturedDatas::init_from_view(capture.root.clone()));
+    let datas =
+        create_rw_signal(CapturedDatas::init_from_view(capture.root.clone()));
     let window = capture.window.clone();
     let capture_ = capture.clone();
     let (image_width, image_height) = capture
@@ -348,8 +359,9 @@ fn capture_view(
     let inner_search = search_str;
     let match_ids = create_rw_signal((0, Vec::<ViewId>::new()));
 
-    let search =
-        text_input(search_str).on_event_stop(EventListener::KeyUp, move |event: &Event| {
+    let search = text_input(search_str).on_event_stop(
+        EventListener::KeyUp,
+        move |event: &Event| {
             if let Event::KeyUp(key) = event {
                 match key.key.logical_key {
                     keyboard::Key::Named(NamedKey::ArrowUp) => {
@@ -392,14 +404,16 @@ fn capture_view(
                     }
                 }
             }
-        });
+        },
+    );
     let tree = if capture.root.warnings() {
         v_stack((header("Warnings"), header("View Tree"), search, tree)).into_view()
     } else {
         v_stack((header("View Tree"), search, tree)).into_view()
     };
 
-    let tree = tree.style(|s| s.height_full().min_width(0).flex_basis(0).flex_grow(1.0));
+    let tree =
+        tree.style(|s| s.height_full().min_width(0).flex_basis(0).flex_grow(1.0));
 
     let separator = empty().style(move |s| {
         s.height_full()
@@ -407,7 +421,8 @@ fn capture_view(
             .background(palette::css::BLACK.with_alpha(0.2))
     });
 
-    h_stack((left, separator, tree)).style(|s| s.height_full().width_full().max_width_full())
+    h_stack((left, separator, tree))
+        .style(|s| s.height_full().width_full().max_width_full())
 }
 
 fn view_tree(
@@ -590,5 +605,6 @@ fn tree_node_name(view: &CapturedData, marge_left: f64) -> impl IntoView {
                 expanded.set(!expanded.get_untracked());
             }
         });
-    h_stack((checkbox, id, tab, name)).style(move |s| s.items_center().margin_left(marge_left))
+    h_stack((checkbox, id, tab, name))
+        .style(move |s| s.items_center().margin_left(marge_left))
 }

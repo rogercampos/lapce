@@ -93,6 +93,7 @@ fn load_png_icon(path: &Path) -> Icon {
 
 fn load_svg_icon(svg: &str) -> Icon {
     let svg = nsvg::parse_str(svg, nsvg::Units::Pixel, 96.0).unwrap();
-    let (icon_width, icon_height, icon_rgba) = svg.rasterize_to_raw_rgba(1.0).unwrap();
+    let (icon_width, icon_height, icon_rgba) =
+        svg.rasterize_to_raw_rgba(1.0).unwrap();
     Icon::from_rgba(icon_rgba, icon_width, icon_height).expect("Failed to open icon")
 }

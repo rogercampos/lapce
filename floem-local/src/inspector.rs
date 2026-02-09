@@ -9,7 +9,8 @@ use crate::style::{Style, StyleClassRef, StylePropRef, Transition};
 use crate::view::{IntoView, View};
 use crate::view_state::ChangeFlags;
 use crate::views::{
-    button, dyn_container, stack, static_label, text, v_stack, v_stack_from_iter, Decorators, Label,
+    button, dyn_container, stack, static_label, text, v_stack, v_stack_from_iter,
+    Decorators, Label,
 };
 use crate::{keyboard, style, Clipboard};
 use floem_reactive::{batch, RwSignal, Scope, SignalGet, SignalUpdate};
@@ -73,7 +74,8 @@ impl CapturedView {
             .cloned()
             .collect::<Vec<_>>()
             .join(" - ");
-        let custom_name = custom_name.iter().cloned().collect::<Vec<_>>().join(" - ");
+        let custom_name =
+            custom_name.iter().cloned().collect::<Vec<_>>().join(" - ");
         Self {
             id,
             name,
@@ -137,7 +139,8 @@ impl CapturedView {
     }
 
     fn warnings(&self) -> bool {
-        !self.requested_changes.is_empty() || self.children.iter().any(|child| child.warnings())
+        !self.requested_changes.is_empty()
+            || self.children.iter().any(|child| child.warnings())
     }
 }
 
@@ -163,7 +166,11 @@ pub struct CaptureState {
 }
 
 impl CaptureState {
-    pub(crate) fn capture_style(id: ViewId, cx: &mut StyleCx, computed_style: Style) {
+    pub(crate) fn capture_style(
+        id: ViewId,
+        cx: &mut StyleCx,
+        computed_style: Style,
+    ) {
         if cx.app_state_mut().capture.is_some() {
             cx.app_state_mut()
                 .capture
@@ -201,29 +208,55 @@ fn add_event(
                 if let Event::KeyUp(key) = event {
                     match key.key.logical_key {
                         keyboard::Key::Named(NamedKey::ArrowUp) => {
-                            let rs = find_relative_view_by_id_with_self(id, &capture.root);
+                            let rs = find_relative_view_by_id_with_self(
+                                id,
+                                &capture.root,
+                            );
                             let Some(ids) = rs else {
                                 return;
                             };
                             if !key.modifiers.control() {
                                 if let Some(id) = ids.big_brother_id {
-                                    update_select_view_id(id, &capture_view, true, datas);
+                                    update_select_view_id(
+                                        id,
+                                        &capture_view,
+                                        true,
+                                        datas,
+                                    );
                                 }
                             } else if let Some(id) = ids.parent_id {
-                                update_select_view_id(id, &capture_view, true, datas);
+                                update_select_view_id(
+                                    id,
+                                    &capture_view,
+                                    true,
+                                    datas,
+                                );
                             }
                         }
                         keyboard::Key::Named(NamedKey::ArrowDown) => {
-                            let rs = find_relative_view_by_id_with_self(id, &capture.root);
+                            let rs = find_relative_view_by_id_with_self(
+                                id,
+                                &capture.root,
+                            );
                             let Some(ids) = rs else {
                                 return;
                             };
                             if !key.modifiers.control() {
                                 if let Some(id) = ids.next_brother_id {
-                                    update_select_view_id(id, &capture_view, true, datas);
+                                    update_select_view_id(
+                                        id,
+                                        &capture_view,
+                                        true,
+                                        datas,
+                                    );
                                 }
                             } else if let Some(id) = ids.child_id {
-                                update_select_view_id(id, &capture_view, true, datas);
+                                update_select_view_id(
+                                    id,
+                                    &capture_view,
+                                    true,
+                                    datas,
+                                );
                             }
                         }
                         _ => {}
@@ -281,7 +314,8 @@ fn stats(capture: &Capture) -> impl IntoView {
         "Taffy Time",
         format!("{:.4} ms", capture.taffy_duration.as_secs_f64() * 1000.0),
     );
-    let taffy_node_count = info("Taffy Node Count", capture.taffy_node_count.to_string());
+    let taffy_node_count =
+        info("Taffy Node Count", capture.taffy_node_count.to_string());
     let taffy_depth = info("Taffy Depth", capture.taffy_depth.to_string());
     let paint_time = info(
         "Paint Time",
@@ -301,7 +335,10 @@ fn stats(capture: &Capture) -> impl IntoView {
     ))
 }
 
-fn selected_view(capture: &Rc<Capture>, selected: RwSignal<Option<ViewId>>) -> impl IntoView {
+fn selected_view(
+    capture: &Rc<Capture>,
+    selected: RwSignal<Option<ViewId>>,
+) -> impl IntoView {
     let capture = capture.clone();
     dyn_container(
         move || selected.get(),
@@ -357,7 +394,8 @@ fn selected_view(capture: &Rc<Capture>, selected: RwSignal<Option<ViewId>>) -> i
                         "{}{}",
                         view.taffy.location.x,
                         beyond(
-                            view.taffy.location.x as f64 + view.taffy.size.width as f64,
+                            view.taffy.location.x as f64
+                                + view.taffy.size.width as f64,
                             capture.window_size.width
                         )
                     ),
@@ -368,7 +406,8 @@ fn selected_view(capture: &Rc<Capture>, selected: RwSignal<Option<ViewId>>) -> i
                         "{}{}",
                         view.taffy.location.y,
                         beyond(
-                            view.taffy.location.x as f64 + view.taffy.size.width as f64,
+                            view.taffy.location.x as f64
+                                + view.taffy.size.width as f64,
                             capture.window_size.width
                         )
                     ),
@@ -379,7 +418,8 @@ fn selected_view(capture: &Rc<Capture>, selected: RwSignal<Option<ViewId>>) -> i
                         "{}{}",
                         view.taffy.size.width,
                         beyond(
-                            view.taffy.location.x as f64 + view.taffy.size.width as f64,
+                            view.taffy.location.x as f64
+                                + view.taffy.size.width as f64,
                             capture.window_size.width
                         )
                     ),
@@ -390,7 +430,8 @@ fn selected_view(capture: &Rc<Capture>, selected: RwSignal<Option<ViewId>>) -> i
                         "{}{}",
                         view.taffy.size.height,
                         beyond(
-                            view.taffy.location.y as f64 + view.taffy.size.height as f64,
+                            view.taffy.location.y as f64
+                                + view.taffy.size.height as f64,
                             capture.window_size.height
                         )
                     ),
@@ -403,7 +444,8 @@ fn selected_view(capture: &Rc<Capture>, selected: RwSignal<Option<ViewId>>) -> i
                 let style_header = header("View Style");
                 let class_header = header("Class Header");
 
-                let direct: HashSet<_> = view.direct_style.map.keys().copied().collect();
+                let direct: HashSet<_> =
+                    view.direct_style.map.keys().copied().collect();
 
                 let style = capture
                     .state
@@ -417,7 +459,9 @@ fn selected_view(capture: &Rc<Capture>, selected: RwSignal<Option<ViewId>>) -> i
                     .clone()
                     .into_iter()
                     .filter_map(|(p, v)| match p.info {
-                        style::StyleKeyInfo::Prop(..) => Some((StylePropRef { key: p }, v)),
+                        style::StyleKeyInfo::Prop(..) => {
+                            Some((StylePropRef { key: p }, v))
+                        }
                         _ => None,
                     })
                     .map(|(p, v)| ((p, format!("{:?}", p.key)), v))
@@ -435,16 +479,20 @@ fn selected_view(capture: &Rc<Capture>, selected: RwSignal<Option<ViewId>>) -> i
 
                 class_list.sort_unstable();
 
-                let style_list =
-                    v_stack_from_iter(style_list.into_iter().map(|((prop, name), value)| {
-                        let name = name.strip_prefix("floem::style::").unwrap_or(&name);
+                let style_list = v_stack_from_iter(style_list.into_iter().map(
+                    |((prop, name), value)| {
+                        let name =
+                            name.strip_prefix("floem::style::").unwrap_or(&name);
                         let name = if direct.contains(&prop.key) {
                             text(name).into_any()
                         } else {
                             stack((
                                 text("Inherited").style(|s| {
                                     s.margin_right(5.0)
-                                        .background(palette::css::WHITE_SMOKE.with_alpha(0.6))
+                                        .background(
+                                            palette::css::WHITE_SMOKE
+                                                .with_alpha(0.6),
+                                        )
                                         .border(1.)
                                         .border_radius(5.0)
                                         .border_color(palette::css::WHITE_SMOKE)
@@ -456,9 +504,11 @@ fn selected_view(capture: &Rc<Capture>, selected: RwSignal<Option<ViewId>>) -> i
                             ))
                             .into_any()
                         };
-                        let mut v = (prop.info().debug_view)(&*value).unwrap_or_else(|| {
-                            static_label((prop.info().debug_any)(&*value)).into_any()
-                        });
+                        let mut v = (prop.info().debug_view)(&*value)
+                            .unwrap_or_else(|| {
+                                static_label((prop.info().debug_any)(&*value))
+                                    .into_any()
+                            });
                         if let Some(transition) = style
                             .map
                             .get(&prop.info().transition_key)
@@ -468,7 +518,10 @@ fn selected_view(capture: &Rc<Capture>, selected: RwSignal<Option<ViewId>>) -> i
                                 text("Transition").style(|s| {
                                     s.margin_top(5.0)
                                         .margin_right(5.0)
-                                        .background(palette::css::WHITE_SMOKE.with_alpha(0.6))
+                                        .background(
+                                            palette::css::WHITE_SMOKE
+                                                .with_alpha(0.6),
+                                        )
                                         .border(1.)
                                         .border_radius(5.0)
                                         .border_color(palette::css::WHITE_SMOKE)
@@ -487,17 +540,19 @@ fn selected_view(capture: &Rc<Capture>, selected: RwSignal<Option<ViewId>>) -> i
                                     .color(palette::css::BLACK.with_alpha(0.6))
                             }),))
                             .style(|s| {
-                                s.min_width(150.0).flex_direction(FlexDirection::RowReverse)
+                                s.min_width(150.0)
+                                    .flex_direction(FlexDirection::RowReverse)
                             }),
                             v,
                         ))
                         .style(|s| {
-                            s.padding(5.0)
-                                .items_center()
-                                .hover(|s| s.background(Color::from_rgba8(228, 237, 216, 160)))
+                            s.padding(5.0).items_center().hover(|s| {
+                                s.background(Color::from_rgba8(228, 237, 216, 160))
+                            })
                         })
-                    }))
-                    .style(|s| s.width_full());
+                    },
+                ))
+                .style(|s| s.width_full());
 
                 v_stack((
                     name,
@@ -515,7 +570,8 @@ fn selected_view(capture: &Rc<Capture>, selected: RwSignal<Option<ViewId>>) -> i
                     style_header,
                     style_list,
                     class_header,
-                    v_stack_from_iter(class_list.iter().map(text)).style(|s| s.gap(10)),
+                    v_stack_from_iter(class_list.iter().map(text))
+                        .style(|s| s.gap(10)),
                 ))
                 .style(|s| s.width_full())
                 .into_any()

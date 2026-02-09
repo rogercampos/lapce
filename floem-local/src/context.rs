@@ -179,7 +179,9 @@ impl EventCx<'_> {
                 if event_propagation.is_processed() {
                     return (EventPropagation::Stop, PointerEventConsumed::Yes);
                 }
-                if event.is_pointer() && pointer_event_consumed == PointerEventConsumed::Yes {
+                if event.is_pointer()
+                    && pointer_event_consumed == PointerEventConsumed::Yes
+                {
                     // if a child's pointer event was consumed because pointer-events: auto
                     // we don't pass the pointer event the next child
                     // also, we mark pointer_event_consumed to be yes
@@ -256,7 +258,8 @@ impl EventCx<'_> {
                             if self.app_state.draggable.contains(&view_id)
                                 && self.app_state.drag_start.is_none()
                             {
-                                self.app_state.drag_start = Some((view_id, pointer_event.pos));
+                                self.app_state.drag_start =
+                                    Some((view_id, pointer_event.pos));
                             }
                         }
                     } else if pointer_event.button.is_secondary() {
@@ -304,11 +307,10 @@ impl EventCx<'_> {
                             .filter(|(drag_id, _)| drag_id == &view_id)
                         {
                             let offset = pointer_event.pos - *drag_start;
-                            if let Some(dragging) = self
-                                .app_state
-                                .dragging
-                                .as_mut()
-                                .filter(|d| d.id == view_id && d.released_at.is_none())
+                            if let Some(dragging) =
+                                self.app_state.dragging.as_mut().filter(|d| {
+                                    d.id == view_id && d.released_at.is_none()
+                                })
                             {
                                 // update the mouse position if the view is dragging and not released
                                 dragging.offset = drag_start.to_vec2();
@@ -324,7 +326,8 @@ impl EventCx<'_> {
                                 });
                                 self.update_active(view_id);
                                 self.app_state.request_paint(view_id);
-                                view_id.apply_event(&EventListener::DragStart, &event);
+                                view_id
+                                    .apply_event(&EventListener::DragStart, &event);
                             }
                         }
                     }
@@ -350,7 +353,9 @@ impl EventCx<'_> {
                         // if id_path.is_none() {
                         if !directed {
                             if on_view {
-                                if let Some(dragging) = self.app_state.dragging.as_mut() {
+                                if let Some(dragging) =
+                                    self.app_state.dragging.as_mut()
+                                {
                                     let dragging_id = dragging.id;
                                     if view_id
                                         .apply_event(&EventListener::Drop, &event)
@@ -360,12 +365,18 @@ impl EventCx<'_> {
                                         // for the dragged view back to its original position isn't played.
                                         self.app_state.dragging = None;
                                         self.app_state.request_paint(view_id);
-                                        dragging_id.apply_event(&EventListener::DragEnd, &event);
+                                        dragging_id.apply_event(
+                                            &EventListener::DragEnd,
+                                            &event,
+                                        );
                                     }
                                 }
                             }
-                        } else if let Some(dragging) =
-                            self.app_state.dragging.as_mut().filter(|d| d.id == view_id)
+                        } else if let Some(dragging) = self
+                            .app_state
+                            .dragging
+                            .as_mut()
+                            .filter(|d| d.id == view_id)
                         {
                             let dragging_id = dragging.id;
                             dragging.released_at = Some(Instant::now());
@@ -374,10 +385,14 @@ impl EventCx<'_> {
                             dragging_id.apply_event(&EventListener::DragEnd, &event);
                         }
 
-                        let last_pointer_down = view_state.borrow_mut().last_pointer_down.take();
+                        let last_pointer_down =
+                            view_state.borrow_mut().last_pointer_down.take();
 
-                        let event_listeners = view_state.borrow().event_listeners.clone();
-                        if let Some(handlers) = event_listeners.get(&EventListener::DoubleClick) {
+                        let event_listeners =
+                            view_state.borrow().event_listeners.clone();
+                        if let Some(handlers) =
+                            event_listeners.get(&EventListener::DoubleClick)
+                        {
                             view_state.borrow_mut();
                             if on_view
                                 && self.app_state.is_clicking(&view_id)
@@ -386,22 +401,34 @@ impl EventCx<'_> {
                                     .map(|e| e.count == 2)
                                     .unwrap_or(false)
                                 && handlers.iter().fold(false, |handled, handler| {
-                                    handled | (handler.borrow_mut())(&event).is_processed()
+                                    handled
+                                        | (handler.borrow_mut())(&event)
+                                            .is_processed()
                                 })
                             {
-                                return (EventPropagation::Stop, PointerEventConsumed::Yes);
+                                return (
+                                    EventPropagation::Stop,
+                                    PointerEventConsumed::Yes,
+                                );
                             }
                         }
 
-                        if let Some(handlers) = event_listeners.get(&EventListener::Click) {
+                        if let Some(handlers) =
+                            event_listeners.get(&EventListener::Click)
+                        {
                             if on_view
                                 && self.app_state.is_clicking(&view_id)
                                 && last_pointer_down.is_some()
                                 && handlers.iter().fold(false, |handled, handler| {
-                                    handled | (handler.borrow_mut())(&event).is_processed()
+                                    handled
+                                        | (handler.borrow_mut())(&event)
+                                            .is_processed()
                                 })
                             {
-                                return (EventPropagation::Stop, PointerEventConsumed::Yes);
+                                return (
+                                    EventPropagation::Stop,
+                                    PointerEventConsumed::Yes,
+                                );
                             }
                         }
 
@@ -409,23 +436,34 @@ impl EventCx<'_> {
                             .apply_event(&EventListener::PointerUp, &event)
                             .is_some_and(|prop| prop.is_processed())
                         {
-                            return (EventPropagation::Stop, PointerEventConsumed::Yes);
+                            return (
+                                EventPropagation::Stop,
+                                PointerEventConsumed::Yes,
+                            );
                         }
                     } else if pointer_event.button.is_secondary() {
                         let rect = view_id.get_size().unwrap_or_default().to_rect();
                         let on_view = rect.contains(pointer_event.pos);
 
-                        let last_pointer_down = view_state.borrow_mut().last_pointer_down.take();
-                        let event_listeners = view_state.borrow().event_listeners.clone();
-                        if let Some(handlers) = event_listeners.get(&EventListener::SecondaryClick)
+                        let last_pointer_down =
+                            view_state.borrow_mut().last_pointer_down.take();
+                        let event_listeners =
+                            view_state.borrow().event_listeners.clone();
+                        if let Some(handlers) =
+                            event_listeners.get(&EventListener::SecondaryClick)
                         {
                             if on_view
                                 && last_pointer_down.is_some()
                                 && handlers.iter().fold(false, |handled, handler| {
-                                    handled | (handler.borrow_mut())(&event).is_processed()
+                                    handled
+                                        | (handler.borrow_mut())(&event)
+                                            .is_processed()
                                 })
                             {
-                                return (EventPropagation::Stop, PointerEventConsumed::Yes);
+                                return (
+                                    EventPropagation::Stop,
+                                    PointerEventConsumed::Yes,
+                                );
                             }
                         }
 
@@ -439,12 +477,17 @@ impl EventCx<'_> {
                         let context_menu = view_state.borrow().context_menu.clone();
                         if let Some(menu) = context_menu {
                             show_context_menu(menu(), Some(viewport_event_position));
-                            return (EventPropagation::Stop, PointerEventConsumed::Yes);
+                            return (
+                                EventPropagation::Stop,
+                                PointerEventConsumed::Yes,
+                            );
                         }
                     }
                 }
                 Event::KeyDown(_) => {
-                    if self.app_state.is_focused(&view_id) && event.is_keyboard_trigger() {
+                    if self.app_state.is_focused(&view_id)
+                        && event.is_keyboard_trigger()
+                    {
                         view_id.apply_event(&EventListener::Click, &event);
                     }
                 }
@@ -490,8 +533,10 @@ impl EventCx<'_> {
         if let Some(layout) = id.get_layout() {
             event.transform(
                 Affine::translate((
-                    layout.location.x as f64 - viewport.map(|rect| rect.x0).unwrap_or(0.0),
-                    layout.location.y as f64 - viewport.map(|rect| rect.y0).unwrap_or(0.0),
+                    layout.location.x as f64
+                        - viewport.map(|rect| rect.x0).unwrap_or(0.0),
+                    layout.location.y as f64
+                        - viewport.map(|rect| rect.y0).unwrap_or(0.0),
                 )) * transform,
             )
         } else {
@@ -502,7 +547,9 @@ impl EventCx<'_> {
     /// Used to determine if you should send an event to another view. This is basically a check for pointer events to see if the pointer is inside a child view and to make sure the current view isn't hidden or disabled.
     /// Usually this is used if you want to propagate an event to a child view
     pub fn should_send(&mut self, id: ViewId, event: &Event) -> bool {
-        if id.style_has_hidden() || (self.app_state.is_disabled(&id) && !event.allow_disabled()) {
+        if id.style_has_hidden()
+            || (self.app_state.is_disabled(&id) && !event.allow_disabled())
+        {
             return false;
         }
 
@@ -852,7 +899,8 @@ impl<'a> ComputeLayoutCx<'a> {
         let layout = id.get_layout().unwrap_or_default();
         let origin = Point::new(layout.location.x as f64, layout.location.y as f64);
         let this_viewport = view_state.borrow().viewport;
-        let this_viewport_origin = this_viewport.unwrap_or_default().origin().to_vec2();
+        let this_viewport_origin =
+            this_viewport.unwrap_or_default().origin().to_vec2();
         let size = Size::new(layout.size.width as f64, layout.size.height as f64);
         let parent_viewport = self.viewport.with_origin(
             Point::new(
@@ -865,7 +913,8 @@ impl<'a> ComputeLayoutCx<'a> {
             self.viewport = self.viewport.intersect(this_viewport);
         }
 
-        let window_origin = origin + self.window_origin.to_vec2() - this_viewport_origin;
+        let window_origin =
+            origin + self.window_origin.to_vec2() - this_viewport_origin;
         self.window_origin = window_origin;
         {
             view_state.borrow_mut().window_origin = window_origin;
@@ -1096,22 +1145,26 @@ impl PaintCx<'_> {
 
                     if !(easing.finished(progress)) {
                         let offset_scale = 1.0 - easing.eval(progress);
-                        let release_offset = release_location.to_vec2() - dragging.offset;
+                        let release_offset =
+                            release_location.to_vec2() - dragging.offset;
 
                         // Schedule next animation frame
                         exec_after(Duration::from_millis(8), move |_| {
                             id.request_paint();
                         });
 
-                        Some(self.transform * Affine::translate(release_offset * offset_scale))
+                        Some(
+                            self.transform
+                                * Affine::translate(release_offset * offset_scale),
+                        )
                     } else {
                         drag_set_to_none = true;
                         None
                     }
                 } else {
                     // Handle active dragging
-                    let translation =
-                        self.app_state.last_cursor_location.to_vec2() - dragging.offset;
+                    let translation = self.app_state.last_cursor_location.to_vec2()
+                        - dragging.offset;
                     Some(self.transform.with_translation(translation))
                 };
 
@@ -1126,9 +1179,12 @@ impl PaintCx<'_> {
 
                     // Apply styles
                     let style = view_state.borrow().combined_style.clone();
-                    let mut view_style_props = view_state.borrow().view_style_props.clone();
+                    let mut view_style_props =
+                        view_state.borrow().view_style_props.clone();
 
-                    if let Some(dragging_style) = view_state.borrow().dragging_style.clone() {
+                    if let Some(dragging_style) =
+                        view_state.borrow().dragging_style.clone()
+                    {
                         let style = style.apply(dragging_style);
                         let mut _new_frame = false;
                         view_style_props.read_explicit(
@@ -1228,7 +1284,9 @@ impl PaintCx<'_> {
                 let raidus = rect.radii();
                 *rect = rect
                     .rect()
-                    .with_origin(rect.origin() - Vec2::new(offset.x as f64, offset.y as f64))
+                    .with_origin(
+                        rect.origin() - Vec2::new(offset.x as f64, offset.y as f64),
+                    )
                     .to_rounded_rect(raidus);
             }
 
@@ -1253,7 +1311,9 @@ pub enum PaintState {
     /// The renderer is not yet initialized. This state is used to wait for the GPU resources to be acquired.
     PendingGpuResources {
         window: Arc<dyn Window>,
-        rx: Receiver<Result<(GpuResources, wgpu::Surface<'static>), GpuResourceError>>,
+        rx: Receiver<
+            Result<(GpuResources, wgpu::Surface<'static>), GpuResourceError>,
+        >,
         font_embolden: f32,
         /// This field holds an instance of `Renderer::Uninitialized` until the GPU resources are acquired,
         /// which will be returned in `PaintState::renderer` and `PaintState::renderer_mut`.
@@ -1270,7 +1330,9 @@ pub enum PaintState {
 impl PaintState {
     pub fn new_pending(
         window: Arc<dyn Window>,
-        rx: Receiver<Result<(GpuResources, wgpu::Surface<'static>), GpuResourceError>>,
+        rx: Receiver<
+            Result<(GpuResources, wgpu::Surface<'static>), GpuResourceError>,
+        >,
         scale: f64,
         size: Size,
         font_embolden: f32,
@@ -1361,7 +1423,8 @@ fn animations_on_remove(id: ViewId, scope: Scope) -> u16 {
     let animations = &mut state.animations.stack;
     let mut request_style = false;
     for anim in animations {
-        if anim.run_on_remove && !matches!(anim.repeat_mode, RepeatMode::LoopForever) {
+        if anim.run_on_remove && !matches!(anim.repeat_mode, RepeatMode::LoopForever)
+        {
             anim.reverse_mut();
             request_style = true;
             wait_for += 1;
@@ -1414,7 +1477,8 @@ fn animations_on_create(id: ViewId) {
     let animations = &mut state.animations.stack;
     let mut request_style = false;
     for anim in animations {
-        if anim.run_on_create && !matches!(anim.repeat_mode, RepeatMode::LoopForever) {
+        if anim.run_on_create && !matches!(anim.repeat_mode, RepeatMode::LoopForever)
+        {
             anim.start_mut();
             request_style = true;
         }
