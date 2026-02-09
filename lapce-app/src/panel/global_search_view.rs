@@ -3,9 +3,7 @@ use std::{path::PathBuf, rc::Rc, sync::Arc};
 use floem::{
     View,
     event::EventListener,
-    reactive::{
-        ReadSignal, RwSignal, SignalGet, SignalUpdate, create_rw_signal,
-    },
+    reactive::{ReadSignal, RwSignal, SignalGet, SignalUpdate, create_rw_signal},
     style::{CursorStyle, Display},
     views::{Decorators, container, scroll, stack, svg, virtual_stack},
 };
@@ -35,11 +33,12 @@ pub fn global_search_panel(
     let preview_focused = global_search.preview_focused;
 
     stack((
-        search_result(workspace, global_search, internal_command, config)
-            .style(move |s| {
+        search_result(workspace, global_search, internal_command, config).style(
+            move |s| {
                 let w = if has_preview.get() { 50.0 } else { 100.0 };
                 s.width_pct(w).height_pct(100.0)
-            }),
+            },
+        ),
         search_preview_editor(window_tab_data, config, has_preview, preview_focused),
     ))
     .style(|s| s.absolute().size_pct(100.0, 100.0).flex_row())
@@ -280,13 +279,12 @@ fn search_preview_editor(
         }),
     )
     .style(move |s| {
-        s.width_pct(50.0)
-            .height_pct(100.0)
-            .min_width(0.0)
-            .display(if has_preview.get() {
+        s.width_pct(50.0).height_pct(100.0).min_width(0.0).display(
+            if has_preview.get() {
                 Display::Flex
             } else {
                 Display::None
-            })
+            },
+        )
     })
 }

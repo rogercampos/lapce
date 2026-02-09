@@ -93,8 +93,7 @@ impl PaletteKind {
             | PaletteKind::Workspace
             | PaletteKind::DocumentSymbol
             | PaletteKind::WorkspaceSymbol
-            | PaletteKind::Line
-             => input.get(1..).unwrap_or(""),
+            | PaletteKind::Line => input.get(1..).unwrap_or(""),
         }
     }
 

@@ -15,7 +15,6 @@ use std::{
 
 use anyhow::{Result, anyhow};
 use clap::Parser;
-use include_dir::{Dir, include_dir};
 use floem::{
     IntoView, View,
     action::show_context_menu,
@@ -51,8 +50,8 @@ use floem::{
     },
     window::{ResizeDirection, WindowConfig, WindowId},
 };
+use include_dir::{Dir, include_dir};
 use lapce_core::{
-    command::{EditCommand, FocusCommand},
     directory::Directory,
     meta,
     syntax::{Syntax, highlight::reset_highlight_configs},
@@ -68,7 +67,7 @@ use serde::{Deserialize, Serialize};
 use tracing_subscriber::{filter::Targets, reload::Handle};
 
 use crate::{
-    about, alert, recent_files,
+    about, alert,
     code_action::CodeActionStatus,
     command::{
         CommandKind, InternalCommand, LapceCommand, LapceWorkbenchCommand,
@@ -99,6 +98,7 @@ use crate::{
     },
     panel::{position::PanelContainerPosition, view::panel_container_view},
     plugin::{PluginData, plugin_info_view},
+    recent_files,
     settings::{settings_view, theme_color_settings_view},
     status::status,
     text_input::TextInputBuilder,
@@ -132,7 +132,11 @@ fn install_bundled_plugins() {
             continue;
         }
         if let Err(err) = extract_dir(entry, &target) {
-            tracing::error!("Failed to install bundled plugin {:?}: {:?}", name, err);
+            tracing::error!(
+                "Failed to install bundled plugin {:?}: {:?}",
+                name,
+                err
+            );
         }
     }
 }
@@ -774,9 +778,8 @@ fn editor_tab_header(
             .style(|s| s.padding(4.));
 
             let tab_content = tooltip(
-                label(move || info.with(|info| info.name.clone())).style(move |s| {
-                    s.selectable(false)
-                }),
+                label(move || info.with(|info| info.name.clone()))
+                    .style(move |s| s.selectable(false)),
                 move || {
                     tooltip_tip(
                         config,
@@ -2011,10 +2014,7 @@ fn workbench(window_tab_data: Rc<WindowTabData>) -> impl View {
                     PanelContainerPosition::Left,
                 ),
                 main_split(window_tab_data.clone()),
-                panel_container_view(
-                    window_tab_data,
-                    PanelContainerPosition::Right,
-                ),
+                panel_container_view(window_tab_data, PanelContainerPosition::Right),
             ))
             .on_resize(move |rect| {
                 let width = rect.size().width;
@@ -2024,7 +2024,10 @@ fn workbench(window_tab_data: Rc<WindowTabData>) -> impl View {
             })
             .style(|s| s.flex_grow(1.0))
         },
-        panel_container_view(window_tab_data.clone(), PanelContainerPosition::Bottom),
+        panel_container_view(
+            window_tab_data.clone(),
+            PanelContainerPosition::Bottom,
+        ),
         window_message_view(window_tab_data.messages, window_tab_data.common.config),
     ))
     .on_resize(move |rect| {
@@ -2035,6 +2038,55 @@ fn workbench(window_tab_data: Rc<WindowTabData>) -> impl View {
     })
     .style(move |s| s.flex_col().size_full())
     .debug_name("Workbench")
+}
+
+fn empty_workspace_view(window_tab_data: Rc<WindowTabData>) -> impl View {
+    let config = window_tab_data.common.config;
+    let workbench_command = window_tab_data.common.workbench_command;
+
+    drag_window_area(
+        container(
+            label(|| "Open Folder".to_string())
+                .on_event_stop(EventListener::PointerDown, |_| {})
+                .on_click_stop(move |_| {
+                    workbench_command.send(LapceWorkbenchCommand::OpenFolder);
+                })
+                .style(move |s| {
+                    let config = config.get();
+                    s.padding_horiz(20.0)
+                        .padding_vert(10.0)
+                        .border_radius(6.0)
+                        .color(
+                            config
+                                .color(LapceColor::LAPCE_BUTTON_PRIMARY_FOREGROUND),
+                        )
+                        .background(
+                            config
+                                .color(LapceColor::LAPCE_BUTTON_PRIMARY_BACKGROUND),
+                        )
+                        .font_size((config.ui.font_size() + 2) as f32)
+                        .hover(|s| {
+                            s.cursor(CursorStyle::Pointer).background(
+                                config
+                                    .color(
+                                        LapceColor::LAPCE_BUTTON_PRIMARY_BACKGROUND,
+                                    )
+                                    .multiply_alpha(0.8),
+                            )
+                        })
+                        .active(|s| {
+                            s.background(
+                                config
+                                    .color(
+                                        LapceColor::LAPCE_BUTTON_PRIMARY_BACKGROUND,
+                                    )
+                                    .multiply_alpha(0.6),
+                            )
+                        })
+                }),
+        )
+        .style(|s| s.size_full().flex_col().items_center().justify_center()),
+    )
 }
 
 fn palette_item(
@@ -3037,58 +3089,61 @@ fn window_tab(window_tab_data: Rc<WindowTabData>) -> impl View {
     let config = window_tab_data.common.config;
     let window_tab_scope = window_tab_data.scope;
     let hover_active = window_tab_data.common.hover.active;
-    let status_height = window_tab_data.status_height;
 
-    let view = stack((
+    let view = if window_tab_data.workspace.path.is_none() {
+        empty_workspace_view(window_tab_data.clone()).into_any()
+    } else {
+        let status_height = window_tab_data.status_height;
         stack((
-            title(window_tab_data.clone()),
-            workbench(window_tab_data.clone()),
-            status(
-                window_tab_data.clone(),
-                status_height,
-                config,
-            ),
+            stack((
+                title(window_tab_data.clone()),
+                workbench(window_tab_data.clone()),
+                status(window_tab_data.clone(), status_height, config),
+            ))
+            .on_resize(move |rect| {
+                layout_rect.set(rect);
+            })
+            .on_move(move |point| {
+                window_origin.set(point);
+            })
+            .style(|s| s.size_full().flex_col())
+            .debug_name("Base Layer"),
+            completion(window_tab_data.clone()),
+            hover(window_tab_data.clone()),
+            code_action(window_tab_data.clone()),
+            rename(window_tab_data.clone()),
+            palette(window_tab_data.clone()),
+            crate::search_modal::search_modal_popup(window_tab_data.clone()),
+            recent_files::recent_files_popup(window_tab_data.clone()),
+            about::about_popup(window_tab_data.clone()),
+            alert::alert_box(window_tab_data.alert_data.clone()),
         ))
-        .on_resize(move |rect| {
-            layout_rect.set(rect);
+        .into_any()
+    };
+
+    let view = view
+        .on_cleanup(move || {
+            window_tab_scope.dispose();
         })
-        .on_move(move |point| {
-            window_origin.set(point);
+        .on_event_cont(EventListener::PointerMove, move |_| {
+            if hover_active.get_untracked() {
+                hover_active.set(false);
+            }
         })
-        .style(|s| s.size_full().flex_col())
-        .debug_name("Base Layer"),
-        completion(window_tab_data.clone()),
-        hover(window_tab_data.clone()),
-        code_action(window_tab_data.clone()),
-        rename(window_tab_data.clone()),
-        palette(window_tab_data.clone()),
-        crate::search_modal::search_modal_popup(window_tab_data.clone()),
-        recent_files::recent_files_popup(window_tab_data.clone()),
-        about::about_popup(window_tab_data.clone()),
-        alert::alert_box(window_tab_data.alert_data.clone()),
-    ))
-    .on_cleanup(move || {
-        window_tab_scope.dispose();
-    })
-    .on_event_cont(EventListener::PointerMove, move |_| {
-        if hover_active.get_untracked() {
-            hover_active.set(false);
-        }
-    })
-    .style(move |s| {
-        let config = config.get();
-        s.size_full()
-            .color(config.color(LapceColor::EDITOR_FOREGROUND))
-            .background(config.color(LapceColor::EDITOR_BACKGROUND))
-            .font_size(config.ui.font_size() as f32)
-            .apply_if(!config.ui.font_family.is_empty(), |s| {
-                s.font_family(config.ui.font_family.clone())
-            })
-            .class(floem::views::scroll::Handle, |s| {
-                s.background(config.color(LapceColor::LAPCE_SCROLL_BAR))
-            })
-    })
-    .debug_name("Window Tab");
+        .style(move |s| {
+            let config = config.get();
+            s.size_full()
+                .color(config.color(LapceColor::EDITOR_FOREGROUND))
+                .background(config.color(LapceColor::EDITOR_BACKGROUND))
+                .font_size(config.ui.font_size() as f32)
+                .apply_if(!config.ui.font_family.is_empty(), |s| {
+                    s.font_family(config.ui.font_family.clone())
+                })
+                .class(floem::views::scroll::Handle, |s| {
+                    s.background(config.color(LapceColor::LAPCE_SCROLL_BAR))
+                })
+        })
+        .debug_name("Window Tab");
 
     let view_id = view.id();
     window_tab_data.common.view_id.set(view_id);
@@ -3432,7 +3487,8 @@ fn window(window_data: WindowData) -> impl View {
             window_tab.common.keypress.track();
             let workbench_command = window_tab.common.workbench_command;
             let lapce_command = window_tab.common.lapce_command;
-            window_menu(lapce_command, workbench_command)
+            let has_folder = window_tab.workspace.path.is_some();
+            window_menu(lapce_command, workbench_command, has_folder)
         } else {
             Menu::new("Lapce")
         }
@@ -3896,30 +3952,26 @@ fn listen_local_socket(tx: SyncSender<CoreNotification>) -> Result<()> {
 }
 
 pub fn window_menu(
-    lapce_command: Listener<LapceCommand>,
+    _lapce_command: Listener<LapceCommand>,
     workbench_command: Listener<LapceWorkbenchCommand>,
+    has_folder: bool,
 ) -> Menu {
+    let file_menu = if has_folder {
+        Menu::new("File").entry(MenuItem::new("Close Folder").action(move || {
+            workbench_command.send(LapceWorkbenchCommand::CloseFolder);
+        }))
+    } else {
+        Menu::new("File").entry(MenuItem::new("Open Folder").action(move || {
+            workbench_command.send(LapceWorkbenchCommand::OpenFolder);
+        }))
+    };
+
     Menu::new("Lapce")
         .entry({
             let mut menu = Menu::new("Lapce")
                 .entry(MenuItem::new("About Lapce").action(move || {
                     workbench_command.send(LapceWorkbenchCommand::ShowAbout)
                 }))
-                .separator()
-                .entry(
-                    Menu::new("Settings...")
-                        .entry(MenuItem::new("Open Settings").action(move || {
-                            workbench_command
-                                .send(LapceWorkbenchCommand::OpenSettings);
-                        }))
-                        .entry(MenuItem::new("Open Keyboard Shortcuts").action(
-                            move || {
-                                workbench_command.send(
-                                    LapceWorkbenchCommand::OpenKeyboardShortcuts,
-                                );
-                            },
-                        )),
-                )
                 .separator()
                 .entry(MenuItem::new("Quit Lapce").action(move || {
                     workbench_command.send(LapceWorkbenchCommand::Quit);
@@ -3934,77 +3986,7 @@ pub fn window_menu(
             menu
         })
         .separator()
-        .entry(
-            Menu::new("File")
-                .entry(MenuItem::new("New File").action(move || {
-                    workbench_command.send(LapceWorkbenchCommand::NewFile);
-                }))
-                .separator()
-                .entry(MenuItem::new("Open").action(move || {
-                    workbench_command.send(LapceWorkbenchCommand::OpenFile);
-                }))
-                .entry(MenuItem::new("Open Folder").action(move || {
-                    workbench_command.send(LapceWorkbenchCommand::OpenFolder);
-                }))
-                .separator()
-                .entry(MenuItem::new("Save").action(move || {
-                    lapce_command.send(LapceCommand {
-                        kind: CommandKind::Focus(FocusCommand::Save),
-                        data: None,
-                    });
-                }))
-                .entry(MenuItem::new("Save All").action(move || {
-                    workbench_command.send(LapceWorkbenchCommand::SaveAll);
-                }))
-                .separator()
-                .entry(MenuItem::new("Close Folder").action(move || {
-                    workbench_command.send(LapceWorkbenchCommand::CloseFolder);
-                }))
-                .entry(MenuItem::new("Close Window").action(move || {
-                    workbench_command.send(LapceWorkbenchCommand::CloseWindow);
-                })),
-        )
-        .entry(
-            Menu::new("Edit")
-                .entry(MenuItem::new("Cut").action(move || {
-                    lapce_command.send(LapceCommand {
-                        kind: CommandKind::Edit(EditCommand::ClipboardCut),
-                        data: None,
-                    });
-                }))
-                .entry(MenuItem::new("Copy").action(move || {
-                    lapce_command.send(LapceCommand {
-                        kind: CommandKind::Edit(EditCommand::ClipboardCopy),
-                        data: None,
-                    });
-                }))
-                .entry(MenuItem::new("Paste").action(move || {
-                    lapce_command.send(LapceCommand {
-                        kind: CommandKind::Edit(EditCommand::ClipboardPaste),
-                        data: None,
-                    });
-                }))
-                .separator()
-                .entry(MenuItem::new("Undo").action(move || {
-                    lapce_command.send(LapceCommand {
-                        kind: CommandKind::Edit(EditCommand::Undo),
-                        data: None,
-                    });
-                }))
-                .entry(MenuItem::new("Redo").action(move || {
-                    lapce_command.send(LapceCommand {
-                        kind: CommandKind::Edit(EditCommand::Redo),
-                        data: None,
-                    });
-                }))
-                .separator()
-                .entry(MenuItem::new("Find").action(move || {
-                    lapce_command.send(LapceCommand {
-                        kind: CommandKind::Focus(FocusCommand::Search),
-                        data: None,
-                    });
-                })),
-        )
+        .entry(file_menu)
 }
 fn tab_secondary_click(
     internal_command: Listener<InternalCommand>,

@@ -207,10 +207,7 @@ fn file_view(
                         .size(size, size)
                         .color(config.color(LapceColor::LAPCE_ICON_ACTIVE))
                 }),
-                crate::file_icon::file_icon_svg(
-                    config,
-                    move || path.clone(),
-                ),
+                crate::file_icon::file_icon_svg(config, move || path.clone()),
                 label(|| " ".to_string()).style(move |s| s.selectable(false)),
             ))
             .style(|s| s.absolute().items_center().margin_left(10.0)),
@@ -340,7 +337,7 @@ fn related_view(
                         related.location.range.start,
                     )),
                     scroll_offset: None,
-            
+
                     same_editor_tab: false,
                 };
                 let message = format!("{path}{}", related.message);

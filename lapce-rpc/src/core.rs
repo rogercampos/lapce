@@ -288,7 +288,6 @@ impl CoreRpcHandler {
     pub fn cancel(&self, params: CancelParams) {
         self.notification(CoreNotification::LspCancel { params });
     }
-
 }
 
 impl Default for CoreRpcHandler {

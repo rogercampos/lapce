@@ -96,74 +96,79 @@ pub fn about_popup(window_tab_data: Rc<WindowTabData>) -> impl View {
     let logo_size = 100.0;
 
     let close_data = about_data.clone();
-    exclusive_popup(config, about_data.visible, move || close_data.close(), move || {
-        stack((
-            svg(move || (config.get()).logo_svg()).style(move |s| {
-                s.size(logo_size, logo_size)
-                    .color(config.get().color(LapceColor::EDITOR_FOREGROUND))
-            }),
-            label(|| "Lapce".to_string()).style(move |s| {
-                s.font_bold()
-                    .margin_top(10.0)
-                    .color(config.get().color(LapceColor::EDITOR_FOREGROUND))
-            }),
-            label(|| format!("Version: {}", VERSION)).style(move |s| {
-                s.margin_top(10.0)
-                    .color(config.get().color(LapceColor::EDITOR_DIM))
-            }),
-            web_link(
-                || "Website".to_string(),
-                || AboutUri::LAPCE.to_string(),
-                move || config.get().color(LapceColor::EDITOR_LINK),
-                internal_command,
-            )
-            .style(|s| s.margin_top(20.0)),
-            web_link(
-                || "GitHub".to_string(),
-                || AboutUri::GITHUB.to_string(),
-                move || config.get().color(LapceColor::EDITOR_LINK),
-                internal_command,
-            )
-            .style(|s| s.margin_top(10.0)),
-            web_link(
-                || "Discord".to_string(),
-                || AboutUri::DISCORD.to_string(),
-                move || config.get().color(LapceColor::EDITOR_LINK),
-                internal_command,
-            )
-            .style(|s| s.margin_top(10.0)),
-            web_link(
-                || "Matrix".to_string(),
-                || AboutUri::MATRIX.to_string(),
-                move || config.get().color(LapceColor::EDITOR_LINK),
-                internal_command,
-            )
-            .style(|s| s.margin_top(10.0)),
-            label(|| "Attributions".to_string()).style(move |s| {
-                s.font_bold()
-                    .color(config.get().color(LapceColor::EDITOR_DIM))
-                    .margin_top(40.0)
-            }),
-            web_link(
-                || "Codicons (CC-BY-4.0)".to_string(),
-                || AboutUri::CODICONS.to_string(),
-                move || config.get().color(LapceColor::EDITOR_LINK),
-                internal_command,
-            )
-            .style(|s| s.margin_top(10.0)),
-        ))
-        .style(move |s| {
-            let config = config.get();
-            s.flex_col()
-                .items_center()
-                .padding_vert(25.0)
-                .padding_horiz(100.0)
-                .border(1.0)
-                .border_radius(6.0)
-                .border_color(config.color(LapceColor::LAPCE_BORDER))
-                .background(config.color(LapceColor::PANEL_BACKGROUND))
-        })
-    })
+    exclusive_popup(
+        config,
+        about_data.visible,
+        move || close_data.close(),
+        move || {
+            stack((
+                svg(move || (config.get()).logo_svg()).style(move |s| {
+                    s.size(logo_size, logo_size)
+                        .color(config.get().color(LapceColor::EDITOR_FOREGROUND))
+                }),
+                label(|| "Lapce".to_string()).style(move |s| {
+                    s.font_bold()
+                        .margin_top(10.0)
+                        .color(config.get().color(LapceColor::EDITOR_FOREGROUND))
+                }),
+                label(|| format!("Version: {}", VERSION)).style(move |s| {
+                    s.margin_top(10.0)
+                        .color(config.get().color(LapceColor::EDITOR_DIM))
+                }),
+                web_link(
+                    || "Website".to_string(),
+                    || AboutUri::LAPCE.to_string(),
+                    move || config.get().color(LapceColor::EDITOR_LINK),
+                    internal_command,
+                )
+                .style(|s| s.margin_top(20.0)),
+                web_link(
+                    || "GitHub".to_string(),
+                    || AboutUri::GITHUB.to_string(),
+                    move || config.get().color(LapceColor::EDITOR_LINK),
+                    internal_command,
+                )
+                .style(|s| s.margin_top(10.0)),
+                web_link(
+                    || "Discord".to_string(),
+                    || AboutUri::DISCORD.to_string(),
+                    move || config.get().color(LapceColor::EDITOR_LINK),
+                    internal_command,
+                )
+                .style(|s| s.margin_top(10.0)),
+                web_link(
+                    || "Matrix".to_string(),
+                    || AboutUri::MATRIX.to_string(),
+                    move || config.get().color(LapceColor::EDITOR_LINK),
+                    internal_command,
+                )
+                .style(|s| s.margin_top(10.0)),
+                label(|| "Attributions".to_string()).style(move |s| {
+                    s.font_bold()
+                        .color(config.get().color(LapceColor::EDITOR_DIM))
+                        .margin_top(40.0)
+                }),
+                web_link(
+                    || "Codicons (CC-BY-4.0)".to_string(),
+                    || AboutUri::CODICONS.to_string(),
+                    move || config.get().color(LapceColor::EDITOR_LINK),
+                    internal_command,
+                )
+                .style(|s| s.margin_top(10.0)),
+            ))
+            .style(move |s| {
+                let config = config.get();
+                s.flex_col()
+                    .items_center()
+                    .padding_vert(25.0)
+                    .padding_horiz(100.0)
+                    .border(1.0)
+                    .border_radius(6.0)
+                    .border_color(config.color(LapceColor::LAPCE_BORDER))
+                    .background(config.color(LapceColor::PANEL_BACKGROUND))
+            })
+        },
+    )
     .debug_name("About Popup")
 }
 

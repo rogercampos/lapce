@@ -854,11 +854,11 @@ impl PaletteData {
                     self.common.lapce_command.send(cmd);
                 }
                 PaletteItemContent::File { full_path, .. } => {
-                    self.common.internal_command.send(
-                        InternalCommand::OpenFile {
+                    self.common
+                        .internal_command
+                        .send(InternalCommand::OpenFile {
                             path: full_path.clone(),
-                        },
-                    );
+                        });
                 }
                 PaletteItemContent::Line { line, .. } => {
                     let editor = self.main_split.active_editor.get_untracked();

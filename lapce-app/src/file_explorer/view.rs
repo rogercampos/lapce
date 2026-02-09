@@ -66,8 +66,7 @@ pub fn file_explorer_panel(
     let file_explorer_header = {
         let wtd = window_tab_data.clone();
         h_stack((
-            text("File Explorer")
-                .style(move |s| s.selectable(false).flex_grow(1.0)),
+            text("File Explorer").style(move |s| s.selectable(false).flex_grow(1.0)),
             clickable_icon(
                 || LapceIcons::LOCATE_FILE,
                 move || {
@@ -101,8 +100,7 @@ pub fn file_explorer_panel(
         )
         .add_with_header(
             file_explorer_header,
-            container(file_explorer_view(data))
-                .style(|s| s.size_full()),
+            container(file_explorer_view(data)).style(|s| s.size_full()),
             window_tab_data
                 .panel
                 .section_open(PanelSection::FileExplorer),
@@ -150,10 +148,7 @@ fn file_node_text_color(config: ReadSignal<Arc<LapceConfig>>) -> Color {
     config.get().color(LapceColor::PANEL_FOREGROUND)
 }
 
-fn file_node_text_view(
-    data: FileExplorerData,
-    node: FileNodeViewData,
-) -> impl View {
+fn file_node_text_view(data: FileExplorerData, node: FileNodeViewData) -> impl View {
     let config = data.common.config;
     let ui_line_height = data.common.ui_line_height;
 

@@ -1,10 +1,4 @@
-use std::{
-    collections::HashMap,
-    rc::Rc,
-    str::FromStr,
-    sync::Arc,
-    time::Duration,
-};
+use std::{collections::HashMap, rc::Rc, str::FromStr, sync::Arc, time::Duration};
 
 use floem::{
     ViewId,
@@ -158,12 +152,7 @@ impl EditorInfo {
                     })
                     .unwrap();
 
-                editors.new_from_doc(
-                    data.scope,
-                    doc,
-                    Some(editor_tab_id),
-                    common,
-                )
+                editors.new_from_doc(data.scope, doc, Some(editor_tab_id), common)
             }
         }
     }
@@ -283,19 +272,11 @@ impl EditorData {
     }
 
     /// Create a new editor using the same underlying [`Doc`]  
-    pub fn copy(
-        &self,
-        cx: Scope,
-        editor_tab_id: Option<EditorTabId>,
-    ) -> Self {
+    pub fn copy(&self, cx: Scope, editor_tab_id: Option<EditorTabId>) -> Self {
         let cx = cx.create_child();
 
-        let editor = Self::new_doc(
-            cx,
-            self.doc(),
-            editor_tab_id,
-            self.common.clone(),
-        );
+        let editor =
+            Self::new_doc(cx, self.doc(), editor_tab_id, self.common.clone());
         editor.editor.cursor.set(self.editor.cursor.get_untracked());
         editor
             .editor
@@ -946,7 +927,7 @@ impl EditorData {
                                     l.range.start,
                                 )),
                                 scroll_offset: None,
-        
+
                                 same_editor_tab: false,
                             })
                             .collect(),
@@ -1008,7 +989,7 @@ impl EditorData {
                                                         ),
                                                     ),
                                                     scroll_offset: None,
-                            
+
                                                     same_editor_tab: false,
                                                 },
                                             ));
@@ -1028,7 +1009,7 @@ impl EditorData {
                                     location.range.start,
                                 )),
                                 scroll_offset: None,
-        
+
                                 same_editor_tab: false,
                             }));
                         }
@@ -1858,7 +1839,11 @@ impl EditorData {
             .doc()
             .buffer
             .with_untracked(|buffer| position.to_offset(buffer));
-        self.cursor().set(Cursor::new(CursorMode::Insert(Selection::caret(offset)), None, None));
+        self.cursor().set(Cursor::new(
+            CursorMode::Insert(Selection::caret(offset)),
+            None,
+            None,
+        ));
         if let Some(scroll_offset) = scroll_offset {
             self.editor.scroll_to.set(Some(scroll_offset));
         }
@@ -2382,7 +2367,7 @@ impl EditorData {
                                             location.range.start,
                                         )),
                                         scroll_offset: None,
-    
+
                                         same_editor_tab: false,
                                     },
                                 },
@@ -2709,9 +2694,7 @@ impl KeyPressFocus for EditorData {
                     && self.find_focus.get_untracked()
                     && self.common.find.replace_focus.get_untracked()
             }
-            Condition::SearchActive => {
-                self.common.find.visual.get_untracked()
-            }
+            Condition::SearchActive => self.common.find.visual.get_untracked(),
             _ => false,
         }
     }
@@ -2726,8 +2709,7 @@ impl KeyPressFocus for EditorData {
         if self.common.find.visual.get_untracked() && self.find_focus.get_untracked()
         {
             match &command.kind {
-                CommandKind::Edit(_)
-                | CommandKind::Move(_) => {
+                CommandKind::Edit(_) | CommandKind::Move(_) => {
                     if self.common.find.replace_focus.get_untracked() {
                         self.common.internal_command.send(
                             InternalCommand::ReplaceEditorCommand {
@@ -2778,12 +2760,8 @@ impl KeyPressFocus for EditorData {
                 }
                 self.run_focus_command(cmd, count, mods)
             }
-            crate::command::CommandKind::MotionMode(_) => {
-                CommandExecuted::No
-            }
-            crate::command::CommandKind::MultiSelection(_) => {
-                CommandExecuted::No
-            }
+            crate::command::CommandKind::MotionMode(_) => CommandExecuted::No,
+            crate::command::CommandKind::MultiSelection(_) => CommandExecuted::No,
         }
     }
 
@@ -2829,9 +2807,7 @@ impl KeyPressFocus for EditorData {
                 self.cancel_completion();
             }
 
-            self.update_inline_completion(
-                InlineCompletionTriggerKind::Automatic,
-            );
+            self.update_inline_completion(InlineCompletionTriggerKind::Automatic);
 
             self.apply_deltas(&deltas);
         }

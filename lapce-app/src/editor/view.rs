@@ -1,6 +1,4 @@
-use std::{
-    cmp, ops::DerefMut, rc::Rc, sync::Arc,
-};
+use std::{cmp, ops::DerefMut, rc::Rc, sync::Arc};
 
 use floem::{
     Renderer, View, ViewId,
@@ -24,14 +22,14 @@ use floem::{
         Decorators, clip, container, dyn_stack,
         editor::{
             CurrentLineColor, CursorSurroundingLines, Editor, EditorStyle,
-            IndentGuideColor, IndentStyleProp, Modal,
-            PhantomColor, PlaceholderColor, PreeditUnderlineColor,
-            RenderWhitespaceProp, ScrollBeyondLastLine, SelectionColor,
-            ShowIndentGuide, SmartTab, VisibleWhitespaceColor, WrapProp,
+            IndentGuideColor, IndentStyleProp, Modal, PhantomColor,
+            PlaceholderColor, PreeditUnderlineColor, RenderWhitespaceProp,
+            ScrollBeyondLastLine, SelectionColor, ShowIndentGuide, SmartTab,
+            VisibleWhitespaceColor, WrapProp,
             text::WrapMethod,
             view::{
-                EditorView as FloemEditorView, EditorViewClass,
-                LineRegion, ScreenLines, cursor_caret,
+                EditorView as FloemEditorView, EditorViewClass, LineRegion,
+                ScreenLines, cursor_caret,
             },
             visual_line::RVLine,
         },
@@ -1688,15 +1686,13 @@ fn editor_content(
     let current_scroll = create_rw_signal(Rect::ZERO);
 
     scroll({
-        let editor_content_view =
-            editor_view(e_data.get_untracked(), is_active).style(
-                move |s| {
-                    s.absolute()
-                        .margin_left(1.0)
-                        .min_size_full()
-                        .cursor(CursorStyle::Text)
-                },
-            );
+        let editor_content_view = editor_view(e_data.get_untracked(), is_active)
+            .style(move |s| {
+                s.absolute()
+                    .margin_left(1.0)
+                    .min_size_full()
+                    .cursor(CursorStyle::Text)
+            });
 
         let id = editor_content_view.id();
         editor.editor_view_id.set(Some(id));
@@ -2117,4 +2113,3 @@ fn find_view(
             .apply_if(!find_visual.get(), |s| s.hide())
     })
 }
-

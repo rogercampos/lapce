@@ -17,8 +17,8 @@ use lapce_rpc::{
 };
 use lapce_xi_rope::{Rope, RopeDelta};
 use lsp_types::{
-    DidOpenTextDocumentParams, SemanticTokens,
-    TextDocumentIdentifier, TextDocumentItem, VersionedTextDocumentIdentifier,
+    DidOpenTextDocumentParams, SemanticTokens, TextDocumentIdentifier,
+    TextDocumentItem, VersionedTextDocumentIdentifier,
     notification::DidOpenTextDocument, request::Request,
 };
 use parking_lot::Mutex;

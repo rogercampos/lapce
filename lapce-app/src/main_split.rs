@@ -46,8 +46,7 @@ use crate::{
         EditorTabChild, EditorTabChildSource, EditorTabData, EditorTabInfo,
     },
     id::{
-        EditorTabId, KeymapId, SettingsId, SplitId,
-        ThemeColorSettingsId, VoltViewId,
+        EditorTabId, KeymapId, SettingsId, SplitId, ThemeColorSettingsId, VoltViewId,
     },
     keypress::{EventRef, KeyPressData, KeyPressHandle},
     panel::implementation_view::ReferencesRoot,
@@ -273,12 +272,7 @@ impl Editors {
         editor_tab_id: Option<EditorTabId>,
         common: Rc<CommonData>,
     ) -> EditorId {
-        let editor = EditorData::new_doc(
-            cx,
-            doc,
-            editor_tab_id,
-            common,
-        );
+        let editor = EditorData::new_doc(cx, doc, editor_tab_id, common);
 
         self.insert(editor)
     }
@@ -291,12 +285,7 @@ impl Editors {
         editor_tab_id: Option<EditorTabId>,
         common: Rc<CommonData>,
     ) -> EditorData {
-        let id = self.new_from_doc(
-            cx,
-            doc,
-            editor_tab_id,
-            common,
-        );
+        let id = self.new_from_doc(cx, doc, editor_tab_id, common);
         self.editor_untracked(id).unwrap()
     }
 
@@ -319,8 +308,7 @@ impl Editors {
         cx: Scope,
         editor_tab_id: Option<EditorTabId>,
     ) -> Option<EditorData> {
-        let editor_id =
-            self.copy(editor_id, cx, editor_tab_id)?;
+        let editor_id = self.copy(editor_id, cx, editor_tab_id)?;
         self.editor_untracked(editor_id)
     }
 
@@ -642,9 +630,7 @@ impl MainSplitData {
         let path = location.path.clone();
         self.common
             .internal_command
-            .send(InternalCommand::TrackRecentFile {
-                path: path.clone(),
-            });
+            .send(InternalCommand::TrackRecentFile { path: path.clone() });
         let (doc, new_doc) = self.get_doc(path.clone(), None);
 
         let child = self.get_editor_tab_child(
@@ -768,9 +754,7 @@ impl MainSplitData {
             match &source {
                 EditorTabChildSource::Editor { path, .. } => active_editor_tab
                     .with_untracked(|editor_tab| {
-                        editor_tab
-                            .get_editor(editors, path)
-                            .map(|(i, _)| i)
+                        editor_tab.get_editor(editors, path).map(|(i, _)| i)
                     }),
                 EditorTabChildSource::NewFileEditor => None,
                 EditorTabChildSource::Settings => {
@@ -780,16 +764,12 @@ impl MainSplitData {
                         })
                     })
                 }
-                EditorTabChildSource::ThemeColorSettings => {
-                    active_editor_tab.with_untracked(|editor_tab| {
+                EditorTabChildSource::ThemeColorSettings => active_editor_tab
+                    .with_untracked(|editor_tab| {
                         editor_tab.children.iter().position(|(_, _, child)| {
-                            matches!(
-                                child,
-                                EditorTabChild::ThemeColorSettings(_)
-                            )
+                            matches!(child, EditorTabChild::ThemeColorSettings(_))
                         })
-                    })
-                }
+                    }),
                 EditorTabChildSource::Keymap => {
                     active_editor_tab.with_untracked(|editor_tab| {
                         editor_tab.children.iter().position(|(_, _, child)| {
@@ -2107,10 +2087,7 @@ impl MainSplitData {
     }
 
     pub fn open_theme_color_settings(&self) {
-        self.get_editor_tab_child(
-            EditorTabChildSource::ThemeColorSettings,
-            false,
-        );
+        self.get_editor_tab_child(EditorTabChildSource::ThemeColorSettings, false);
     }
 
     pub fn open_keymap(&self) {

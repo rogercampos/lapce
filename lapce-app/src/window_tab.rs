@@ -26,7 +26,10 @@ use im::HashMap;
 use indexmap::IndexMap;
 use itertools::Itertools;
 use lapce_core::{
-    command::FocusCommand, cursor::CursorAffinity, directory::Directory, meta,
+    command::FocusCommand,
+    cursor::CursorAffinity,
+    directory::Directory,
+    meta,
     register::{Clipboard, Register},
 };
 use lapce_rpc::{
@@ -82,7 +85,6 @@ use crate::{
     tracing::*,
     window::WindowCommonData,
     workspace::{LapceWorkspace, LapceWorkspaceType, WorkspaceInfo},
-
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -2105,9 +2107,7 @@ impl WindowTabData {
                 // in those cases.
                 self.panel.is_panel_visible(&kind)
             }
-            PanelKind::Search => {
-                self.is_panel_focused(kind)
-            }
+            PanelKind::Search => self.is_panel_focused(kind),
         };
         if should_hide {
             self.hide_panel(kind);

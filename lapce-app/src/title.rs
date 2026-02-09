@@ -23,13 +23,14 @@ use crate::{
 };
 
 fn left(
-    _workspace: Arc<LapceWorkspace>,
+    workspace: Arc<LapceWorkspace>,
     lapce_command: Listener<LapceCommand>,
     workbench_command: Listener<LapceWorkbenchCommand>,
     config: ReadSignal<Arc<LapceConfig>>,
     num_window_tabs: Memo<usize>,
 ) -> impl View {
     let is_macos = cfg!(target_os = "macos");
+    let has_folder = workspace.path.is_some();
     stack((
         empty().style(move |s| {
             let should_hide = if is_macos {
@@ -54,7 +55,9 @@ fn left(
             || "Menu",
             config,
         )
-        .popout_menu(move || window_menu(lapce_command, workbench_command))
+        .popout_menu(move || {
+            window_menu(lapce_command, workbench_command, has_folder)
+        })
         .style(move |s| {
             s.margin_left(4.0)
                 .margin_right(6.0)
@@ -98,10 +101,8 @@ fn middle(
     };
 
     stack((
-        stack((
-            drag_window_area(empty())
-                .style(|s| s.height_pct(100.0).flex_basis(0.0).flex_grow(1.0)),
-        ))
+        stack((drag_window_area(empty())
+            .style(|s| s.height_pct(100.0).flex_basis(0.0).flex_grow(1.0)),))
         .style(|s| {
             s.flex_basis(0)
                 .flex_grow(1.0)
@@ -295,11 +296,7 @@ pub fn title(window_tab_data: Rc<WindowTabData>) -> impl View {
             config,
             num_window_tabs,
         ),
-        middle(
-            workspace,
-            workbench_command,
-            config,
-        ),
+        middle(workspace, workbench_command, config),
         right(
             window_command,
             workbench_command,
