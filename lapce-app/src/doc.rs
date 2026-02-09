@@ -473,9 +473,7 @@ impl Doc {
     }
 
     pub fn handle_file_changed(&self, content: Rope) {
-        if self.is_pristine() {
-            self.reload(content, true);
-        }
+        self.reload(content, true);
     }
 
     pub fn do_insert(
