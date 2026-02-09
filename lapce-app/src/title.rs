@@ -143,12 +143,12 @@ fn middle(
                 .flex_grow(10.0)
                 .min_width(200.0)
                 .max_width(500.0)
-                .height(26.0)
+                .height(22.0)
                 .justify_content(Some(JustifyContent::Center))
                 .align_items(Some(AlignItems::Center))
                 .border(1.0)
                 .border_color(config.color(LapceColor::LAPCE_BORDER))
-                .border_radius(6.0)
+                .border_radius(2.0)
                 .background(config.color(LapceColor::EDITOR_BACKGROUND))
         }),
         drag_window_area(empty())
@@ -319,7 +319,7 @@ pub fn title(window_tab_data: Rc<WindowTabData>) -> impl View {
     .style(move |s| {
         let config = config.get();
         s.width_pct(100.0)
-            .height(37.0)
+            .height(30.0)
             .items_center()
             .background(config.color(LapceColor::PANEL_BACKGROUND))
             .border_bottom(1.0)

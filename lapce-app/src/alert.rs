@@ -95,7 +95,7 @@ pub fn alert_box(alert_data: AlertBoxData) -> impl View {
                                     .font_size((config.ui.font_size() + 1) as f32)
                                     .line_height(1.6)
                                     .border(1.0)
-                                    .border_radius(6.0)
+                                    .border_radius(2.0)
                                     .border_color(
                                         config.color(LapceColor::LAPCE_BORDER),
                                     )
@@ -127,7 +127,7 @@ pub fn alert_box(alert_data: AlertBoxData) -> impl View {
                             .font_size((config.ui.font_size() + 1) as f32)
                             .line_height(1.5)
                             .border(1.0)
-                            .border_radius(6.0)
+                            .border_radius(2.0)
                             .border_color(config.color(LapceColor::LAPCE_BORDER))
                             .hover(|s| {
                                 s.cursor(CursorStyle::Pointer).background(
@@ -150,7 +150,7 @@ pub fn alert_box(alert_data: AlertBoxData) -> impl View {
             s.padding(20.0)
                 .width(250.0)
                 .border(1.0)
-                .border_radius(6.0)
+                .border_radius(2.0)
                 .border_color(config.color(LapceColor::LAPCE_BORDER))
                 .color(config.color(LapceColor::EDITOR_FOREGROUND))
                 .background(config.color(LapceColor::PANEL_BACKGROUND))

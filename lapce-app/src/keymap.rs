@@ -232,7 +232,7 @@ pub fn keymap_view(editors: Editors, common: Rc<CommonData>) -> impl View {
                 .request_focus(|| {})
                 .style(move |s| {
                     s.width_pct(100.0)
-                        .border_radius(6.0)
+                        .border_radius(2.0)
                         .border(1.0)
                         .border_color(config.get().color(LapceColor::LAPCE_BORDER))
                 }),
@@ -347,7 +347,7 @@ fn keyboard_picker_view(
                             .margin_right(5.0)
                             .height(ui_line_height.get() as f32)
                             .border(1.0)
-                            .border_radius(6.0)
+                            .border_radius(2.0)
                             .border_color(
                                 config.get().color(LapceColor::LAPCE_BORDER),
                             )
@@ -362,7 +362,7 @@ fn keyboard_picker_view(
                     .margin_top(20.0)
                     .height((ui_line_height.get() as f32) * 1.2)
                     .border(1.0)
-                    .border_radius(6.0)
+                    .border_radius(2.0)
                     .border_color(config.color(LapceColor::LAPCE_BORDER))
                     .background(config.color(LapceColor::EDITOR_BACKGROUND))
             }),
@@ -374,7 +374,7 @@ fn keyboard_picker_view(
                             .justify_center()
                             .padding_vert(8.0)
                             .border(1.0)
-                            .border_radius(6.0)
+                            .border_radius(2.0)
                             .border_color(config.color(LapceColor::LAPCE_BORDER))
                             .hover(|s| {
                                 s.cursor(CursorStyle::Pointer).background(
@@ -410,7 +410,7 @@ fn keyboard_picker_view(
                             .justify_center()
                             .padding_vert(8.0)
                             .border(1.0)
-                            .border_radius(6.0)
+                            .border_radius(2.0)
                             .border_color(config.color(LapceColor::LAPCE_BORDER))
                             .hover(|s| {
                                 s.cursor(CursorStyle::Pointer).background(
@@ -445,7 +445,7 @@ fn keyboard_picker_view(
                 .padding(20.0)
                 .width(400.0)
                 .border(1.0)
-                .border_radius(6.0)
+                .border_radius(2.0)
                 .border_color(config.color(LapceColor::LAPCE_BORDER))
                 .background(config.color(LapceColor::PANEL_BACKGROUND))
         }),

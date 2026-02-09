@@ -114,7 +114,7 @@ pub fn text_area(
     .style(move |s| {
         let config = config.get();
         s.border(1.0)
-            .border_radius(6.0)
+            .border_radius(2.0)
             .border_color(config.color(LapceColor::LAPCE_BORDER))
             .background(config.color(LapceColor::EDITOR_BACKGROUND))
     })

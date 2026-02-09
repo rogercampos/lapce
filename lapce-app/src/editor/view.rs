@@ -1208,7 +1208,7 @@ fn editor_gutter_code_lens_view(
     .style(move |s| {
         let config = config.get();
         s.padding(4.0)
-            .border_radius(6.0)
+            .border_radius(2.0)
             .hover(|s| {
                 s.cursor(CursorStyle::Pointer)
                     .background(config.color(LapceColor::PANEL_HOVERED_BACKGROUND))
@@ -1267,7 +1267,7 @@ fn editor_gutter_folding_view(
     .style(move |s| {
         let config = config.get();
         s.padding(4.0)
-            .border_radius(6.0)
+            .border_radius(2.0)
             .hover(|s| {
                 s.cursor(CursorStyle::Pointer)
                     .background(config.color(LapceColor::PANEL_HOVERED_BACKGROUND))
@@ -1434,7 +1434,7 @@ fn editor_gutter_code_actions(
         .style(move |s| {
             let config = config.get();
             s.padding(4.0)
-                .border_radius(6.0)
+                .border_radius(2.0)
                 .hover(|s| {
                     s.cursor(CursorStyle::Pointer).background(
                         config.color(LapceColor::PANEL_HOVERED_BACKGROUND),
@@ -1492,7 +1492,7 @@ fn editor_gutter(
         icon_size + icon_padding * 2.0
     };
 
-    let gutter_padding_right = create_memo(move |_| icon_total_width() + 6.0);
+    let gutter_padding_right = create_memo(move |_| icon_total_width() + 4.0);
 
     stack((
         stack((
@@ -1873,7 +1873,7 @@ fn search_editor_view(
         s.width(200.0)
             .items_center()
             .border(1.0)
-            .border_radius(6.0)
+            .border_radius(2.0)
             .border_color(config.color(LapceColor::LAPCE_BORDER))
             .background(config.color(LapceColor::EDITOR_BACKGROUND))
     })
@@ -1915,7 +1915,7 @@ fn replace_editor_view(
         s.width(200.0)
             .items_center()
             .border(1.0)
-            .border_radius(6.0)
+            .border_radius(2.0)
             .border_color(config.color(LapceColor::LAPCE_BORDER))
             .background(config.color(LapceColor::EDITOR_BACKGROUND))
     })
@@ -2079,7 +2079,7 @@ fn find_view(
             let config = config.get();
             s.margin_right(50.0)
                 .background(config.color(LapceColor::PANEL_BACKGROUND))
-                .border_radius(6.0)
+                .border_radius(2.0)
                 .border(1.0)
                 .border_color(config.color(LapceColor::LAPCE_BORDER))
                 .padding_vert(4.0)

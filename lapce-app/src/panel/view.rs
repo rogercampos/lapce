@@ -59,8 +59,8 @@ pub fn foldable_panel_section(
             header.style(|s| s.align_items(AlignItems::Center).padding_left(3.0)),
         ))
         .style(move |s| {
-            s.padding_horiz(10.0)
-                .padding_vert(6.0)
+            s.padding_horiz(8.0)
+                .padding_vert(4.0)
                 .width_pct(100.0)
                 .cursor(CursorStyle::Pointer)
                 .background(config.get().color(LapceColor::EDITOR_BACKGROUND))
@@ -616,7 +616,7 @@ fn panel_picker(
                 .dragging_style(move |s| {
                     let config = config.get();
                     s.border(1.0)
-                        .border_radius(6.0)
+                        .border_radius(2.0)
                         .border_color(config.color(LapceColor::LAPCE_BORDER))
                         .padding(6.0)
                         .background(
@@ -652,7 +652,7 @@ fn panel_picker(
                         )
                 }),
             )))
-            .style(|s| s.padding(6.0))
+            .style(|s| s.padding(4.0))
         },
     )
     .style(move |s| {

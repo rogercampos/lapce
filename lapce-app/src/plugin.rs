@@ -766,7 +766,7 @@ pub fn plugin_info_view(plugin: PluginData, volt: VoltID) -> impl View {
                     let config = config.get();
                     s.margin_left(10)
                         .padding_horiz(10)
-                        .border_radius(6.0)
+                        .border_radius(2.0)
                         .color(
                             config
                                 .color(LapceColor::LAPCE_BUTTON_PRIMARY_FOREGROUND),

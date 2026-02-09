@@ -771,7 +771,7 @@ fn editor_tab_header(
                             )
                     })
             })
-            .style(|s| s.padding(4.));
+            .style(|s| s.padding(2.));
 
             let tab_content = tooltip(
                 label(move || info.with(|info| info.name.clone())).style(move |s| {
@@ -858,8 +858,8 @@ fn editor_tab_header(
                     .border_left(if i.get() == 0 { 1.0 } else { 0.0 })
                     .border_right(1.0)
                     .border_color(config.get().color(LapceColor::LAPCE_BORDER))
-                    .padding_horiz(6.)
-                    .gap(6.)
+                    .padding_horiz(4.)
+                    .gap(4.)
                     .grid()
                     .grid_template_columns(vec![auto(), fr(1.), auto()])
                     .apply_if(
@@ -919,7 +919,7 @@ fn editor_tab_header(
                 .dragging_style(move |s| {
                     let config = config.get();
                     s.border(1.0)
-                        .border_radius(6.0)
+                        .border_radius(2.0)
                         .background(
                             config
                                 .color(LapceColor::PANEL_BACKGROUND)
@@ -1934,8 +1934,8 @@ pub fn clickable_icon_base(
     .disabled(disabled_fn)
     .style(move |s| {
         let config = config.get();
-        s.padding(4.0)
-            .border_radius(6.0)
+        s.padding(2.0)
+            .border_radius(2.0)
             .border(1.0)
             .border_color(Color::TRANSPARENT)
             .apply_if(active_fn(), |s| {
@@ -1983,19 +1983,19 @@ fn tooltip_tip<V: View + 'static>(
 ) -> impl IntoView {
     container(child).style(move |s| {
         let config = config.get();
-        s.padding_horiz(10.0)
-            .padding_vert(5.0)
+        s.padding_horiz(8.0)
+            .padding_vert(4.0)
             .font_size(config.ui.font_size() as f32)
             .font_family(config.ui.font_family.clone())
             .color(config.color(LapceColor::TOOLTIP_FOREGROUND))
             .background(config.color(LapceColor::TOOLTIP_BACKGROUND))
             .border(1)
-            .border_radius(6)
+            .border_radius(2)
             .border_color(config.color(LapceColor::LAPCE_BORDER))
             .box_shadow_blur(3.0)
             .box_shadow_color(config.color(LapceColor::LAPCE_DROPDOWN_SHADOW))
             .margin_left(0.0)
-            .margin_top(4.0)
+            .margin_top(2.0)
     })
 }
 
@@ -2354,7 +2354,7 @@ fn palette_input(window_tab_data: Rc<WindowTabData>) -> impl View {
     container(container(input).style(move |s| {
         let config = config.get();
         s.width_full()
-            .height(25.0)
+            .height(22.0)
             .items_center()
             .border_bottom(1.0)
             .border_color(config.color(LapceColor::LAPCE_BORDER))
@@ -2400,7 +2400,7 @@ fn palette_content(
     let config = window_tab_data.common.config;
     let run_id = window_tab_data.palette.run_id;
     let input = window_tab_data.palette.input.read_only();
-    let palette_item_height = 25.0;
+    let palette_item_height = 22.0;
     let workspace = window_tab_data.workspace.clone();
     stack((
         scroll({
@@ -2549,7 +2549,7 @@ fn palette(window_tab_data: Rc<WindowTabData>) -> impl View {
                 })
                 .margin_top(4.0)
                 .border(1.0)
-                .border_radius(6.0)
+                .border_radius(2.0)
                 .border_color(config.color(LapceColor::LAPCE_BORDER))
                 .flex_col()
                 .background(config.color(LapceColor::PALETTE_BACKGROUND))
@@ -2645,7 +2645,7 @@ fn window_message_view(
                     .items_start()
                     .padding(10.0)
                     .border(1.0)
-                    .border_radius(6.0)
+                    .border_radius(2.0)
                     .border_color(config.color(LapceColor::LAPCE_BORDER))
                     .background(config.color(LapceColor::PANEL_BACKGROUND))
                     .apply_if(i > 0, |s| s.margin_top(10.0))
@@ -2769,7 +2769,7 @@ fn hover(window_tab_data: Rc<WindowTabData>) -> impl View {
                     .margin_top(origin.y as f32)
                     .max_height(300.0)
                     .border(1.0)
-                    .border_radius(6.0)
+                    .border_radius(2.0)
                     .border_color(config.color(LapceColor::LAPCE_BORDER))
                     .background(config.color(LapceColor::PANEL_BACKGROUND))
                     .set(PropagatePointerWheel, false)
@@ -2898,7 +2898,7 @@ fn completion(window_tab_data: Rc<WindowTabData>) -> impl View {
             .background(config.color(LapceColor::COMPLETION_BACKGROUND))
             .font_family(config.editor.font_family.clone())
             .font_size(config.editor.font_size() as f32)
-            .border_radius(6.0)
+            .border_radius(2.0)
     })
     .debug_name("Completion Layer")
 }
@@ -2937,7 +2937,7 @@ fn code_action(window_tab_data: Rc<WindowTabData>) -> impl View {
                             .min_width(0.0)
                             .width_full()
                             .line_height(1.8)
-                            .border_radius(6.0)
+                            .border_radius(2.0)
                             .cursor(CursorStyle::Pointer)
                             .apply_if(active.get() == i, |s| {
                                 s.background(
@@ -2985,7 +2985,7 @@ fn code_action(window_tab_data: Rc<WindowTabData>) -> impl View {
         .margin_left(origin.x as f32)
         .margin_top(origin.y as f32)
         .background(config.get().color(LapceColor::COMPLETION_BACKGROUND))
-        .border_radius(6.0)
+        .border_radius(2.0)
     })
     .debug_name("Code Action Layer")
 }
@@ -3008,7 +3008,7 @@ fn rename(window_tab_data: Rc<WindowTabData>) -> impl View {
             s.font_family(config.editor.font_family.clone())
                 .font_size(config.editor.font_size() as f32)
                 .border(1.0)
-                .border_radius(6.0)
+                .border_radius(2.0)
                 .border_color(config.color(LapceColor::LAPCE_BORDER))
                 .background(config.color(LapceColor::EDITOR_BACKGROUND))
         }),
@@ -3025,7 +3025,7 @@ fn rename(window_tab_data: Rc<WindowTabData>) -> impl View {
             .margin_left(origin.x as f32)
             .margin_top(origin.y as f32)
             .background(config.get().color(LapceColor::PANEL_BACKGROUND))
-            .border_radius(6.0)
+            .border_radius(2.0)
             .padding(6.0)
     })
     .debug_name("Rename Layer")
@@ -3253,7 +3253,7 @@ fn workspace_tab_header(window_data: WindowData) -> impl View {
             .dragging_style(move |s| {
                 let config = config.get();
                 s.border(1.0)
-                    .border_radius(6.0)
+                    .border_radius(2.0)
                     .border_color(config.color(LapceColor::LAPCE_BORDER))
                     .color(
                         config
@@ -3368,7 +3368,7 @@ fn workspace_tab_header(window_data: WindowData) -> impl View {
         let config = config.get();
         s.border_bottom(1.0)
             .width_full()
-            .height(37.0)
+            .height(30.0)
             .font_size(config.ui.font_size() as f32)
             .apply_if(!config.ui.font_family.is_empty(), |s| {
                 s.font_family(config.ui.font_family.clone())
@@ -3463,6 +3463,18 @@ pub fn launch() {
             env!("CARGO_MANIFEST_DIR"),
             "/../extra/fonts/DejaVu/DejaVuSansMono.ttf"
         ));
+        const FONT_JETBRAINS_MONO_REGULAR: &[u8] = include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../extra/fonts/JetBrainsMono/JetBrainsMono-Regular.ttf"
+        ));
+        const FONT_JETBRAINS_MONO_BOLD: &[u8] = include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../extra/fonts/JetBrainsMono/JetBrainsMono-Bold.ttf"
+        ));
+        const FONT_JETBRAINS_MONO_ITALIC: &[u8] = include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../extra/fonts/JetBrainsMono/JetBrainsMono-Italic.ttf"
+        ));
 
         FONT_SYSTEM
             .lock()
@@ -3473,6 +3485,24 @@ pub fn launch() {
             .db_mut()
             .load_font_source(Source::Binary(Arc::new(
                 FONT_DEJAVU_SANS_MONO_REGULAR,
+            )));
+        FONT_SYSTEM
+            .lock()
+            .db_mut()
+            .load_font_source(Source::Binary(Arc::new(
+                FONT_JETBRAINS_MONO_REGULAR,
+            )));
+        FONT_SYSTEM
+            .lock()
+            .db_mut()
+            .load_font_source(Source::Binary(Arc::new(
+                FONT_JETBRAINS_MONO_BOLD,
+            )));
+        FONT_SYSTEM
+            .lock()
+            .db_mut()
+            .load_font_source(Source::Binary(Arc::new(
+                FONT_JETBRAINS_MONO_ITALIC,
             )));
     }
 

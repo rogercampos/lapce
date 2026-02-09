@@ -159,7 +159,7 @@ pub fn about_popup(window_tab_data: Rc<WindowTabData>) -> impl View {
                 .padding_vert(25.0)
                 .padding_horiz(100.0)
                 .border(1.0)
-                .border_radius(6.0)
+                .border_radius(2.0)
                 .border_color(config.color(LapceColor::LAPCE_BORDER))
                 .background(config.color(LapceColor::PANEL_BACKGROUND))
         })

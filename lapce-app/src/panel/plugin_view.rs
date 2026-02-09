@@ -247,7 +247,7 @@ fn available_view(plugin: PluginData, core_rpc: CoreRpcHandler) -> impl View {
                     )
                     .margin_left(6.0)
                     .padding_horiz(6.0)
-                    .border_radius(6.0)
+                    .border_radius(2.0)
                     .hover(|s| {
                         s.cursor(CursorStyle::Pointer).background(
                             config
@@ -370,7 +370,7 @@ fn available_view(plugin: PluginData, core_rpc: CoreRpcHandler) -> impl View {
                     .items_center()
                     .background(config.color(LapceColor::EDITOR_BACKGROUND))
                     .border(1.0)
-                    .border_radius(6.0)
+                    .border_radius(2.0)
                     .border_color(config.color(LapceColor::LAPCE_BORDER))
             })
         })

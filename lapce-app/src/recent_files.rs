@@ -397,7 +397,7 @@ fn recent_files_content(window_tab_data: Rc<WindowTabData>) -> impl View {
             .width(500.0)
             .max_width_pct(80.0)
             .border(1.0)
-            .border_radius(6.0)
+            .border_radius(2.0)
             .border_color(config.color(LapceColor::LAPCE_BORDER))
             .background(config.color(LapceColor::PALETTE_BACKGROUND))
     })

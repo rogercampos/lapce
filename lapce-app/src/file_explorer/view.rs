@@ -249,7 +249,7 @@ fn file_node_input_view(data: FileExplorerData, err: Option<String>) -> Containe
                 .height(ui_line_height.get())
                 .padding(0.0)
                 .margin(0.0)
-                .border_radius(6.0)
+                .border_radius(2.0)
                 .border(1.0)
                 .border_color(config.get().color(LapceColor::LAPCE_BORDER))
         });
@@ -385,7 +385,7 @@ fn file_explorer_view(data: FileExplorerData) -> impl View {
                     move |s| {
                         s.padding_right(15.0)
                             .min_width_full()
-                            .padding_left((level * 10) as f32)
+                            .padding_left((level * 16) as f32)
                             .align_items(AlignItems::Center)
                             .hover(|s| {
                                 s.background(

@@ -101,7 +101,7 @@ pub fn status(
                 })
                 .style(move |s| {
                     s.height_pct(100.0)
-                        .padding_horiz(10.0)
+                        .padding_horiz(6.0)
                         .items_center()
                         .hover(|s| {
                             s.cursor(CursorStyle::Pointer).background(
@@ -348,7 +348,7 @@ fn status_text<S: std::fmt::Display + 'static>(
 
         s.display(display)
             .height_full()
-            .padding_horiz(10.0)
+            .padding_horiz(6.0)
             .items_center()
             .color(config.color(LapceColor::STATUS_FOREGROUND))
             .hover(|s| {

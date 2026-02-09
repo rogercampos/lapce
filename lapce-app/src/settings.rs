@@ -482,7 +482,7 @@ pub fn settings_view(
                     .keyboard_navigable()
                     .style(move |s| {
                         s.width_pct(100.0)
-                            .border_radius(6.0)
+                            .border_radius(2.0)
                             .border(1.0)
                             .border_color(
                                 config.get().color(LapceColor::LAPCE_BORDER),
@@ -631,7 +631,7 @@ fn settings_item_view(
                 text_input_view
                     .keyboard_navigable()
                     .style(move |s| {
-                        s.width(300.0).border(1.0).border_radius(6.0).border_color(
+                        s.width(300.0).border(1.0).border_radius(2.0).border_color(
                             config.get().color(LapceColor::LAPCE_BORDER),
                         )
                     })
@@ -1079,7 +1079,7 @@ pub fn theme_color_settings_view(
                     .keyboard_navigable()
                     .style(move |s| {
                         s.width_pct(100.0)
-                            .border_radius(6.0)
+                            .border_radius(2.0)
                             .border(1.0)
                             .border_color(
                                 config.get().color(LapceColor::LAPCE_BORDER),
@@ -1254,7 +1254,7 @@ fn dropdown_view(
             .cursor(CursorStyle::Pointer)
             .border_color(config.get().color(LapceColor::LAPCE_BORDER))
             .border(1.0)
-            .border_radius(6.0)
+            .border_radius(2.0)
             .width(250.0)
             .line_height(1.8)
     })
@@ -1376,7 +1376,7 @@ fn dropdown_scroll(
                 s.background(config.color(LapceColor::LAPCE_SCROLL_BAR))
             })
             .border(1)
-            .border_radius(6.0)
+            .border_radius(2.0)
             .border_color(config.color(LapceColor::LAPCE_BORDER))
             .box_shadow_blur(3.0)
             .box_shadow_color(config.color(LapceColor::LAPCE_DROPDOWN_SHADOW))
