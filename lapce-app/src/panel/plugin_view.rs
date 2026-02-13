@@ -19,10 +19,8 @@ use lapce_rpc::{
     plugin::{VoltID, VoltInfo},
 };
 
-use super::{
-    data::PanelSection, kind::PanelKind, position::PanelPosition, view::PanelBuilder,
-};
 use crate::{
+    about::exclusive_popup,
     app::not_clickable_icon,
     command::InternalCommand,
     config::{color::LapceColor, icon::LapceIcons},
@@ -65,27 +63,51 @@ impl<K: Clone + 'static, V: Clone + 'static> VirtualVector<(usize, K, V)>
     }
 }
 
-pub fn plugin_panel(
-    workspace_data: Rc<WorkspaceData>,
-    position: PanelPosition,
-) -> impl View {
+pub fn plugin_popup(workspace_data: Rc<WorkspaceData>) -> impl View {
+    let plugin_popup_data = workspace_data.plugin_popup_data.clone();
     let config = workspace_data.common.config;
     let plugin = workspace_data.plugin.clone();
     let core_rpc = workspace_data.proxy.core_rpc.clone();
 
-    PanelBuilder::new(config, position)
-        .add(
-            "Installed",
-            installed_view(plugin.clone()),
-            workspace_data.panel.section_open(PanelSection::Installed),
-        )
-        .add(
-            "Available",
-            available_view(plugin.clone(), core_rpc),
-            workspace_data.panel.section_open(PanelSection::Available),
-        )
-        .build()
-        .debug_name("Plugin Panel")
+    let close_data = plugin_popup_data.clone();
+    exclusive_popup(
+        config,
+        plugin_popup_data.visible,
+        move || close_data.close(),
+        move || {
+            stack((
+                label(|| "Installed".to_string()).style(move |s| {
+                    let config = config.get();
+                    s.padding_horiz(10.0)
+                        .padding_vert(6.0)
+                        .width_pct(100.0)
+                        .font_bold()
+                        .background(config.color(LapceColor::EDITOR_BACKGROUND))
+                }),
+                installed_view(plugin.clone()),
+                label(|| "Available".to_string()).style(move |s| {
+                    let config = config.get();
+                    s.padding_horiz(10.0)
+                        .padding_vert(6.0)
+                        .width_pct(100.0)
+                        .font_bold()
+                        .background(config.color(LapceColor::EDITOR_BACKGROUND))
+                }),
+                available_view(plugin.clone(), core_rpc),
+            ))
+            .style(move |s| {
+                let config = config.get();
+                s.flex_col()
+                    .width(500.0)
+                    .height(600.0)
+                    .border(1.0)
+                    .border_radius(6.0)
+                    .border_color(config.color(LapceColor::LAPCE_BORDER))
+                    .background(config.color(LapceColor::PANEL_BACKGROUND))
+            })
+        },
+    )
+    .debug_name("Plugin Popup")
 }
 
 fn installed_view(plugin: PluginData) -> impl View {
@@ -337,7 +359,7 @@ fn available_view(plugin: PluginData, core_rpc: CoreRpcHandler) -> impl View {
 
     let editor = plugin.available.query_editor.clone();
     let focus = plugin.common.focus;
-    let is_focused = move || focus.get() == Focus::Panel(PanelKind::Plugin);
+    let is_focused = move || focus.get() == Focus::PluginPopup;
     let cursor_x = create_rw_signal(0.0);
 
     stack((
@@ -360,7 +382,7 @@ fn available_view(plugin: PluginData, core_rpc: CoreRpcHandler) -> impl View {
                     .with_origin(Point::new(cursor_x.get(), 0.0))
             })
             .on_event_cont(EventListener::PointerDown, move |_| {
-                focus.set(Focus::Panel(PanelKind::Plugin));
+                focus.set(Focus::PluginPopup);
             })
             .scroll_style(|s| s.hide_bars(true))
             .style(move |s| {

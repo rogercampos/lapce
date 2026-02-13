@@ -22,10 +22,7 @@ pub type PanelOrder = im::HashMap<PanelPosition, im::Vector<PanelKind>>;
 
 pub fn default_panel_order() -> PanelOrder {
     let mut order = PanelOrder::new();
-    order.insert(
-        PanelPosition::LeftTop,
-        im::vector![PanelKind::FileExplorer, PanelKind::Plugin,],
-    );
+    order.insert(PanelPosition::LeftTop, im::vector![PanelKind::FileExplorer]);
     order.insert(
         PanelPosition::BottomLeft,
         im::vector![
@@ -47,8 +44,6 @@ pub enum PanelSection {
     Error,
     Warn,
     Changes,
-    Installed,
-    Available,
 }
 
 #[derive(Clone, Serialize, Deserialize)]

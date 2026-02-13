@@ -43,7 +43,7 @@ use crate::{
     markdown::{MarkdownContent, parse_markdown},
     panel::plugin_view::VOLT_DEFAULT_PNG,
     web_link::web_link,
-    workspace_data::CommonData,
+    workspace_data::{CommonData, Focus},
 };
 
 type PluginInfo = Option<(
@@ -147,6 +147,85 @@ impl KeyPressFocus for PluginData {
 
     fn receive_char(&self, c: &str) {
         self.available.query_editor.receive_char(c);
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct PluginPopupData {
+    pub visible: RwSignal<bool>,
+    pub focus: RwSignal<Focus>,
+    pub plugin: PluginData,
+}
+
+impl PluginPopupData {
+    pub fn new(cx: Scope, focus: RwSignal<Focus>, plugin: PluginData) -> Self {
+        let visible = cx.create_rw_signal(false);
+        Self {
+            visible,
+            focus,
+            plugin,
+        }
+    }
+
+    pub fn open(&self) {
+        self.visible.set(true);
+        self.focus.set(Focus::PluginPopup);
+    }
+
+    pub fn close(&self) {
+        self.visible.set(false);
+        self.focus.set(Focus::Workbench);
+    }
+}
+
+impl KeyPressFocus for PluginPopupData {
+    fn check_condition(&self, condition: Condition) -> bool {
+        matches!(condition, Condition::ModalFocus)
+    }
+
+    fn run_command(
+        &self,
+        command: &crate::command::LapceCommand,
+        count: Option<usize>,
+        mods: Modifiers,
+    ) -> CommandExecuted {
+        match &command.kind {
+            CommandKind::Workbench(_) => {}
+            CommandKind::Scroll(_) => {}
+            CommandKind::Focus(cmd) => {
+                if cmd == &lapce_core::command::FocusCommand::ModalClose {
+                    self.close();
+                    return CommandExecuted::Yes;
+                }
+            }
+            CommandKind::Edit(_)
+            | CommandKind::Move(_)
+            | CommandKind::MultiSelection(_) => {
+                #[allow(clippy::single_match)]
+                match command.kind {
+                    CommandKind::Edit(EditCommand::InsertNewLine) => {
+                        return CommandExecuted::Yes;
+                    }
+                    _ => {}
+                }
+
+                return self
+                    .plugin
+                    .available
+                    .query_editor
+                    .run_command(command, count, mods);
+            }
+            CommandKind::MotionMode(_) => {}
+        }
+        CommandExecuted::No
+    }
+
+    fn receive_char(&self, c: &str) {
+        self.plugin.available.query_editor.receive_char(c);
+    }
+
+    fn focus_only(&self) -> bool {
+        true
     }
 }
 

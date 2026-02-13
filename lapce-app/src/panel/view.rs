@@ -19,7 +19,6 @@ use floem::{
 use super::{
     global_search_view::global_search_panel,
     kind::PanelKind,
-    plugin_view::plugin_panel,
     position::{PanelContainerPosition, PanelPosition},
     problem_view::problem_panel,
 };
@@ -500,9 +499,6 @@ fn panel_view(
                 PanelKind::FileExplorer => {
                     file_explorer_panel(workspace_data.clone(), position).into_any()
                 }
-                PanelKind::Plugin => {
-                    plugin_panel(workspace_data.clone(), position).into_any()
-                }
                 PanelKind::Search => {
                     global_search_panel(workspace_data.clone(), position).into_any()
                 }
@@ -564,7 +560,6 @@ fn panel_picker(
             let workspace_data = workspace_data.clone();
             let tooltip = match p {
                 PanelKind::FileExplorer => "File Explorer",
-                PanelKind::Plugin => "Plugins",
                 PanelKind::Search => "Search",
                 PanelKind::Problem => "Problems",
                 PanelKind::CallHierarchy => "Call Hierarchy",
@@ -649,7 +644,7 @@ fn panel_picker(
         s.border_color(config.get().color(LapceColor::LAPCE_BORDER))
             .apply_if(
                 panels.with(|p| {
-                    p.get(&position).map(|p| p.is_empty()).unwrap_or(true)
+                    p.get(&position).map(|p| p.len() <= 1).unwrap_or(true)
                 }),
                 |s| s.hide(),
             )

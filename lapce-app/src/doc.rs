@@ -1996,7 +1996,7 @@ fn should_blink(
             focus,
             Focus::Workbench
                 | Focus::Palette
-                | Focus::Panel(PanelKind::Plugin)
+                | Focus::PluginPopup
                 | Focus::Panel(PanelKind::Search)
         ) {
             return true;

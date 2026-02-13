@@ -2885,6 +2885,7 @@ fn workspace_view(workspace_data: Rc<WorkspaceData>) -> impl View {
             crate::search_modal::search_modal_popup(workspace_data.clone()),
             recent_files::recent_files_popup(workspace_data.clone()),
             about::about_popup(workspace_data.clone()),
+            crate::panel::plugin_view::plugin_popup(workspace_data.clone()),
             alert::alert_box(workspace_data.alert_data.clone()),
         ))
         .into_any()
@@ -3551,6 +3552,10 @@ pub fn window_menu(
         }))
         .entry(MenuItem::new("Install Theme").action(move || {
             workbench_command.send(LapceWorkbenchCommand::InstallTheme);
+        }))
+        .separator()
+        .entry(MenuItem::new("Plugins").action(move || {
+            workbench_command.send(LapceWorkbenchCommand::ShowPlugins);
         }));
 
     let help_menu = {

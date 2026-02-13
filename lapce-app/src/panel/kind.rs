@@ -9,7 +9,6 @@ use crate::config::icon::LapceIcons;
 )]
 pub enum PanelKind {
     FileExplorer,
-    Plugin,
     Search,
     Problem,
     CallHierarchy,
@@ -21,7 +20,6 @@ impl PanelKind {
     pub fn svg_name(&self) -> &'static str {
         match &self {
             PanelKind::FileExplorer => LapceIcons::FILE_EXPLORER,
-            PanelKind::Plugin => LapceIcons::EXTENSIONS,
             PanelKind::Search => LapceIcons::SEARCH,
             PanelKind::Problem => LapceIcons::PROBLEM,
             PanelKind::CallHierarchy => LapceIcons::TYPE_HIERARCHY,
@@ -43,7 +41,6 @@ impl PanelKind {
     pub fn default_position(&self) -> PanelPosition {
         match self {
             PanelKind::FileExplorer => PanelPosition::LeftTop,
-            PanelKind::Plugin => PanelPosition::LeftTop,
             PanelKind::Search => PanelPosition::BottomLeft,
             PanelKind::Problem => PanelPosition::BottomLeft,
             PanelKind::CallHierarchy => PanelPosition::BottomLeft,

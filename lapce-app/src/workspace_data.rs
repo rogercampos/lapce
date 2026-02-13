@@ -77,7 +77,7 @@ use crate::{
         kind::PanelKind,
         position::PanelContainerPosition,
     },
-    plugin::PluginData,
+    plugin::{PluginData, PluginPopupData},
     proxy::{ProxyData, new_proxy},
     recent_files::RecentFilesData,
     rename::RenameData,
@@ -96,6 +96,7 @@ pub enum Focus {
     AboutPopup,
     RecentFiles,
     SearchModal,
+    PluginPopup,
     Panel(PanelKind),
 }
 
@@ -171,6 +172,7 @@ pub struct WorkspaceData {
     pub search_modal_data: SearchModalData,
     pub call_hierarchy_data: CallHierarchyData,
     pub about_data: AboutData,
+    pub plugin_popup_data: PluginPopupData,
     pub recent_files: RwSignal<Vec<PathBuf>>,
     pub recent_files_data: RecentFilesData,
     pub alert_data: AlertBoxData,
@@ -455,6 +457,8 @@ impl WorkspaceData {
         );
 
         let about_data = AboutData::new(cx, common.focus);
+        let plugin_popup_data =
+            PluginPopupData::new(cx, common.focus, plugin.clone());
         let recent_files = cx.create_rw_signal(Vec::<PathBuf>::new());
         let recent_files_data = RecentFilesData::new(
             cx,
@@ -484,6 +488,7 @@ impl WorkspaceData {
                 scroll_to_line: cx.create_rw_signal(None),
             },
             about_data,
+            plugin_popup_data,
             recent_files,
             recent_files_data,
             alert_data,
@@ -1000,6 +1005,9 @@ impl WorkspaceData {
             }
             ShowAbout => {
                 self.about_data.open();
+            }
+            ShowPlugins => {
+                self.plugin_popup_data.open();
             }
 
             // ==== Updating ====
@@ -1715,8 +1723,8 @@ impl WorkspaceData {
             Focus::Panel(PanelKind::Search) => {
                 Some(keypress.key_down(event, &self.global_search))
             }
-            Focus::Panel(PanelKind::Plugin) => {
-                Some(keypress.key_down(event, &self.plugin))
+            Focus::PluginPopup => {
+                Some(keypress.key_down(event, &self.plugin_popup_data))
             }
             _ => None,
         };
@@ -1965,7 +1973,6 @@ impl WorkspaceData {
     fn toggle_panel_focus(&self, kind: PanelKind) {
         let should_hide = match kind {
             PanelKind::FileExplorer
-            | PanelKind::Plugin
             | PanelKind::Problem
             | PanelKind::CallHierarchy
             | PanelKind::References
