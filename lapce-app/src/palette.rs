@@ -33,9 +33,7 @@ use self::{
     kind::PaletteKind,
 };
 use crate::{
-    command::{
-        CommandExecuted, CommandKind, InternalCommand, WindowCommand,
-    },
+    command::{CommandExecuted, CommandKind, InternalCommand, WindowCommand},
     db::LapceDb,
     editor::{
         EditorData, EditorViewKind,

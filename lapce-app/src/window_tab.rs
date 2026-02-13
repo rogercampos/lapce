@@ -1734,7 +1734,6 @@ impl WindowTabData {
                     self.main_split.docs.with_untracked(|x| {
                         for doc in x.values() {
                             doc.get_code_lens();
-                            doc.get_document_symbol();
                             doc.get_semantic_styles();
                             doc.get_folding_range();
                             doc.get_inlay_hints();
@@ -2094,7 +2093,6 @@ impl WindowTabData {
             | PanelKind::Plugin
             | PanelKind::Problem
             | PanelKind::CallHierarchy
-            | PanelKind::DocumentSymbol
             | PanelKind::References
             | PanelKind::Implementation => {
                 // Some panels don't accept focus (yet). Fall back to visibility check

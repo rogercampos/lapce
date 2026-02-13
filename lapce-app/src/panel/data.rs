@@ -24,11 +24,7 @@ pub fn default_panel_order() -> PanelOrder {
     let mut order = PanelOrder::new();
     order.insert(
         PanelPosition::LeftTop,
-        im::vector![
-            PanelKind::FileExplorer,
-            PanelKind::Plugin,
-            PanelKind::DocumentSymbol,
-        ],
+        im::vector![PanelKind::FileExplorer, PanelKind::Plugin,],
     );
     order.insert(
         PanelPosition::BottomLeft,

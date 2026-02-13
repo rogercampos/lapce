@@ -87,8 +87,6 @@ impl LapceIcons {
     pub const FILE_TYPE_SYMLINK_FILE: &'static str = "file-symlink-file";
     pub const FILE_TYPE_SYMLINK_DIRECTORY: &'static str = "file-symlink-directory";
 
-    pub const DOCUMENT_SYMBOL: &'static str = "document_symbol";
-
     pub const REFERENCES: &'static str = "references";
 
     pub const IMPLEMENTATION: &'static str = "implementation";

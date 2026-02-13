@@ -3,10 +3,7 @@ use std::path::PathBuf;
 use lapce_core::line_ending::LineEnding;
 use lsp_types::{Range, SymbolKind};
 
-use crate::{
-    editor::location::EditorLocation,
-    workspace::LapceWorkspace,
-};
+use crate::{editor::location::EditorLocation, workspace::LapceWorkspace};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct PaletteItem {

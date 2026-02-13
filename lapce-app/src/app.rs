@@ -69,10 +69,7 @@ use tracing_subscriber::{filter::Targets, reload::Handle};
 use crate::{
     about, alert,
     code_action::CodeActionStatus,
-    command::{
-        InternalCommand, LapceCommand, LapceWorkbenchCommand,
-        WindowCommand,
-    },
+    command::{InternalCommand, LapceCommand, LapceWorkbenchCommand, WindowCommand},
     config::{
         LapceConfig, color::LapceColor, icon::LapceIcons, ui::TabSeparatorHeight,
         watcher::ConfigWatcher,
@@ -3888,9 +3885,11 @@ pub fn window_menu(
 ) -> Menu {
     let file_menu = {
         let mut menu = if has_folder {
-            Menu::new("File").entry(MenuItem::new("Close Folder").action(move || {
-                workbench_command.send(LapceWorkbenchCommand::CloseFolder);
-            }))
+            Menu::new("File").entry(MenuItem::new("Close Folder").action(
+                move || {
+                    workbench_command.send(LapceWorkbenchCommand::CloseFolder);
+                },
+            ))
         } else {
             Menu::new("File").entry(MenuItem::new("Open Folder").action(move || {
                 workbench_command.send(LapceWorkbenchCommand::OpenFolder);
@@ -3986,7 +3985,8 @@ pub fn window_menu(
         }))
         .separator()
         .entry(MenuItem::new("Export Theme Settings").action(move || {
-            workbench_command.send(LapceWorkbenchCommand::ExportCurrentThemeSettings);
+            workbench_command
+                .send(LapceWorkbenchCommand::ExportCurrentThemeSettings);
         }))
         .entry(MenuItem::new("Install Theme").action(move || {
             workbench_command.send(LapceWorkbenchCommand::InstallTheme);
@@ -4007,10 +4007,12 @@ pub fn window_menu(
             .entry(MenuItem::new("Open Settings File").action(move || {
                 workbench_command.send(LapceWorkbenchCommand::OpenSettingsFile);
             }))
-            .entry(MenuItem::new("Open Keyboard Shortcuts File").action(move || {
-                workbench_command
-                    .send(LapceWorkbenchCommand::OpenKeyboardShortcutsFile);
-            }))
+            .entry(
+                MenuItem::new("Open Keyboard Shortcuts File").action(move || {
+                    workbench_command
+                        .send(LapceWorkbenchCommand::OpenKeyboardShortcutsFile);
+                }),
+            )
             .separator()
             .entry(MenuItem::new("Open Plugins Directory").action(move || {
                 workbench_command.send(LapceWorkbenchCommand::OpenPluginsDirectory);

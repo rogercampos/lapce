@@ -104,7 +104,6 @@ name = "Lapce Codicons"
 "search.replace" = "replace.svg"
 "search.replace_all" = "replace-all.svg"
 
-"document_symbol" = "symbol-class.svg"
 "references" = "references.svg"
 "implementation" = "combine.svg"
 "symbol_kind.array" = "symbol-array.svg"

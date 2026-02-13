@@ -13,7 +13,6 @@ pub enum PanelKind {
     Search,
     Problem,
     CallHierarchy,
-    DocumentSymbol,
     References,
     Implementation,
 }
@@ -26,7 +25,6 @@ impl PanelKind {
             PanelKind::Search => LapceIcons::SEARCH,
             PanelKind::Problem => LapceIcons::PROBLEM,
             PanelKind::CallHierarchy => LapceIcons::TYPE_HIERARCHY,
-            PanelKind::DocumentSymbol => LapceIcons::DOCUMENT_SYMBOL,
             PanelKind::References => LapceIcons::REFERENCES,
             PanelKind::Implementation => LapceIcons::IMPLEMENTATION,
         }
@@ -49,7 +47,6 @@ impl PanelKind {
             PanelKind::Search => PanelPosition::BottomLeft,
             PanelKind::Problem => PanelPosition::BottomLeft,
             PanelKind::CallHierarchy => PanelPosition::BottomLeft,
-            PanelKind::DocumentSymbol => PanelPosition::RightTop,
             PanelKind::References => PanelPosition::BottomLeft,
             PanelKind::Implementation => PanelPosition::BottomLeft,
         }
