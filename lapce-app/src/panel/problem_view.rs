@@ -20,21 +20,21 @@ use crate::{
     editor::location::{EditorLocation, EditorPosition},
     listener::Listener,
     lsp::path_from_url,
-    window_tab::WindowTabData,
     workspace::LapceWorkspace,
+    workspace_data::WorkspaceData,
 };
 
 pub fn problem_panel(
-    window_tab_data: Rc<WindowTabData>,
+    workspace_data: Rc<WorkspaceData>,
     position: PanelPosition,
 ) -> impl View {
-    let config = window_tab_data.common.config;
+    let config = workspace_data.common.config;
     let is_bottom = position.is_bottom();
     PanelBuilder::new(config, position)
         .add_style(
             "Errors",
-            problem_section(window_tab_data.clone(), DiagnosticSeverity::ERROR),
-            window_tab_data.panel.section_open(PanelSection::Error),
+            problem_section(workspace_data.clone(), DiagnosticSeverity::ERROR),
+            workspace_data.panel.section_open(PanelSection::Error),
             move |s| {
                 s.border_color(config.get().color(LapceColor::LAPCE_BORDER))
                     .apply_if(is_bottom, |s| s.border_right(1.0))
@@ -43,20 +43,20 @@ pub fn problem_panel(
         )
         .add(
             "Warnings",
-            problem_section(window_tab_data.clone(), DiagnosticSeverity::WARNING),
-            window_tab_data.panel.section_open(PanelSection::Warn),
+            problem_section(workspace_data.clone(), DiagnosticSeverity::WARNING),
+            workspace_data.panel.section_open(PanelSection::Warn),
         )
         .build()
         .debug_name("Problem Panel")
 }
 
 fn problem_section(
-    window_tab_data: Rc<WindowTabData>,
+    workspace_data: Rc<WorkspaceData>,
     severity: DiagnosticSeverity,
 ) -> impl View {
-    let config = window_tab_data.common.config;
-    let main_split = window_tab_data.main_split.clone();
-    let internal_command = window_tab_data.common.internal_command;
+    let config = workspace_data.common.config;
+    let main_split = workspace_data.main_split.clone();
+    let internal_command = workspace_data.common.internal_command;
     container({
         scroll(
             dyn_stack(

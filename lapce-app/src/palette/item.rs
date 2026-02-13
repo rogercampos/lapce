@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 
 use lapce_core::line_ending::LineEnding;
-use lsp_types::{Range, SymbolKind};
 
 use crate::{editor::location::EditorLocation, workspace::LapceWorkspace};
 
@@ -28,18 +27,6 @@ pub enum PaletteItemContent {
     },
     Reference {
         path: PathBuf,
-        location: EditorLocation,
-    },
-    DocumentSymbol {
-        kind: SymbolKind,
-        name: String,
-        range: Range,
-        container_name: Option<String>,
-    },
-    WorkspaceSymbol {
-        kind: SymbolKind,
-        name: String,
-        container_name: Option<String>,
         location: EditorLocation,
     },
     ColorTheme {

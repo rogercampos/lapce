@@ -25,7 +25,6 @@ use lapce_core::{
 };
 use lapce_rpc::proxy::ProxyResponse;
 use lapce_xi_rope::Rope;
-use lsp_types::{DocumentSymbol, DocumentSymbolResponse};
 use nucleo::Utf32Str;
 
 use self::{
@@ -40,10 +39,9 @@ use crate::{
         location::{EditorLocation, EditorPosition},
     },
     keypress::{KeyPressFocus, condition::Condition},
-    lsp::path_from_url,
     main_split::MainSplitData,
-    window_tab::{CommonData, Focus},
     workspace::LapceWorkspace,
+    workspace_data::{CommonData, Focus},
 };
 
 pub mod item;
@@ -271,10 +269,6 @@ impl PaletteData {
                         .unwrap();
                     if let Some(new_kind) = new_kind {
                         palette.run_inner(new_kind);
-                    } else if input
-                        .with_untracked(|i| i.kind == PaletteKind::WorkspaceSymbol)
-                    {
-                        palette.run_inner(PaletteKind::WorkspaceSymbol);
                     }
                 }
                 Some(new_input)
@@ -340,12 +334,6 @@ impl PaletteData {
             }
             PaletteKind::Reference => {
                 self.get_references();
-            }
-            PaletteKind::DocumentSymbol => {
-                self.get_document_symbols();
-            }
-            PaletteKind::WorkspaceSymbol => {
-                self.get_workspace_symbols();
             }
             PaletteKind::ColorTheme => {
                 self.get_color_themes();
@@ -485,147 +473,6 @@ impl PaletteData {
             .collect();
 
         self.items.set(items);
-    }
-
-    fn get_document_symbols(&self) {
-        let editor = self.main_split.active_editor.get_untracked();
-        let doc = match editor {
-            Some(editor) => editor.doc(),
-            None => {
-                self.items.update(|items| items.clear());
-                return;
-            }
-        };
-        let path = doc
-            .content
-            .with_untracked(|content| content.path().cloned());
-        let path = match path {
-            Some(path) => path,
-            None => {
-                self.items.update(|items| items.clear());
-                return;
-            }
-        };
-
-        let set_items = self.items.write_only();
-        let send = create_ext_action(self.common.scope, move |result| {
-            if let Ok(ProxyResponse::GetDocumentSymbols { resp }) = result {
-                let items = Self::format_document_symbol_resp(resp);
-                set_items.set(items);
-            } else {
-                set_items.update(|items| items.clear());
-            }
-        });
-
-        self.common.proxy.get_document_symbols(path, move |result| {
-            send(result);
-        });
-    }
-
-    fn format_document_symbol_resp(
-        resp: DocumentSymbolResponse,
-    ) -> im::Vector<PaletteItem> {
-        match resp {
-            DocumentSymbolResponse::Flat(symbols) => symbols
-                .iter()
-                .map(|s| {
-                    let mut filter_text = s.name.clone();
-                    if let Some(container_name) = s.container_name.as_ref() {
-                        filter_text += container_name;
-                    }
-                    PaletteItem {
-                        content: PaletteItemContent::DocumentSymbol {
-                            kind: s.kind,
-                            name: s.name.replace('\n', "↵"),
-                            range: s.location.range,
-                            container_name: s.container_name.clone(),
-                        },
-                        filter_text,
-                        score: 0,
-                        indices: Vec::new(),
-                    }
-                })
-                .collect(),
-            DocumentSymbolResponse::Nested(symbols) => {
-                let mut items = im::Vector::new();
-                for s in symbols {
-                    Self::format_document_symbol(&mut items, None, s)
-                }
-                items
-            }
-        }
-    }
-
-    fn format_document_symbol(
-        items: &mut im::Vector<PaletteItem>,
-        parent: Option<String>,
-        s: DocumentSymbol,
-    ) {
-        items.push_back(PaletteItem {
-            content: PaletteItemContent::DocumentSymbol {
-                kind: s.kind,
-                name: s.name.replace('\n', "↵"),
-                range: s.range,
-                container_name: parent,
-            },
-            filter_text: s.name.clone(),
-            score: 0,
-            indices: Vec::new(),
-        });
-        if let Some(children) = s.children {
-            let parent = Some(s.name.replace('\n', "↵"));
-            for child in children {
-                Self::format_document_symbol(items, parent.clone(), child);
-            }
-        }
-    }
-
-    fn get_workspace_symbols(&self) {
-        let input = self.input.get_untracked().input;
-
-        let set_items = self.items.write_only();
-        let send = create_ext_action(self.common.scope, move |result| {
-            if let Ok(ProxyResponse::GetWorkspaceSymbols { symbols }) = result {
-                let items: im::Vector<PaletteItem> = symbols
-                    .iter()
-                    .map(|s| {
-                        // TODO: Should we be using filter text?
-                        let mut filter_text = s.name.clone();
-                        if let Some(container_name) = s.container_name.as_ref() {
-                            filter_text += container_name;
-                        }
-                        PaletteItem {
-                            content: PaletteItemContent::WorkspaceSymbol {
-                                kind: s.kind,
-                                name: s.name.clone(),
-                                location: EditorLocation {
-                                    path: path_from_url(&s.location.uri),
-                                    position: Some(EditorPosition::Position(
-                                        s.location.range.start,
-                                    )),
-                                    scroll_offset: None,
-
-                                    same_editor_tab: false,
-                                },
-                                container_name: s.container_name.clone(),
-                            },
-                            filter_text,
-                            score: 0,
-                            indices: Vec::new(),
-                        }
-                    })
-                    .collect();
-                set_items.set(items);
-            } else {
-                set_items.update(|items| items.clear());
-            }
-        });
-
-        self.common
-            .proxy
-            .get_workspace_symbols(input, move |result| {
-                send(result);
-            });
     }
 
     fn get_color_themes(&self) {
@@ -771,42 +618,6 @@ impl PaletteData {
                         },
                     );
                 }
-                PaletteItemContent::DocumentSymbol { range, .. } => {
-                    let editor = self.main_split.active_editor.get_untracked();
-                    let doc = match editor {
-                        Some(editor) => editor.doc(),
-                        None => {
-                            return;
-                        }
-                    };
-                    let path = doc
-                        .content
-                        .with_untracked(|content| content.path().cloned());
-                    let path = match path {
-                        Some(path) => path,
-                        None => return,
-                    };
-                    self.common.internal_command.send(
-                        InternalCommand::JumpToLocation {
-                            location: EditorLocation {
-                                path,
-                                position: Some(EditorPosition::Position(
-                                    range.start,
-                                )),
-                                scroll_offset: None,
-
-                                same_editor_tab: false,
-                            },
-                        },
-                    );
-                }
-                PaletteItemContent::WorkspaceSymbol { location, .. } => {
-                    self.common.internal_command.send(
-                        InternalCommand::JumpToLocation {
-                            location: location.clone(),
-                        },
-                    );
-                }
                 PaletteItemContent::ColorTheme { name } => self
                     .common
                     .internal_command
@@ -899,46 +710,6 @@ impl PaletteData {
                 PaletteItemContent::Language { .. } => {}
                 PaletteItemContent::LineEnding { .. } => {}
                 PaletteItemContent::Reference { location, .. } => {
-                    self.has_preview.set(true);
-                    let (doc, new_doc) =
-                        self.main_split.get_doc(location.path.clone(), None);
-                    self.preview_editor.update_doc(doc);
-                    self.preview_editor.go_to_location(
-                        location.clone(),
-                        new_doc,
-                        None,
-                    );
-                }
-                PaletteItemContent::DocumentSymbol { range, .. } => {
-                    self.has_preview.set(true);
-                    let editor = self.main_split.active_editor.get_untracked();
-                    let doc = match editor {
-                        Some(editor) => editor.doc(),
-                        None => {
-                            return;
-                        }
-                    };
-                    let path = doc
-                        .content
-                        .with_untracked(|content| content.path().cloned());
-                    let path = match path {
-                        Some(path) => path,
-                        None => return,
-                    };
-                    self.preview_editor.update_doc(doc);
-                    self.preview_editor.go_to_location(
-                        EditorLocation {
-                            path,
-                            position: Some(EditorPosition::Position(range.start)),
-                            scroll_offset: None,
-
-                            same_editor_tab: false,
-                        },
-                        false,
-                        None,
-                    );
-                }
-                PaletteItemContent::WorkspaceSymbol { location, .. } => {
                     self.has_preview.set(true);
                     let (doc, new_doc) =
                         self.main_split.get_doc(location.path.clone(), None);

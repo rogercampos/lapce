@@ -145,14 +145,6 @@ pub enum LapceWorkbenchCommand {
     #[strum(message = "Open Folder")]
     OpenFolder,
 
-    #[strum(serialize = "close_folder")]
-    #[strum(message = "Close Folder")]
-    CloseFolder,
-
-    #[strum(serialize = "open_file")]
-    #[strum(message = "Open File")]
-    OpenFile,
-
     #[strum(serialize = "show_call_hierarchy")]
     #[strum(message = "Show Call Hierarchy")]
     ShowCallHierarchy,
@@ -267,22 +259,6 @@ pub enum LapceWorkbenchCommand {
     #[strum(message = "Reset Zoom")]
     ZoomReset,
 
-    #[strum(serialize = "close_window_tab")]
-    #[strum(message = "Close Current Window Tab")]
-    CloseWindowTab,
-
-    #[strum(serialize = "new_window_tab")]
-    #[strum(message = "Create New Window Tab")]
-    NewWindowTab,
-
-    #[strum(serialize = "next_window_tab")]
-    #[strum(message = "Go To Next Window Tab")]
-    NextWindowTab,
-
-    #[strum(serialize = "previous_window_tab")]
-    #[strum(message = "Go To Previous Window Tab")]
-    PreviousWindowTab,
-
     #[strum(serialize = "reload_window")]
     #[strum(message = "Reload Window")]
     ReloadWindow,
@@ -290,10 +266,6 @@ pub enum LapceWorkbenchCommand {
     #[strum(message = "New Window")]
     #[strum(serialize = "new_window")]
     NewWindow,
-
-    #[strum(message = "Close Window")]
-    #[strum(serialize = "close_window")]
-    CloseWindow,
 
     #[strum(message = "New File")]
     #[strum(serialize = "new_file")]
@@ -306,14 +278,6 @@ pub enum LapceWorkbenchCommand {
     #[strum(serialize = "palette")]
     #[strum(message = "Go to File")]
     Palette,
-
-    #[strum(message = "Go To Symbol In File")]
-    #[strum(serialize = "palette.symbol")]
-    PaletteSymbol,
-
-    #[strum(message = "Go To Symbol In Workspace")]
-    #[strum(serialize = "palette.workspace_symbol")]
-    PaletteWorkspaceSymbol,
 
     #[strum(message = "Open Recent Workspace")]
     #[strum(serialize = "palette.workspace")]
@@ -348,36 +312,8 @@ pub enum LapceWorkbenchCommand {
     #[strum(serialize = "toggle_panel_bottom_visual")]
     TogglePanelBottomVisual,
 
-    #[strum(message = "Toggle Plugin Focus")]
-    #[strum(serialize = "toggle_plugin_focus")]
-    TogglePluginFocus,
-
-    #[strum(message = "Toggle File Explorer Focus")]
-    #[strum(serialize = "toggle_file_explorer_focus")]
-    ToggleFileExplorerFocus,
-
-    #[strum(message = "Toggle Problem Focus")]
-    #[strum(serialize = "toggle_problem_focus")]
-    ToggleProblemFocus,
-
-    #[strum(message = "Toggle Search Focus")]
-    #[strum(serialize = "toggle_search_focus")]
-    ToggleSearchFocus,
-
     #[strum(serialize = "search_modal_open_full_results")]
     SearchModalOpenFullResults,
-
-    #[strum(serialize = "toggle_plugin_visual")]
-    TogglePluginVisual,
-
-    #[strum(serialize = "toggle_file_explorer_visual")]
-    ToggleFileExplorerVisual,
-
-    #[strum(serialize = "toggle_problem_visual")]
-    ToggleProblemVisual,
-
-    #[strum(serialize = "toggle_search_visual")]
-    ToggleSearchVisual,
 
     #[strum(serialize = "focus_editor")]
     FocusEditor,
@@ -421,10 +357,6 @@ pub enum LapceWorkbenchCommand {
     #[strum(message = "About Lapce")]
     ShowAbout,
 
-    #[strum(message = "Save All Files")]
-    #[strum(serialize = "save_all")]
-    SaveAll,
-
     #[cfg(target_os = "macos")]
     #[strum(message = "Install Lapce to PATH")]
     #[strum(serialize = "install_to_path")]
@@ -446,14 +378,6 @@ pub enum LapceWorkbenchCommand {
 
     #[strum(serialize = "jump_location_forward_local")]
     JumpLocationForwardLocal,
-
-    #[strum(message = "Next Error in Workspace")]
-    #[strum(serialize = "next_error")]
-    NextError,
-
-    #[strum(message = "Previous Error in Workspace")]
-    #[strum(serialize = "previous_error")]
-    PreviousError,
 
     #[strum(serialize = "quit")]
     #[strum(message = "Quit Editor")]
@@ -616,18 +540,7 @@ pub enum InternalCommand {
 
 #[derive(Clone)]
 pub enum WindowCommand {
-    SetWorkspace {
-        workspace: LapceWorkspace,
-    },
-    CloseWorkspaceTab {
-        index: Option<usize>,
-    },
-    NewWorkspaceTab {
-        workspace: LapceWorkspace,
-        end: bool,
-    },
-    NextWorkspaceTab,
-    PreviousWorkspaceTab,
+    SetWorkspace { workspace: LapceWorkspace },
     NewWindow,
     CloseWindow,
 }

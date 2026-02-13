@@ -479,25 +479,6 @@ impl ProxyHandler for Dispatcher {
                     },
                 );
             }
-            GetDocumentSymbols { path } => {
-                let proxy_rpc = self.proxy_rpc.clone();
-                self.catalog_rpc
-                    .get_document_symbols(&path, move |_, result| {
-                        let result = result
-                            .map(|resp| ProxyResponse::GetDocumentSymbols { resp });
-                        proxy_rpc.handle_response(id, result);
-                    });
-            }
-            GetWorkspaceSymbols { query } => {
-                let proxy_rpc = self.proxy_rpc.clone();
-                self.catalog_rpc
-                    .get_workspace_symbols(query, move |_, result| {
-                        let result = result.map(|symbols| {
-                            ProxyResponse::GetWorkspaceSymbols { symbols }
-                        });
-                        proxy_rpc.handle_response(id, result);
-                    });
-            }
             GetDocumentFormatting { path } => {
                 let proxy_rpc = self.proxy_rpc.clone();
                 self.catalog_rpc

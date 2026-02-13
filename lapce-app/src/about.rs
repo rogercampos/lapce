@@ -15,7 +15,7 @@ use crate::{
     config::{LapceConfig, color::LapceColor},
     keypress::KeyPressFocus,
     web_link::web_link,
-    window_tab::{Focus, WindowTabData},
+    workspace_data::{Focus, WorkspaceData},
 };
 
 struct AboutUri {}
@@ -89,10 +89,10 @@ impl KeyPressFocus for AboutData {
     }
 }
 
-pub fn about_popup(window_tab_data: Rc<WindowTabData>) -> impl View {
-    let about_data = window_tab_data.about_data.clone();
-    let config = window_tab_data.common.config;
-    let internal_command = window_tab_data.common.internal_command;
+pub fn about_popup(workspace_data: Rc<WorkspaceData>) -> impl View {
+    let about_data = workspace_data.about_data.clone();
+    let config = workspace_data.common.config;
+    let internal_command = workspace_data.common.internal_command;
     let logo_size = 100.0;
 
     let close_data = about_data.clone();

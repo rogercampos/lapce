@@ -1,18 +1,8 @@
-# --------------------------------- Window ---------------------------------------------
-
-[[keymaps]]
-command = "close_window"
-key = "Alt+F4"
-
 # --------------------------------- General --------------------------------------------
 
 [[keymaps]]
 key = "ctrl+shift+n"
 command = "palette"
-
-[[keymaps]]
-key = "ctrl+shift+s"
-command = "save_all"
 
 [[keymaps]]
 key = "ctrl+e"
@@ -134,10 +124,6 @@ key = "ctrl+s"
 command = "save"
 
 [[keymaps]]
-key = "ctrl+o"
-command = "open_file"
-
-[[keymaps]]
 key = "ctrl+n"
 command = "new_file"
 
@@ -146,10 +132,6 @@ command = "new_file"
 [[keymaps]]
 key = "ctrl+w"
 command = "split_close"
-
-[[keymaps]]
-key = "ctrl+k f"
-command = "close_folder"
 
 [[keymaps]]
 key = "ctrl+F4"
@@ -177,24 +159,6 @@ command = "get_signature"
 key = "alt+enter"
 command = "show_code_actions"
 
-# --------------------------------- Display -------------------------------------------
-
-[[keymaps]]
-key = "alt+1"
-command = "toggle_file_explorer_focus"
-
-[[keymaps]]
-key = "ctrl+shift+f"
-command = "toggle_search_focus"
-
-[[keymaps]]
-key = "ctrl+shift+x"
-command = "toggle_plugin_focus"
-
-[[keymaps]]
-key = "alt+6"
-command = "toggle_problem_focus"
-
 # ------------------------------------ Navigation -------------------------------------
 
 [[keymaps]]
@@ -204,14 +168,6 @@ command = "document_start"
 [[keymaps]]
 key = "Ctrl+End"
 command = "document_end"
-
-[[keymaps]]
-key = "ctrl+alt+shift+n"
-command = "palette.symbol"
-
-[[keymaps]]
-key = "ctrl+t"
-command = "palette.workspace_symbol"
 
 [[keymaps]]
 key = "ctrl+g"

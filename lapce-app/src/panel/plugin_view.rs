@@ -28,7 +28,7 @@ use crate::{
     config::{color::LapceColor, icon::LapceIcons},
     plugin::{AvailableVoltData, InstalledVoltData, PluginData, VoltIcon},
     text_input::TextInputBuilder,
-    window_tab::{Focus, WindowTabData},
+    workspace_data::{Focus, WorkspaceData},
 };
 
 pub const VOLT_DEFAULT_PNG: &[u8] = include_bytes!("../../../extra/images/volt.png");
@@ -66,23 +66,23 @@ impl<K: Clone + 'static, V: Clone + 'static> VirtualVector<(usize, K, V)>
 }
 
 pub fn plugin_panel(
-    window_tab_data: Rc<WindowTabData>,
+    workspace_data: Rc<WorkspaceData>,
     position: PanelPosition,
 ) -> impl View {
-    let config = window_tab_data.common.config;
-    let plugin = window_tab_data.plugin.clone();
-    let core_rpc = window_tab_data.proxy.core_rpc.clone();
+    let config = workspace_data.common.config;
+    let plugin = workspace_data.plugin.clone();
+    let core_rpc = workspace_data.proxy.core_rpc.clone();
 
     PanelBuilder::new(config, position)
         .add(
             "Installed",
             installed_view(plugin.clone()),
-            window_tab_data.panel.section_open(PanelSection::Installed),
+            workspace_data.panel.section_open(PanelSection::Installed),
         )
         .add(
             "Available",
             available_view(plugin.clone(), core_rpc),
-            window_tab_data.panel.section_open(PanelSection::Available),
+            workspace_data.panel.section_open(PanelSection::Available),
         )
         .build()
         .debug_name("Plugin Panel")

@@ -16,8 +16,8 @@ use crate::{
     doc::DocInfo,
     panel::{data::PanelOrder, kind::PanelKind},
     window::{WindowData, WindowInfo},
-    window_tab::WindowTabData,
     workspace::{LapceWorkspace, WorkspaceInfo},
+    workspace_data::WorkspaceData,
 };
 
 const APP: &str = "app";
@@ -220,7 +220,7 @@ impl LapceDb {
         Ok(())
     }
 
-    pub fn save_window_tab(&self, data: Rc<WindowTabData>) -> Result<()> {
+    pub fn save_workspace(&self, data: Rc<WorkspaceData>) -> Result<()> {
         let workspace = (*data.workspace).clone();
         let workspace_info = data.workspace_info();
 
@@ -334,8 +334,8 @@ impl LapceDb {
     }
 
     pub fn save_window(&self, data: WindowData) -> Result<()> {
-        for (_, window_tab) in data.window_tabs.get_untracked().into_iter() {
-            if let Err(err) = self.save_window_tab(window_tab) {
+        for (_, workspace) in data.workspaces.get_untracked().into_iter() {
+            if let Err(err) = self.save_workspace(workspace) {
                 tracing::error!("{:?}", err);
             }
         }
@@ -343,8 +343,8 @@ impl LapceDb {
     }
 
     pub fn insert_window(&self, data: WindowData) -> Result<()> {
-        for (_, window_tab) in data.window_tabs.get_untracked().into_iter() {
-            if let Err(err) = self.insert_window_tab(window_tab) {
+        for (_, workspace) in data.workspaces.get_untracked().into_iter() {
+            if let Err(err) = self.insert_workspace_data(workspace) {
                 tracing::error!("{:?}", err);
             }
         }
@@ -354,7 +354,7 @@ impl LapceDb {
         Ok(())
     }
 
-    pub fn insert_window_tab(&self, data: Rc<WindowTabData>) -> Result<()> {
+    pub fn insert_workspace_data(&self, data: Rc<WorkspaceData>) -> Result<()> {
         let workspace = (*data.workspace).clone();
         let workspace_info = data.workspace_info();
 

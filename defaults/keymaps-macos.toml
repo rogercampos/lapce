@@ -1,18 +1,8 @@
-# --------------------------------- Window ---------------------------------------------
-
-[[keymaps]]
-command = "window_close"
-key = "Meta+Shift+W"
-
 # --------------------------------- General --------------------------------------------
 
 [[keymaps]]
 key = "meta+shift+o"
 command = "palette"
-
-[[keymaps]]
-key = "meta+alt+s"
-command = "save_all"
 
 [[keymaps]]
 key = "meta+e"
@@ -158,10 +148,6 @@ key = "meta+s"
 command = "save"
 
 [[keymaps]]
-key = "meta+o"
-command = "open_file"
-
-[[keymaps]]
 key = "meta+n"
 command = "new_file"
 
@@ -170,10 +156,6 @@ command = "new_file"
 [[keymaps]]
 key = "meta+w"
 command = "split_close"
-
-[[keymaps]]
-key = "meta+k f"
-command = "close_folder"
 
 [[keymaps]]
 key = "meta+shift+d"
@@ -196,24 +178,6 @@ command = "get_signature"
 [[keymaps]]
 key = "alt+enter"
 command = "show_code_actions"
-
-# --------------------------------- Display -------------------------------------------
-
-[[keymaps]]
-key = "meta+1"
-command = "toggle_file_explorer_focus"
-
-[[keymaps]]
-key = "meta+shift+f"
-command = "toggle_search_focus"
-
-[[keymaps]]
-key = "meta+shift+x"
-command = "toggle_plugin_focus"
-
-[[keymaps]]
-key = "meta+6"
-command = "toggle_problem_focus"
 
 # ------------------------------------ Navigation -------------------------------------
 
@@ -238,14 +202,6 @@ when = "!list_focus"
 key = "ctrl+n"
 command = "down"
 when = "!list_focus"
-
-[[keymaps]]
-key = "meta+alt+o"
-command = "palette.symbol"
-
-[[keymaps]]
-key = "meta+t"
-command = "palette.workspace_symbol"
 
 [[keymaps]]
 key = "meta+l"

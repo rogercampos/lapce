@@ -41,12 +41,11 @@ use lsp_types::{
     request::{
         CallHierarchyIncomingCalls, CallHierarchyPrepare, CodeActionRequest,
         CodeActionResolveRequest, CodeLensRequest, CodeLensResolve, Completion,
-        DocumentSymbolRequest, FoldingRangeRequest, Formatting, GotoDefinition,
-        GotoImplementation, GotoTypeDefinition, HoverRequest, Initialize,
-        InlayHintRequest, InlineCompletionRequest, PrepareRenameRequest, References,
+        FoldingRangeRequest, Formatting, GotoDefinition, GotoImplementation,
+        GotoTypeDefinition, HoverRequest, Initialize, InlayHintRequest,
+        InlineCompletionRequest, PrepareRenameRequest, References,
         RegisterCapability, Rename, ResolveCompletionItem, SelectionRangeRequest,
         SemanticTokensFullRequest, SignatureHelpRequest, WorkDoneProgressCreate,
-        WorkspaceSymbolRequest,
     },
 };
 use parking_lot::Mutex;
@@ -826,12 +825,6 @@ impl PluginHostHandler {
                 .server_capabilities
                 .inline_completion_provider
                 .is_some(),
-            DocumentSymbolRequest::METHOD => {
-                self.server_capabilities.document_symbol_provider.is_some()
-            }
-            WorkspaceSymbolRequest::METHOD => {
-                self.server_capabilities.workspace_symbol_provider.is_some()
-            }
             PrepareRenameRequest::METHOD => {
                 self.server_capabilities.rename_provider.is_some()
             }

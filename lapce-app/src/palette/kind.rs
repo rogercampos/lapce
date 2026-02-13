@@ -4,8 +4,6 @@ pub enum PaletteKind {
     Line,
     Workspace,
     Reference,
-    DocumentSymbol,
-    WorkspaceSymbol,
     ColorTheme,
     IconTheme,
     Language,

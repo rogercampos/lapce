@@ -4,15 +4,16 @@ use floem::{View, reactive::SignalGet, views::Decorators};
 
 use super::position::PanelPosition;
 use crate::{
-    panel::implementation_view::common_reference_panel, window_tab::WindowTabData,
+    panel::implementation_view::common_reference_panel,
+    workspace_data::WorkspaceData,
 };
 
 pub fn references_panel(
-    window_tab_data: Rc<WindowTabData>,
+    workspace_data: Rc<WorkspaceData>,
     _position: PanelPosition,
 ) -> impl View {
-    common_reference_panel(window_tab_data.clone(), _position, move || {
-        window_tab_data.main_split.references.get()
+    common_reference_panel(workspace_data.clone(), _position, move || {
+        workspace_data.main_split.references.get()
     })
     .debug_name("references panel")
 }

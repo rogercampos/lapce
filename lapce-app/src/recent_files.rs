@@ -26,7 +26,7 @@ use crate::{
     keypress::KeyPressFocus,
     main_split::MainSplitData,
     text_input::TextInputBuilder,
-    window_tab::{CommonData, Focus, WindowTabData},
+    workspace_data::{CommonData, Focus, WorkspaceData},
 };
 
 #[derive(Clone)]
@@ -286,9 +286,9 @@ fn file_display_parts(
     (filename, dir_hint)
 }
 
-pub fn recent_files_popup(window_tab_data: Rc<WindowTabData>) -> impl View {
-    let data = window_tab_data.recent_files_data.clone();
-    let config = window_tab_data.common.config;
+pub fn recent_files_popup(workspace_data: Rc<WorkspaceData>) -> impl View {
+    let data = workspace_data.recent_files_data.clone();
+    let config = workspace_data.common.config;
     let visibility = data.visible;
     let close_data = data.clone();
 
@@ -296,18 +296,18 @@ pub fn recent_files_popup(window_tab_data: Rc<WindowTabData>) -> impl View {
         config,
         visibility,
         move || close_data.close(),
-        move || recent_files_content(window_tab_data),
+        move || recent_files_content(workspace_data),
     )
     .debug_name("Recent Files Popup")
 }
 
-fn recent_files_content(window_tab_data: Rc<WindowTabData>) -> impl View {
-    let data = window_tab_data.recent_files_data.clone();
-    let config = window_tab_data.common.config;
-    let focus = window_tab_data.common.focus;
+fn recent_files_content(workspace_data: Rc<WorkspaceData>) -> impl View {
+    let data = workspace_data.recent_files_data.clone();
+    let config = workspace_data.common.config;
+    let focus = workspace_data.common.focus;
     let index = data.index;
     let filtered_items = data.filtered_items;
-    let workspace_path = window_tab_data.workspace.path.clone();
+    let workspace_path = workspace_data.workspace.path.clone();
     let item_height = 30.0;
 
     stack((

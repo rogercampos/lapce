@@ -55,8 +55,8 @@ use crate::{
     doc::DocContent,
     editor::gutter::FoldingDisplayItem,
     text_input::TextInputBuilder,
-    window_tab::{Focus, WindowTabData},
     workspace::LapceWorkspace,
+    workspace_data::{Focus, WorkspaceData},
 };
 
 #[derive(Clone, Debug, Default)]
@@ -1087,7 +1087,7 @@ fn get_sticky_header_info(
 }
 
 pub fn editor_container_view(
-    window_tab_data: Rc<WindowTabData>,
+    workspace_data: Rc<WorkspaceData>,
     workspace: Arc<LapceWorkspace>,
     is_active: impl Fn(bool) -> bool + 'static + Copy,
     editor: RwSignal<EditorData>,
@@ -1105,7 +1105,7 @@ pub fn editor_container_view(
             )
         });
 
-    let main_split = window_tab_data.main_split.clone();
+    let main_split = workspace_data.main_split.clone();
     let editors = main_split.editors;
     let scratch_docs = main_split.scratch_docs;
     let find_editor = main_split.find_editor;
@@ -1119,9 +1119,9 @@ pub fn editor_container_view(
     stack((
         editor_breadcrumbs(workspace, editor.get_untracked(), config),
         stack((
-            editor_gutter(window_tab_data.clone(), editor),
+            editor_gutter(workspace_data.clone(), editor),
             editor_gutter_folding_range(
-                window_tab_data.clone(),
+                workspace_data.clone(),
                 doc,
                 screen_lines,
                 viewport,
@@ -1187,14 +1187,14 @@ pub fn editor_container_view(
 }
 
 fn editor_gutter_code_lens_view(
-    window_tab_data: Rc<WindowTabData>,
+    workspace_data: Rc<WorkspaceData>,
     line: usize,
     lens: (PluginId, usize, im::Vector<CodeLens>),
     screen_lines: RwSignal<ScreenLines>,
     viewport: RwSignal<Rect>,
     icon_padding: f32,
 ) -> impl View {
-    let config = window_tab_data.common.config;
+    let config = workspace_data.common.config;
     let view = container(svg(move || config.get().ui_svg(LapceIcons::START)).style(
         move |s| {
             let config = config.get();
@@ -1220,7 +1220,7 @@ fn editor_gutter_code_lens_view(
     .on_click_stop({
         move |_| {
             let (plugin_id, offset, lens) = lens.clone();
-            window_tab_data.show_code_lens(true, plugin_id, offset, lens);
+            workspace_data.show_code_lens(true, plugin_id, offset, lens);
         }
     });
     container(view).style(move |s| {
@@ -1240,12 +1240,12 @@ fn editor_gutter_code_lens_view(
 }
 
 fn editor_gutter_folding_view(
-    window_tab_data: Rc<WindowTabData>,
+    workspace_data: Rc<WorkspaceData>,
     screen_lines: RwSignal<ScreenLines>,
     viewport: RwSignal<Rect>,
     folding_display_item: FoldingDisplayItem,
 ) -> impl View {
-    let config = window_tab_data.common.config;
+    let config = workspace_data.common.config;
     let view = container(
         svg(move || {
             let icon_str = match folding_display_item {
@@ -1294,13 +1294,13 @@ fn editor_gutter_folding_view(
 }
 
 fn editor_gutter_code_lens(
-    window_tab_data: Rc<WindowTabData>,
+    workspace_data: Rc<WorkspaceData>,
     doc: DocSignal,
     screen_lines: RwSignal<ScreenLines>,
     viewport: RwSignal<Rect>,
     icon_padding: f32,
 ) -> impl View {
-    let config = window_tab_data.common.config;
+    let config = workspace_data.common.config;
 
     dyn_stack(
         move || {
@@ -1310,7 +1310,7 @@ fn editor_gutter_code_lens(
         move |(line, _)| (*line, doc.with_untracked(|doc| doc.rev())),
         move |(line, lens)| {
             editor_gutter_code_lens_view(
-                window_tab_data.clone(),
+                workspace_data.clone(),
                 line,
                 lens,
                 screen_lines,
@@ -1331,18 +1331,18 @@ fn editor_gutter_code_lens(
 }
 
 fn editor_gutter_folding_range(
-    window_tab_data: Rc<WindowTabData>,
+    workspace_data: Rc<WorkspaceData>,
     doc: DocSignal,
     screen_lines: RwSignal<ScreenLines>,
     viewport: RwSignal<Rect>,
 ) -> impl View {
-    let config = window_tab_data.common.config;
+    let config = workspace_data.common.config;
     dyn_stack(
         move || doc.get().folding_ranges.get().to_display_items(),
         move |item| *item,
         move |item| {
             editor_gutter_folding_view(
-                window_tab_data.clone(),
+                workspace_data.clone(),
                 screen_lines,
                 viewport,
                 item,
@@ -1471,7 +1471,7 @@ fn editor_gutter_code_actions(
 }
 
 fn editor_gutter(
-    window_tab_data: Rc<WindowTabData>,
+    workspace_data: Rc<WorkspaceData>,
     e_data: RwSignal<EditorData>,
 ) -> impl View {
     let icon_padding = 6.0;
@@ -1506,7 +1506,7 @@ fn editor_gutter(
         clip(
             stack((
                 editor_gutter_code_lens(
-                    window_tab_data.clone(),
+                    workspace_data.clone(),
                     doc,
                     screen_lines,
                     viewport,

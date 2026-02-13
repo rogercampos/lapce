@@ -15,7 +15,7 @@ use super::{
 };
 use crate::{
     db::LapceDb,
-    window_tab::{CommonData, Focus},
+    workspace_data::{CommonData, Focus},
 };
 
 pub type PanelOrder = im::HashMap<PanelPosition, im::Vector<PanelKind>>;

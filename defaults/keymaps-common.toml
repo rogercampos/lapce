@@ -52,14 +52,6 @@ command = "scroll_down"
 
 # ----------------------------------- Editor Management -------------------------------
 
-[[keymaps]]
-key = "ctrl+tab"
-command = "next_editor_tab"
-
-[[keymaps]]
-key = "ctrl+shift+tab"
-command = "previous_editor_tab"
-
 # --------------------------------- Rich Language Editing ----------------------------
 
 [[keymaps]]
@@ -71,14 +63,6 @@ key = "F12"
 command = "goto_definition"
 
 # ------------------------------------ Navigation -------------------------------------
-
-[[keymaps]]
-key = "F8"
-command = "next_error"
-
-[[keymaps]]
-key = "shift+F8"
-command = "previous_error"
 
 [[keymaps]]
 key = "ctrl+-"

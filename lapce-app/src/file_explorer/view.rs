@@ -31,7 +31,7 @@ use crate::{
     },
     plugin::PluginData,
     text_input::TextInputBuilder,
-    window_tab::{Focus, WindowTabData},
+    workspace_data::{Focus, WorkspaceData},
 };
 
 /// Blends `foreground` with `background`.
@@ -57,14 +57,14 @@ fn blend_colors(background: Color, foreground: Color) -> Color {
 }
 
 pub fn file_explorer_panel(
-    window_tab_data: Rc<WindowTabData>,
+    workspace_data: Rc<WorkspaceData>,
     position: PanelPosition,
 ) -> impl View {
-    let config = window_tab_data.common.config;
-    let data = window_tab_data.file_explorer.clone();
+    let config = workspace_data.common.config;
+    let data = workspace_data.file_explorer.clone();
 
     let file_explorer_header = {
-        let wtd = window_tab_data.clone();
+        let wtd = workspace_data.clone();
         h_stack((
             text("File Explorer").style(move |s| s.selectable(false).flex_grow(1.0)),
             clickable_icon(
@@ -93,15 +93,15 @@ pub fn file_explorer_panel(
         .add_height_style(
             "Open Editors",
             150.0,
-            container(open_editors_view(window_tab_data.clone()))
+            container(open_editors_view(workspace_data.clone()))
                 .style(|s| s.size_full()),
-            window_tab_data.panel.section_open(PanelSection::OpenEditor),
+            workspace_data.panel.section_open(PanelSection::OpenEditor),
             move |s| s.apply_if(!config.get().ui.open_editors_visible, |s| s.hide()),
         )
         .add_with_header(
             file_explorer_header,
             container(file_explorer_view(data)).style(|s| s.size_full()),
-            window_tab_data
+            workspace_data
                 .panel
                 .section_open(PanelSection::FileExplorer),
         )
@@ -471,13 +471,13 @@ fn file_explorer_view(data: FileExplorerData) -> impl View {
     })
 }
 
-fn open_editors_view(window_tab_data: Rc<WindowTabData>) -> impl View {
-    let editors = window_tab_data.main_split.editors;
-    let editor_tabs = window_tab_data.main_split.editor_tabs;
-    let config = window_tab_data.common.config;
-    let internal_command = window_tab_data.common.internal_command;
-    let active_editor_tab = window_tab_data.main_split.active_editor_tab;
-    let plugin = window_tab_data.plugin.clone();
+fn open_editors_view(workspace_data: Rc<WorkspaceData>) -> impl View {
+    let editors = workspace_data.main_split.editors;
+    let editor_tabs = workspace_data.main_split.editor_tabs;
+    let config = workspace_data.common.config;
+    let internal_command = workspace_data.common.internal_command;
+    let active_editor_tab = workspace_data.main_split.active_editor_tab;
+    let plugin = workspace_data.plugin.clone();
 
     let child_view = move |plugin: PluginData,
                            editor_tab: RwSignal<EditorTabData>,

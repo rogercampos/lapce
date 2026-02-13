@@ -9,7 +9,7 @@ use crate::{
     },
     main_split::Editors,
     text_input::TextInputBuilder,
-    window_tab::CommonData,
+    workspace_data::CommonData,
 };
 use floem::{
     View,

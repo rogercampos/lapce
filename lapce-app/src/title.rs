@@ -4,7 +4,7 @@ use floem::{
     View,
     menu::{Menu, MenuItem},
     reactive::{
-        Memo, ReadSignal, RwSignal, SignalGet, SignalUpdate, SignalWith, create_memo,
+        ReadSignal, RwSignal, SignalGet, SignalUpdate, SignalWith, create_memo,
     },
     style::JustifyContent,
     views::{Decorators, container, drag_window_area, empty, label, stack, svg},
@@ -17,28 +17,17 @@ use crate::{
     config::{LapceConfig, color::LapceColor, icon::LapceIcons},
     listener::Listener,
     update::ReleaseInfo,
-    window_tab::WindowTabData,
-    workspace::LapceWorkspace,
+    workspace_data::WorkspaceData,
 };
 
 fn left(
-    workspace: Arc<LapceWorkspace>,
     lapce_command: Listener<LapceCommand>,
     workbench_command: Listener<LapceWorkbenchCommand>,
     config: ReadSignal<Arc<LapceConfig>>,
-    num_window_tabs: Memo<usize>,
 ) -> impl View {
     let is_macos = cfg!(target_os = "macos");
-    let has_folder = workspace.path.is_some();
     stack((
-        empty().style(move |s| {
-            let should_hide = if is_macos {
-                num_window_tabs.get() > 1
-            } else {
-                true
-            };
-            s.width(75.0).apply_if(should_hide, |s| s.hide())
-        }),
+        empty().style(move |s| s.width(75.0).apply_if(!is_macos, |s| s.hide())),
         container(svg(move || config.get().ui_svg(LapceIcons::LOGO)).style(
             move |s| {
                 let config = config.get();
@@ -54,9 +43,7 @@ fn left(
             || "Menu",
             config,
         )
-        .popout_menu(move || {
-            window_menu(lapce_command, workbench_command, has_folder)
-        })
+        .popout_menu(move || window_menu(lapce_command, workbench_command))
         .style(move |s| {
             s.margin_left(4.0)
                 .margin_right(6.0)
@@ -79,7 +66,6 @@ fn right(
     workbench_command: Listener<LapceWorkbenchCommand>,
     latest_release: ReadSignal<Arc<Option<ReleaseInfo>>>,
     update_in_progress: RwSignal<bool>,
-    num_window_tabs: Memo<usize>,
     window_maximized: RwSignal<bool>,
     config: ReadSignal<Arc<LapceConfig>>,
 ) -> impl View {
@@ -167,13 +153,7 @@ fn right(
             }),
         ))
         .style(move |s| s.margin_horiz(6.0)),
-        window_controls_view(
-            window_command,
-            true,
-            num_window_tabs,
-            window_maximized,
-            config,
-        ),
+        window_controls_view(window_command, window_maximized, config),
     ))
     .style(|s| {
         s.flex_basis(0)
@@ -183,25 +163,17 @@ fn right(
     .debug_name("Right of top bar")
 }
 
-pub fn title(window_tab_data: Rc<WindowTabData>) -> impl View {
-    let workspace = window_tab_data.workspace.clone();
-    let lapce_command = window_tab_data.common.lapce_command;
-    let workbench_command = window_tab_data.common.workbench_command;
-    let window_command = window_tab_data.common.window_common.window_command;
-    let latest_release = window_tab_data.common.window_common.latest_release;
-    let num_window_tabs = window_tab_data.common.window_common.num_window_tabs;
-    let window_maximized = window_tab_data.common.window_common.window_maximized;
-    let title_height = window_tab_data.title_height;
-    let update_in_progress = window_tab_data.update_in_progress;
-    let config = window_tab_data.common.config;
+pub fn title(workspace_data: Rc<WorkspaceData>) -> impl View {
+    let lapce_command = workspace_data.common.lapce_command;
+    let workbench_command = workspace_data.common.workbench_command;
+    let window_command = workspace_data.common.window_common.window_command;
+    let latest_release = workspace_data.common.window_common.latest_release;
+    let window_maximized = workspace_data.common.window_common.window_maximized;
+    let title_height = workspace_data.title_height;
+    let update_in_progress = workspace_data.update_in_progress;
+    let config = workspace_data.common.config;
     stack((
-        left(
-            workspace,
-            lapce_command,
-            workbench_command,
-            config,
-            num_window_tabs,
-        ),
+        left(lapce_command, workbench_command, config),
         drag_window_area(empty())
             .style(|s| s.height_pct(100.0).flex_basis(0.0).flex_grow(1.0)),
         right(
@@ -209,7 +181,6 @@ pub fn title(window_tab_data: Rc<WindowTabData>) -> impl View {
             workbench_command,
             latest_release,
             update_in_progress,
-            num_window_tabs,
             window_maximized,
             config,
         ),
@@ -234,8 +205,6 @@ pub fn title(window_tab_data: Rc<WindowTabData>) -> impl View {
 
 pub fn window_controls_view(
     window_command: Listener<WindowCommand>,
-    is_title: bool,
-    num_window_tabs: Memo<usize>,
     window_maximized: RwSignal<bool>,
     config: ReadSignal<Arc<LapceConfig>>,
 ) -> impl View {
@@ -285,8 +254,7 @@ pub fn window_controls_view(
     .style(move |s| {
         s.apply_if(
             cfg!(target_os = "macos")
-                || !config.get_untracked().core.custom_titlebar
-                || (is_title && num_window_tabs.get() > 1),
+                || !config.get_untracked().core.custom_titlebar,
             |s| s.hide(),
         )
     })

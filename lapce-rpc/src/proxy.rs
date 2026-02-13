@@ -12,10 +12,10 @@ use indexmap::IndexMap;
 use lapce_xi_rope::RopeDelta;
 use lsp_types::{
     CallHierarchyIncomingCall, CallHierarchyItem, CodeAction, CodeActionResponse,
-    CodeLens, CompletionItem, Diagnostic, DocumentSymbolResponse, FoldingRange,
-    GotoDefinitionResponse, Hover, InlayHint, InlineCompletionResponse,
-    InlineCompletionTriggerKind, Location, Position, PrepareRenameResponse,
-    SelectionRange, SymbolInformation, TextDocumentItem, TextEdit, WorkspaceEdit,
+    CodeLens, CompletionItem, Diagnostic, FoldingRange, GotoDefinitionResponse,
+    Hover, InlayHint, InlineCompletionResponse, InlineCompletionTriggerKind,
+    Location, Position, PrepareRenameResponse, SelectionRange, TextDocumentItem,
+    TextEdit, WorkspaceEdit,
     request::{GotoImplementationResponse, GotoTypeDefinitionResponse},
 };
 use parking_lot::Mutex;
@@ -144,13 +144,6 @@ pub enum ProxyRequest {
     GetCodeLensResolve {
         code_lens: CodeLens,
         path: PathBuf,
-    },
-    GetDocumentSymbols {
-        path: PathBuf,
-    },
-    GetWorkspaceSymbols {
-        /// The search query
-        query: String,
     },
     GetDocumentFormatting {
         path: PathBuf,
@@ -327,12 +320,6 @@ pub enum ProxyResponse {
     },
     GetDocumentFormatting {
         edits: Vec<TextEdit>,
-    },
-    GetDocumentSymbols {
-        resp: DocumentSymbolResponse,
-    },
-    GetWorkspaceSymbols {
-        symbols: Vec<SymbolInformation>,
     },
     GetSelectionRange {
         ranges: Vec<SelectionRange>,
@@ -883,22 +870,6 @@ impl ProxyRpcHandler {
         f: impl ProxyCallback + 'static,
     ) {
         self.request_async(ProxyRequest::GetSemanticTokens { path }, f);
-    }
-
-    pub fn get_document_symbols(
-        &self,
-        path: PathBuf,
-        f: impl ProxyCallback + 'static,
-    ) {
-        self.request_async(ProxyRequest::GetDocumentSymbols { path }, f);
-    }
-
-    pub fn get_workspace_symbols(
-        &self,
-        query: String,
-        f: impl ProxyCallback + 'static,
-    ) {
-        self.request_async(ProxyRequest::GetWorkspaceSymbols { query }, f);
     }
 
     pub fn prepare_rename(

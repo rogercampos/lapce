@@ -32,7 +32,7 @@ use crate::{
         implementation_view::implementation_panel,
         references_view::references_panel,
     },
-    window_tab::{DragContent, WindowTabData},
+    workspace_data::{DragContent, WorkspaceData},
 };
 
 pub fn foldable_panel_section(
@@ -234,14 +234,14 @@ impl PanelBuilder {
 }
 
 pub fn panel_container_view(
-    window_tab_data: Rc<WindowTabData>,
+    workspace_data: Rc<WorkspaceData>,
     position: PanelContainerPosition,
 ) -> impl View {
-    let panel = window_tab_data.panel.clone();
-    let config = window_tab_data.common.config;
-    let dragging = window_tab_data.common.dragging;
+    let panel = workspace_data.panel.clone();
+    let config = workspace_data.common.config;
+    let dragging = workspace_data.common.dragging;
     let current_size = create_rw_signal(Size::ZERO);
-    let available_size = window_tab_data.panel.available_size;
+    let available_size = workspace_data.panel.available_size;
     let is_dragging_panel = move || {
         dragging
             .with(|d| d.as_ref().map(|d| d.is_panel()))
@@ -420,10 +420,10 @@ pub fn panel_container_view(
 
     let is_bottom = position.is_bottom();
     stack((
-        panel_picker(window_tab_data.clone(), position.first()),
-        panel_view(window_tab_data.clone(), position.first()),
-        panel_view(window_tab_data.clone(), position.second()),
-        panel_picker(window_tab_data.clone(), position.second()),
+        panel_picker(workspace_data.clone(), position.first()),
+        panel_view(workspace_data.clone(), position.first()),
+        panel_view(workspace_data.clone(), position.second()),
+        panel_picker(workspace_data.clone(), position.second()),
         resize_drag_view(position),
         stack((drop_view(position.first()), drop_view(position.second()))).style(
             move |s| {
@@ -477,10 +477,10 @@ pub fn panel_container_view(
 }
 
 fn panel_view(
-    window_tab_data: Rc<WindowTabData>,
+    workspace_data: Rc<WorkspaceData>,
     position: PanelPosition,
 ) -> impl View {
-    let panel = window_tab_data.panel.clone();
+    let panel = workspace_data.panel.clone();
     let panels = move || {
         panel
             .panels
@@ -498,27 +498,25 @@ fn panel_view(
         move |kind| {
             let view = match kind {
                 PanelKind::FileExplorer => {
-                    file_explorer_panel(window_tab_data.clone(), position).into_any()
+                    file_explorer_panel(workspace_data.clone(), position).into_any()
                 }
                 PanelKind::Plugin => {
-                    plugin_panel(window_tab_data.clone(), position).into_any()
+                    plugin_panel(workspace_data.clone(), position).into_any()
                 }
                 PanelKind::Search => {
-                    global_search_panel(window_tab_data.clone(), position).into_any()
+                    global_search_panel(workspace_data.clone(), position).into_any()
                 }
                 PanelKind::Problem => {
-                    problem_panel(window_tab_data.clone(), position).into_any()
+                    problem_panel(workspace_data.clone(), position).into_any()
                 }
                 PanelKind::CallHierarchy => {
-                    show_hierarchy_panel(window_tab_data.clone(), position)
-                        .into_any()
+                    show_hierarchy_panel(workspace_data.clone(), position).into_any()
                 }
                 PanelKind::References => {
-                    references_panel(window_tab_data.clone(), position).into_any()
+                    references_panel(workspace_data.clone(), position).into_any()
                 }
                 PanelKind::Implementation => {
-                    implementation_panel(window_tab_data.clone(), position)
-                        .into_any()
+                    implementation_panel(workspace_data.clone(), position).into_any()
                 }
             };
             view.style(|s| s.size_pct(100.0, 100.0))
@@ -546,13 +544,13 @@ pub fn panel_header(
 }
 
 fn panel_picker(
-    window_tab_data: Rc<WindowTabData>,
+    workspace_data: Rc<WorkspaceData>,
     position: PanelPosition,
 ) -> impl View {
-    let panel = window_tab_data.panel.clone();
+    let panel = workspace_data.panel.clone();
     let panels = panel.panels;
-    let config = window_tab_data.common.config;
-    let dragging = window_tab_data.common.dragging;
+    let config = workspace_data.common.config;
+    let dragging = workspace_data.common.dragging;
     let is_bottom = position.is_bottom();
     let is_first = position.is_first();
     dyn_stack(
@@ -563,7 +561,7 @@ fn panel_picker(
         },
         |p| *p,
         move |p| {
-            let window_tab_data = window_tab_data.clone();
+            let workspace_data = workspace_data.clone();
             let tooltip = match p {
                 PanelKind::FileExplorer => "File Explorer",
                 PanelKind::Plugin => "Plugins",
@@ -575,9 +573,9 @@ fn panel_picker(
             };
             let icon = p.svg_name();
             let is_active = {
-                let window_tab_data = window_tab_data.clone();
+                let workspace_data = workspace_data.clone();
                 move || {
-                    if let Some((active_panel, shown)) = window_tab_data
+                    if let Some((active_panel, shown)) = workspace_data
                         .panel
                         .active_panel_at_position(&position, true)
                     {
@@ -591,7 +589,7 @@ fn panel_picker(
                 clickable_icon(
                     || icon,
                     move || {
-                        window_tab_data.toggle_panel_visual(p);
+                        workspace_data.toggle_panel_visual(p);
                     },
                     || false,
                     || false,

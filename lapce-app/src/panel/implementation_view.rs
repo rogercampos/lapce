@@ -19,25 +19,25 @@ use crate::{
     command::InternalCommand,
     config::{color::LapceColor, icon::LapceIcons},
     editor::location::EditorLocation,
-    window_tab::WindowTabData,
+    workspace_data::WorkspaceData,
 };
 
 pub fn implementation_panel(
-    window_tab_data: Rc<WindowTabData>,
+    workspace_data: Rc<WorkspaceData>,
     _position: PanelPosition,
 ) -> impl View {
-    common_reference_panel(window_tab_data.clone(), _position, move || {
-        window_tab_data.main_split.implementations.get()
+    common_reference_panel(workspace_data.clone(), _position, move || {
+        workspace_data.main_split.implementations.get()
     })
     .debug_name("implementation panel")
 }
 pub fn common_reference_panel(
-    window_tab_data: Rc<WindowTabData>,
+    workspace_data: Rc<WorkspaceData>,
     _position: PanelPosition,
     each_fn: impl Fn() -> ReferencesRoot + 'static,
 ) -> impl View {
-    let config = window_tab_data.common.config;
-    let ui_line_height = window_tab_data.common.ui_line_height;
+    let config = workspace_data.common.config;
+    let ui_line_height = workspace_data.common.ui_line_height;
     scroll(
         virtual_stack(
             each_fn,
@@ -137,10 +137,10 @@ pub fn common_reference_panel(
                             })
                     }),))
                     .on_click_stop({
-                        let window_tab_data = window_tab_data.clone();
+                        let workspace_data = workspace_data.clone();
                         let position = file_line.position;
                         move |_| {
-                            window_tab_data.common.internal_command.send(
+                            workspace_data.common.internal_command.send(
                                 InternalCommand::JumpToLocation {
                                     location: EditorLocation {
                                         path: file_line.path.clone(),

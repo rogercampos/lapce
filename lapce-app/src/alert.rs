@@ -14,7 +14,7 @@ use floem::{
 
 use crate::{
     config::{LapceConfig, color::LapceColor, icon::LapceIcons},
-    window_tab::CommonData,
+    workspace_data::CommonData,
 };
 
 #[derive(Clone)]

@@ -36,7 +36,7 @@ use crate::{
     main_split::Editors,
     plugin::InstalledVoltData,
     text_input::TextInputBuilder,
-    window_tab::CommonData,
+    workspace_data::CommonData,
 };
 
 #[derive(Debug, Clone)]

@@ -35,7 +35,7 @@ use crate::{
     editor::EditorData,
     keypress::{KeyPressFocus, condition::Condition},
     main_split::Editors,
-    window_tab::CommonData,
+    workspace_data::CommonData,
 };
 
 enum RenamedPath {

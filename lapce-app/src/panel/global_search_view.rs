@@ -17,15 +17,15 @@ use crate::{
     focus_text::focus_text,
     global_search::{GlobalSearchData, SearchMatchData},
     listener::Listener,
-    window_tab::WindowTabData,
     workspace::LapceWorkspace,
+    workspace_data::WorkspaceData,
 };
 
 pub fn global_search_panel(
-    window_tab_data: Rc<WindowTabData>,
+    workspace_data: Rc<WorkspaceData>,
     _position: PanelPosition,
 ) -> impl View {
-    let global_search = window_tab_data.global_search.clone();
+    let global_search = workspace_data.global_search.clone();
     let config = global_search.common.config;
     let workspace = global_search.common.workspace.clone();
     let internal_command = global_search.common.internal_command;
@@ -39,7 +39,7 @@ pub fn global_search_panel(
                 s.width_pct(w).height_pct(100.0)
             },
         ),
-        search_preview_editor(window_tab_data, config, has_preview, preview_focused),
+        search_preview_editor(workspace_data, config, has_preview, preview_focused),
     ))
     .style(|s| s.absolute().size_pct(100.0, 100.0).flex_row())
     .debug_name("Global Search Panel")
@@ -250,18 +250,18 @@ fn search_result(
 }
 
 fn search_preview_editor(
-    window_tab_data: Rc<WindowTabData>,
+    workspace_data: Rc<WorkspaceData>,
     config: ReadSignal<Arc<LapceConfig>>,
     has_preview: RwSignal<bool>,
     preview_focused: RwSignal<bool>,
 ) -> impl View {
-    let global_search = window_tab_data.global_search.clone();
-    let workspace = window_tab_data.workspace.clone();
+    let global_search = workspace_data.global_search.clone();
+    let workspace = workspace_data.workspace.clone();
     let preview_editor = create_rw_signal(global_search.preview_editor.clone());
 
     container(
         container(editor_container_view(
-            window_tab_data,
+            workspace_data,
             workspace,
             |_tracked: bool| true,
             preview_editor,

@@ -16,7 +16,7 @@ use crate::{
     command::InternalCommand,
     config::{color::LapceColor, icon::LapceIcons},
     editor::location::EditorLocation,
-    window_tab::{CommonData, WindowTabData},
+    workspace_data::{CommonData, WorkspaceData},
 };
 
 #[derive(Clone, Debug)]
@@ -123,10 +123,10 @@ impl VirtualVector<(usize, usize, RwSignal<CallHierarchyItemData>)> for VirtualL
     }
 }
 pub fn show_hierarchy_panel(
-    window_tab_data: Rc<WindowTabData>,
+    workspace_data: Rc<WorkspaceData>,
     _position: PanelPosition,
 ) -> impl View {
-    let call_hierarchy_data = window_tab_data.call_hierarchy_data.clone();
+    let call_hierarchy_data = workspace_data.call_hierarchy_data.clone();
     let config = call_hierarchy_data.common.config;
     let ui_line_height = call_hierarchy_data.common.ui_line_height;
     let scroll_to_line = call_hierarchy_data.scroll_to_line;
@@ -157,13 +157,13 @@ pub fn show_hierarchy_panel(
                     )
                     .style(|s| s.padding(4.0).margin_left(6.0).margin_right(2.0))
                     .on_click_stop({
-                        let window_tab_data = window_tab_data.clone();
+                        let workspace_data = workspace_data.clone();
                         move |_x| {
                             open.update(|x| {
                                 *x = !*x;
                             });
                             if !rw_data.get_untracked().init {
-                                window_tab_data.common.internal_command.send(
+                                workspace_data.common.internal_command.send(
                                     InternalCommand::CallHierarchyIncoming {
                                         item_id: rw_data.get_untracked().view_id,
                                     },
@@ -212,17 +212,17 @@ pub fn show_hierarchy_panel(
                         })
                 })
                 .on_click_stop({
-                    let window_tab_data = window_tab_data.clone();
+                    let workspace_data = workspace_data.clone();
                     let data = rw_data;
                     move |_| {
                         if !rw_data.get_untracked().init {
-                            window_tab_data.common.internal_command.send(
+                            workspace_data.common.internal_command.send(
                                 InternalCommand::CallHierarchyIncoming { item_id: rw_data.get_untracked().view_id },
                             );
                         }
                         let data = data.get_untracked();
                         if let Ok(path) = data.item.uri.to_file_path() {
-                            window_tab_data
+                            workspace_data
                                 .common
                                 .internal_command
                                 .send(InternalCommand::JumpToLocation { location: EditorLocation {

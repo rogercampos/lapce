@@ -43,7 +43,7 @@ use crate::{
     markdown::{MarkdownContent, parse_markdown},
     panel::plugin_view::VOLT_DEFAULT_PNG,
     web_link::web_link,
-    window_tab::CommonData,
+    workspace_data::CommonData,
 };
 
 type PluginInfo = Option<(

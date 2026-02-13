@@ -16,7 +16,7 @@ use floem::{
 use itertools::Itertools;
 use lapce_core::{
     buffer::rope_text::RopeText, command::FocusCommand, cursor::Cursor,
-    rope_text_pos::RopeTextPosition, selection::Selection, syntax::Syntax,
+    selection::Selection, syntax::Syntax,
 };
 use lapce_rpc::{
     buffer::BufferId,
@@ -26,8 +26,8 @@ use lapce_rpc::{
 };
 use lapce_xi_rope::{Rope, spans::SpansBuilder};
 use lsp_types::{
-    CodeAction, CodeActionOrCommand, DiagnosticSeverity, DocumentChangeOperation,
-    DocumentChanges, OneOf, Position, TextEdit, Url, WorkspaceEdit,
+    CodeAction, CodeActionOrCommand, DocumentChangeOperation, DocumentChanges,
+    OneOf, TextEdit, Url, WorkspaceEdit,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -37,7 +37,7 @@ use crate::{
     alert::AlertButton,
     code_lens::CodeLensData,
     command::InternalCommand,
-    doc::{DiagnosticData, Doc, DocContent, EditorDiagnostic},
+    doc::{DiagnosticData, Doc, DocContent},
     editor::{
         EditorData,
         location::{EditorLocation, EditorPosition},
@@ -50,7 +50,7 @@ use crate::{
     },
     keypress::{EventRef, KeyPressData, KeyPressHandle},
     panel::implementation_view::ReferencesRoot,
-    window_tab::{CommonData, Focus, WindowTabData},
+    workspace_data::{CommonData, Focus, WorkspaceData},
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -94,7 +94,7 @@ impl SplitContent {
         }
     }
 
-    pub fn content_info(&self, data: &WindowTabData) -> SplitContentInfo {
+    pub fn content_info(&self, data: &WorkspaceData) -> SplitContentInfo {
         match &self {
             SplitContent::EditorTab(editor_tab_id) => {
                 let editor_tab_data = data
@@ -204,7 +204,7 @@ impl SplitContentInfo {
 }
 
 impl SplitData {
-    pub fn split_info(&self, data: &WindowTabData) -> SplitInfo {
+    pub fn split_info(&self, data: &WorkspaceData) -> SplitInfo {
         SplitInfo {
             direction: self.direction,
             children: self
@@ -1927,84 +1927,6 @@ impl MainSplitData {
         }
     }
 
-    pub fn next_error(&self) {
-        let file_diagnostics =
-            self.file_diagnostics_items(DiagnosticSeverity::ERROR);
-        if file_diagnostics.is_empty() {
-            return;
-        }
-        let active_editor = self.active_editor.get_untracked();
-        let active_path = active_editor
-            .map(|editor| (editor.doc(), editor.cursor()))
-            .and_then(|(doc, cursor)| {
-                let offset = cursor.with_untracked(|c| c.offset());
-                let (path, position) = (
-                    doc.content.get_untracked().path().cloned(),
-                    doc.buffer.with_untracked(|b| b.offset_to_position(offset)),
-                );
-                path.map(|path| (path, offset, position))
-            });
-        let (path, position) =
-            next_in_file_errors_offset(active_path, &file_diagnostics);
-        let location = EditorLocation {
-            path,
-            position: Some(position),
-            scroll_offset: None,
-
-            same_editor_tab: false,
-        };
-        self.jump_to_location(location, None);
-    }
-
-    fn file_diagnostics_items(
-        &self,
-        severity: DiagnosticSeverity,
-    ) -> Vec<(PathBuf, Vec<EditorDiagnostic>)> {
-        let diagnostics = self.diagnostics.get_untracked();
-        diagnostics
-            .into_iter()
-            .filter_map(|(path, diagnostic)| {
-                let span = diagnostic.diagnostics_span.get_untracked();
-                if !span.is_empty() {
-                    let diags = span
-                        .iter()
-                        .filter_map(|(iv, diag)| {
-                            if diag.severity == Some(severity) {
-                                Some(EditorDiagnostic {
-                                    range: Some((iv.start, iv.end)),
-                                    diagnostic: diag.to_owned(),
-                                })
-                            } else {
-                                None
-                            }
-                        })
-                        .collect::<Vec<EditorDiagnostic>>();
-                    if !diags.is_empty() {
-                        Some((path, diags))
-                    } else {
-                        None
-                    }
-                } else {
-                    let diagnostics = diagnostic.diagnostics.get_untracked();
-                    let diagnostics: Vec<EditorDiagnostic> = diagnostics
-                        .into_iter()
-                        .filter(|d| d.severity == Some(severity))
-                        .map(|d| EditorDiagnostic {
-                            range: None,
-                            diagnostic: d,
-                        })
-                        .collect();
-                    if !diagnostics.is_empty() {
-                        Some((path, diagnostics))
-                    } else {
-                        None
-                    }
-                }
-            })
-            .sorted_by_key(|(path, _)| path.clone())
-            .collect()
-    }
-
     pub fn get_diagnostic_data(&self, path: &Path) -> DiagnosticData {
         if let Some(d) = self.diagnostics.with_untracked(|d| d.get(path).cloned()) {
             d
@@ -2685,65 +2607,6 @@ fn workspace_edits(edit: &WorkspaceEdit) -> Option<HashMap<Url, Vec<TextEdit>>> 
             .collect::<HashMap<Url, Vec<TextEdit>>>(),
     };
     Some(edits)
-}
-
-fn next_in_file_errors_offset(
-    active_path: Option<(PathBuf, usize, Position)>,
-    file_diagnostics: &[(PathBuf, Vec<EditorDiagnostic>)],
-) -> (PathBuf, EditorPosition) {
-    if let Some((active_path, offset, position)) = active_path {
-        for (current_path, diagnostics) in file_diagnostics {
-            if &active_path == current_path {
-                for diagnostic in diagnostics {
-                    if let Some((start, _)) = diagnostic.range {
-                        if start > offset {
-                            return (
-                                (*current_path).clone(),
-                                EditorPosition::Offset(start),
-                            );
-                        }
-                    }
-
-                    if diagnostic.diagnostic.range.start.line > position.line
-                        || (diagnostic.diagnostic.range.start.line == position.line
-                            && diagnostic.diagnostic.range.start.character
-                                > position.character)
-                    {
-                        return (
-                            (*current_path).clone(),
-                            EditorPosition::Position(
-                                diagnostic.diagnostic.range.start,
-                            ),
-                        );
-                    }
-                }
-            }
-            if current_path > &active_path {
-                if let Some((start, _)) = diagnostics[0].range {
-                    return ((*current_path).clone(), EditorPosition::Offset(start));
-                }
-                return (
-                    (*current_path).clone(),
-                    if let Some((start, _)) = diagnostics[0].range {
-                        EditorPosition::Offset(start)
-                    } else {
-                        EditorPosition::Position(
-                            diagnostics[0].diagnostic.range.start,
-                        )
-                    },
-                );
-            }
-        }
-    }
-
-    (
-        file_diagnostics[0].0.clone(),
-        if let Some((start, _)) = file_diagnostics[0].1[0].range {
-            EditorPosition::Offset(start)
-        } else {
-            EditorPosition::Position(file_diagnostics[0].1[0].diagnostic.range.start)
-        },
-    )
 }
 
 #[derive(Clone, Copy, Debug)]

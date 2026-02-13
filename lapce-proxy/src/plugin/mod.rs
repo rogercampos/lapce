@@ -38,11 +38,11 @@ use lsp_types::{
     CompletionItem, CompletionItemCapability,
     CompletionItemCapabilityResolveSupport, CompletionParams, CompletionResponse,
     Diagnostic, DocumentFormattingParams, DocumentSymbolClientCapabilities,
-    DocumentSymbolParams, DocumentSymbolResponse, FoldingRange,
-    FoldingRangeClientCapabilities, FoldingRangeParams, FormattingOptions,
-    GotoCapability, GotoDefinitionParams, GotoDefinitionResponse, Hover,
-    HoverClientCapabilities, HoverParams, InlayHint, InlayHintClientCapabilities,
-    InlayHintParams, InlineCompletionClientCapabilities, InlineCompletionParams,
+    FoldingRange, FoldingRangeClientCapabilities, FoldingRangeParams,
+    FormattingOptions, GotoCapability, GotoDefinitionParams, GotoDefinitionResponse,
+    Hover, HoverClientCapabilities, HoverParams, InlayHint,
+    InlayHintClientCapabilities, InlayHintParams,
+    InlineCompletionClientCapabilities, InlineCompletionParams,
     InlineCompletionResponse, InlineCompletionTriggerKind, Location, MarkupKind,
     MessageActionItemCapabilities, ParameterInformationSettings,
     PartialResultParams, Position, PrepareRenameResponse,
@@ -51,21 +51,21 @@ use lsp_types::{
     SemanticTokensClientCapabilities, SemanticTokensParams,
     ShowMessageRequestClientCapabilities, SignatureHelp,
     SignatureHelpClientCapabilities, SignatureHelpParams,
-    SignatureInformationSettings, SymbolInformation, TextDocumentClientCapabilities,
+    SignatureInformationSettings, TextDocumentClientCapabilities,
     TextDocumentIdentifier, TextDocumentItem, TextDocumentPositionParams,
     TextDocumentSyncClientCapabilities, TextEdit, Url,
     VersionedTextDocumentIdentifier, WindowClientCapabilities,
     WorkDoneProgressParams, WorkspaceClientCapabilities, WorkspaceEdit,
-    WorkspaceSymbolClientCapabilities, WorkspaceSymbolParams,
+    WorkspaceSymbolClientCapabilities,
     request::{
         CallHierarchyIncomingCalls, CallHierarchyPrepare, CodeActionRequest,
         CodeActionResolveRequest, CodeLensRequest, CodeLensResolve, Completion,
-        DocumentSymbolRequest, FoldingRangeRequest, Formatting, GotoDefinition,
-        GotoImplementation, GotoImplementationResponse, GotoTypeDefinition,
-        GotoTypeDefinitionParams, GotoTypeDefinitionResponse, HoverRequest,
-        InlayHintRequest, InlineCompletionRequest, PrepareRenameRequest, References,
-        Rename, Request, ResolveCompletionItem, SelectionRangeRequest,
-        SemanticTokensFullRequest, SignatureHelpRequest, WorkspaceSymbolRequest,
+        FoldingRangeRequest, Formatting, GotoDefinition, GotoImplementation,
+        GotoImplementationResponse, GotoTypeDefinition, GotoTypeDefinitionParams,
+        GotoTypeDefinitionResponse, HoverRequest, InlayHintRequest,
+        InlineCompletionRequest, PrepareRenameRequest, References, Rename, Request,
+        ResolveCompletionItem, SelectionRangeRequest, SemanticTokensFullRequest,
+        SignatureHelpRequest,
     },
 };
 use parking_lot::Mutex;
@@ -818,49 +818,6 @@ impl PluginCatalogRpcHandler {
             Some(path.to_path_buf()),
             cb,
         );
-    }
-
-    pub fn get_document_symbols(
-        &self,
-        path: &Path,
-        cb: impl FnOnce(PluginId, Result<DocumentSymbolResponse, RpcError>)
-        + Clone
-        + Send
-        + 'static,
-    ) {
-        let uri = Url::from_file_path(path).unwrap();
-        let method = DocumentSymbolRequest::METHOD;
-        let params = DocumentSymbolParams {
-            text_document: TextDocumentIdentifier { uri },
-            work_done_progress_params: WorkDoneProgressParams::default(),
-            partial_result_params: PartialResultParams::default(),
-        };
-        let language_id =
-            Some(language_id_from_path(path).unwrap_or("").to_string());
-        self.send_request_to_all_plugins(
-            method,
-            params,
-            language_id,
-            Some(path.to_path_buf()),
-            cb,
-        );
-    }
-
-    pub fn get_workspace_symbols(
-        &self,
-        query: String,
-        cb: impl FnOnce(PluginId, Result<Vec<SymbolInformation>, RpcError>)
-        + Clone
-        + Send
-        + 'static,
-    ) {
-        let method = WorkspaceSymbolRequest::METHOD;
-        let params = WorkspaceSymbolParams {
-            query,
-            work_done_progress_params: WorkDoneProgressParams::default(),
-            partial_result_params: PartialResultParams::default(),
-        };
-        self.send_request_to_all_plugins(method, params, None, None, cb);
     }
 
     pub fn get_document_formatting(

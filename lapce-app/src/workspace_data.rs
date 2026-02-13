@@ -64,7 +64,7 @@ use crate::{
     find::Find,
     global_search::GlobalSearchData,
     hover::HoverData,
-    id::WindowTabId,
+    id::WorkspaceId,
     inline_completion::InlineCompletionData,
     keypress::{EventRef, KeyPressData, KeyPressFocus, condition::Condition},
     listener::Listener,
@@ -155,9 +155,9 @@ impl std::fmt::Debug for CommonData {
 }
 
 #[derive(Clone)]
-pub struct WindowTabData {
+pub struct WorkspaceData {
     pub scope: Scope,
-    pub window_tab_id: WindowTabId,
+    pub workspace_id: WorkspaceId,
     pub workspace: Arc<LapceWorkspace>,
     pub palette: PaletteData,
     pub main_split: MainSplitData,
@@ -185,15 +185,15 @@ pub struct WindowTabData {
     pub common: Rc<CommonData>,
 }
 
-impl std::fmt::Debug for WindowTabData {
+impl std::fmt::Debug for WorkspaceData {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("WindowTabData")
-            .field("window_tab_id", &self.window_tab_id)
+        f.debug_struct("WorkspaceData")
+            .field("workspace_id", &self.workspace_id)
             .finish()
     }
 }
 
-impl KeyPressFocus for WindowTabData {
+impl KeyPressFocus for WorkspaceData {
     fn check_condition(&self, condition: Condition) -> bool {
         match condition {
             Condition::PanelFocus => {
@@ -261,7 +261,7 @@ impl KeyPressFocus for WindowTabData {
     fn receive_char(&self, _c: &str) {}
 }
 
-impl WindowTabData {
+impl WorkspaceData {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         cx: Scope,
@@ -396,18 +396,10 @@ impl WindowTabData {
         let panel_available_size = cx.create_memo(move |_| {
             let title_height = title_height.get();
             let status_height = status_height.get();
-            let num_window_tabs = window_common.num_window_tabs.get();
             let window_size = window_common.size.get();
             Size::new(
                 window_size.width,
-                window_size.height
-                    - title_height
-                    - status_height
-                    - if num_window_tabs > 1 {
-                        window_common.window_tab_header_height.get()
-                    } else {
-                        0.0
-                    },
+                window_size.height - title_height - status_height,
             )
         });
         let panel = workspace_info
@@ -472,9 +464,9 @@ impl WindowTabData {
         );
         let alert_data = AlertBoxData::new(cx, common.clone());
 
-        let window_tab_data = Self {
+        let workspace_data = Self {
             scope: cx,
-            window_tab_id: WindowTabId::next(),
+            workspace_id: WorkspaceId::next(),
             workspace,
             palette,
             main_split,
@@ -507,10 +499,10 @@ impl WindowTabData {
         };
 
         {
-            let focus = window_tab_data.common.focus;
-            let active_editor = window_tab_data.main_split.active_editor;
-            let rename_active = window_tab_data.rename.active;
-            let internal_command = window_tab_data.common.internal_command;
+            let focus = workspace_data.common.focus;
+            let active_editor = workspace_data.main_split.active_editor;
+            let rename_active = workspace_data.rename.active;
+            let internal_command = workspace_data.common.internal_command;
             cx.create_effect(move |_| {
                 let focus = focus.get();
                 active_editor.track();
@@ -523,40 +515,40 @@ impl WindowTabData {
         }
 
         {
-            let window_tab_data = window_tab_data.clone();
-            window_tab_data.common.lapce_command.listen(move |cmd| {
-                window_tab_data.run_lapce_command(cmd);
+            let workspace_data = workspace_data.clone();
+            workspace_data.common.lapce_command.listen(move |cmd| {
+                workspace_data.run_lapce_command(cmd);
             });
         }
 
         {
-            let window_tab_data = window_tab_data.clone();
-            window_tab_data.common.workbench_command.listen(move |cmd| {
-                window_tab_data.run_workbench_command(cmd, None);
+            let workspace_data = workspace_data.clone();
+            workspace_data.common.workbench_command.listen(move |cmd| {
+                workspace_data.run_workbench_command(cmd, None);
             });
         }
 
         {
-            let window_tab_data = window_tab_data.clone();
-            let internal_command = window_tab_data.common.internal_command;
+            let workspace_data = workspace_data.clone();
+            let internal_command = workspace_data.common.internal_command;
             internal_command.listen(move |cmd| {
-                window_tab_data.run_internal_command(cmd);
+                workspace_data.run_internal_command(cmd);
             });
         }
 
         {
-            let window_tab_data = window_tab_data.clone();
-            let notification = window_tab_data.proxy.notification;
+            let workspace_data = workspace_data.clone();
+            let notification = workspace_data.proxy.notification;
             cx.create_effect(move |_| {
                 notification.with(|rpc| {
                     if let Some(rpc) = rpc.as_ref() {
-                        window_tab_data.handle_core_notification(rpc);
+                        workspace_data.handle_core_notification(rpc);
                     }
                 });
             });
         }
 
-        window_tab_data
+        workspace_data
     }
 
     pub fn reload_config(&self) {
@@ -687,31 +679,6 @@ impl WindowTabData {
                     }
                 });
             }
-            CloseFolder => {
-                let window_command = self.common.window_common.window_command;
-                let workspace = LapceWorkspace {
-                    kind: LapceWorkspaceType::Local,
-                    path: None,
-                    last_open: 0,
-                };
-                window_command.send(WindowCommand::SetWorkspace { workspace });
-            }
-            OpenFile => {
-                let internal_command = self.common.internal_command;
-                let options = FileDialogOptions::new().title("Choose a file");
-                open_file(options, move |file| {
-                    if let Some(mut file) = file {
-                        internal_command.send(InternalCommand::OpenFile {
-                            path: if let Some(path) = file.path.pop() {
-                                path
-                            } else {
-                                tracing::error!("No path");
-                                return;
-                            },
-                        })
-                    }
-                });
-            }
             NewFile => {
                 self.main_split.new_file();
             }
@@ -740,32 +707,6 @@ impl WindowTabData {
                     }
                 }
             }
-            SaveAll => {
-                self.main_split.editors.with_editors_untracked(|editors| {
-                    let mut paths = HashSet::new();
-                    for (_, editor_data) in editors.iter() {
-                        let doc = editor_data.doc();
-                        let should_save = if let DocContent::File { path, .. } =
-                            doc.content.get_untracked()
-                        {
-                            if paths.contains(&path) {
-                                false
-                            } else {
-                                paths.insert(path.clone());
-
-                                true
-                            }
-                        } else {
-                            false
-                        };
-
-                        if should_save {
-                            editor_data.save(true, || {});
-                        }
-                    }
-                });
-            }
-
             // ==== Configuration / Info Files and Folders ====
             OpenSettings => {
                 self.main_split.open_settings();
@@ -871,40 +812,6 @@ impl WindowTabData {
                     .window_command
                     .send(WindowCommand::NewWindow);
             }
-            CloseWindow => {
-                self.common
-                    .window_common
-                    .window_command
-                    .send(WindowCommand::CloseWindow);
-            }
-            // ==== Window Tabs ====
-            NewWindowTab => {
-                self.common.window_common.window_command.send(
-                    WindowCommand::NewWorkspaceTab {
-                        workspace: LapceWorkspace::default(),
-                        end: false,
-                    },
-                );
-            }
-            CloseWindowTab => {
-                self.common
-                    .window_common
-                    .window_command
-                    .send(WindowCommand::CloseWorkspaceTab { index: None });
-            }
-            NextWindowTab => {
-                self.common
-                    .window_common
-                    .window_command
-                    .send(WindowCommand::NextWorkspaceTab);
-            }
-            PreviousWindowTab => {
-                self.common
-                    .window_common
-                    .window_command
-                    .send(WindowCommand::PreviousWorkspaceTab);
-            }
-
             // ==== Editor Tabs ====
             NextEditorTab => {
                 if let Some(editor_tab_id) =
@@ -972,10 +879,6 @@ impl WindowTabData {
             Palette => {
                 self.palette.run(PaletteKind::File);
             }
-            PaletteSymbol => {
-                self.palette.run(PaletteKind::DocumentSymbol);
-            }
-            PaletteWorkspaceSymbol => {}
             PaletteWorkspace => {
                 self.palette.run(PaletteKind::Workspace);
             }
@@ -1078,32 +981,8 @@ impl WindowTabData {
             TogglePanelBottomVisual => {
                 self.toggle_container_visual(&PanelContainerPosition::Bottom);
             }
-            TogglePluginFocus => {
-                self.toggle_panel_focus(PanelKind::Plugin);
-            }
-            ToggleFileExplorerFocus => {
-                self.toggle_panel_focus(PanelKind::FileExplorer);
-            }
-            ToggleProblemFocus => {
-                self.toggle_panel_focus(PanelKind::Problem);
-            }
-            ToggleSearchFocus => {
-                self.search_modal_data.open();
-            }
             SearchModalOpenFullResults => {
                 self.search_modal_data.open_full_results();
-            }
-            TogglePluginVisual => {
-                self.toggle_panel_visual(PanelKind::Plugin);
-            }
-            ToggleFileExplorerVisual => {
-                self.toggle_panel_visual(PanelKind::FileExplorer);
-            }
-            ToggleProblemVisual => {
-                self.toggle_panel_visual(PanelKind::Problem);
-            }
-            ToggleSearchVisual => {
-                self.toggle_panel_visual(PanelKind::Search);
             }
             FocusEditor => {
                 self.common.focus.set(Focus::Workbench);
@@ -1198,10 +1077,6 @@ impl WindowTabData {
             JumpLocationBackwardLocal => {
                 self.main_split.jump_location_backward(true);
             }
-            NextError => {
-                self.main_split.next_error();
-            }
-            PreviousError => {}
             Quit => {
                 floem::quit_app();
             }
@@ -2179,13 +2054,12 @@ impl WindowTabData {
 
         for folder in folders {
             self.common.window_common.window_command.send(
-                WindowCommand::NewWorkspaceTab {
+                WindowCommand::SetWorkspace {
                     workspace: LapceWorkspace {
                         kind: self.workspace.kind.clone(),
                         path: Some(folder.path.clone()),
                         last_open: 0,
                     },
-                    end: false,
                 },
             );
         }

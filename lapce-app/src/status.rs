@@ -20,19 +20,19 @@ use crate::{
     editor::EditorData,
     palette::kind::PaletteKind,
     panel::{kind::PanelKind, position::PanelContainerPosition},
-    window_tab::{WindowTabData, WorkProgress},
+    workspace_data::{WorkProgress, WorkspaceData},
 };
 
 pub fn status(
-    window_tab_data: Rc<WindowTabData>,
+    workspace_data: Rc<WorkspaceData>,
     status_height: RwSignal<f64>,
     _config: ReadSignal<Arc<LapceConfig>>,
 ) -> impl View {
-    let config = window_tab_data.common.config;
-    let diagnostics = window_tab_data.main_split.diagnostics;
-    let editor = window_tab_data.main_split.active_editor;
-    let panel = window_tab_data.panel.clone();
-    let palette = window_tab_data.palette.clone();
+    let config = workspace_data.common.config;
+    let diagnostics = workspace_data.main_split.diagnostics;
+    let editor = workspace_data.main_split.active_editor;
+    let panel = workspace_data.panel.clone();
+    let palette = workspace_data.palette.clone();
     let diagnostic_count = create_memo(move |_| {
         let mut errors = 0;
         let mut warnings = 0;
@@ -49,7 +49,7 @@ pub fn status(
         }
         (errors, warnings)
     });
-    let progresses = window_tab_data.progresses;
+    let progresses = workspace_data.progresses;
 
     stack((
         stack((

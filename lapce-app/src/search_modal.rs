@@ -38,7 +38,7 @@ use crate::{
     keypress::KeyPressFocus,
     main_split::MainSplitData,
     text_input::TextInputBuilder,
-    window_tab::{CommonData, Focus, WindowTabData},
+    workspace_data::{CommonData, Focus, WorkspaceData},
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -366,9 +366,9 @@ impl VirtualVector<(usize, FlatSearchMatch)> for FlatSearchItems {
     }
 }
 
-pub fn search_modal_popup(window_tab_data: Rc<WindowTabData>) -> impl View {
-    let data = window_tab_data.search_modal_data.clone();
-    let config = window_tab_data.common.config;
+pub fn search_modal_popup(workspace_data: Rc<WorkspaceData>) -> impl View {
+    let data = workspace_data.search_modal_data.clone();
+    let config = workspace_data.common.config;
     let visibility = data.visible;
     let close_data = data.clone();
 
@@ -376,15 +376,15 @@ pub fn search_modal_popup(window_tab_data: Rc<WindowTabData>) -> impl View {
         config,
         visibility,
         move || close_data.close(),
-        move || search_modal_content(window_tab_data),
+        move || search_modal_content(workspace_data),
     )
     .debug_name("Search Modal Popup")
 }
 
-fn search_modal_content(window_tab_data: Rc<WindowTabData>) -> impl View {
-    let data = window_tab_data.search_modal_data.clone();
-    let config = window_tab_data.common.config;
-    let focus = window_tab_data.common.focus;
+fn search_modal_content(workspace_data: Rc<WorkspaceData>) -> impl View {
+    let data = workspace_data.search_modal_data.clone();
+    let config = workspace_data.common.config;
+    let focus = workspace_data.common.focus;
     let index = data.index;
     let flat_matches = data.flat_matches;
     let has_preview = data.has_preview;
@@ -396,7 +396,7 @@ fn search_modal_content(window_tab_data: Rc<WindowTabData>) -> impl View {
         search_modal_input(data.clone(), config, focus),
         // Body: results list + preview (fixed size via flex_grow)
         search_modal_body(
-            window_tab_data.clone(),
+            workspace_data.clone(),
             data.clone(),
             config,
             index,
@@ -455,7 +455,7 @@ fn search_modal_input(
 }
 
 fn search_modal_body(
-    window_tab_data: Rc<WindowTabData>,
+    workspace_data: Rc<WorkspaceData>,
     data: SearchModalData,
     config: ReadSignal<Arc<LapceConfig>>,
     index: RwSignal<usize>,
@@ -592,7 +592,7 @@ fn search_modal_body(
                     .set(PropagatePointerWheel, false)
             }),
             // Preview editor (50% of body)
-            search_modal_preview_editor(window_tab_data, config),
+            search_modal_preview_editor(workspace_data, config),
         ))
         .style(move |s| {
             s.display(if has_preview.get() {
@@ -637,17 +637,17 @@ fn search_modal_body(
 }
 
 fn search_modal_preview_editor(
-    window_tab_data: Rc<WindowTabData>,
+    workspace_data: Rc<WorkspaceData>,
     config: ReadSignal<Arc<LapceConfig>>,
 ) -> impl View {
-    let data = window_tab_data.search_modal_data.clone();
+    let data = workspace_data.search_modal_data.clone();
     let preview_focused = data.preview_focused;
-    let workspace = window_tab_data.workspace.clone();
+    let workspace = workspace_data.workspace.clone();
     let preview_editor = create_rw_signal(data.preview_editor.clone());
 
     container(
         container(editor_container_view(
-            window_tab_data,
+            workspace_data,
             workspace,
             |_tracked: bool| true,
             preview_editor,

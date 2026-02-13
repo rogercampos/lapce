@@ -76,8 +76,8 @@ use crate::{
     keypress::KeyPressFocus,
     main_split::Editors,
     panel::kind::PanelKind,
-    window_tab::{CommonData, Focus},
     workspace::LapceWorkspace,
+    workspace_data::{CommonData, Focus},
 };
 
 #[derive(Clone, Debug)]

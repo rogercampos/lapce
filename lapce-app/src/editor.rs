@@ -68,7 +68,7 @@ use crate::{
     },
     snippet::Snippet,
     tracing::*,
-    window_tab::{CommonData, Focus, WindowTabData},
+    workspace_data::{CommonData, Focus, WorkspaceData},
 };
 
 pub mod gutter;
@@ -297,7 +297,7 @@ impl EditorData {
         self.editor.id()
     }
 
-    pub fn editor_info(&self, _data: &WindowTabData) -> EditorInfo {
+    pub fn editor_info(&self, _data: &WorkspaceData) -> EditorInfo {
         let offset = self.cursor().get_untracked().offset();
         let scroll_offset = self.viewport().get_untracked().origin();
         let doc = self.doc();
@@ -1019,7 +1019,7 @@ impl EditorData {
         );
     }
 
-    pub fn call_hierarchy(&self, window_tab_data: WindowTabData) {
+    pub fn call_hierarchy(&self, workspace_data: WorkspaceData) {
         let doc = self.doc();
         let path = match if doc.loaded() {
             doc.content.with_untracked(|c| c.path().cloned())
@@ -1037,7 +1037,7 @@ impl EditorData {
             let position = buffer.offset_to_position(offset);
             (start_position, position)
         });
-        let scope = window_tab_data.scope;
+        let scope = workspace_data.scope;
         let range = Range {
             start: _start_position,
             end: position,
@@ -1060,11 +1060,11 @@ impl EditorData {
                             children: scope.create_rw_signal(Vec::with_capacity(0)),
                         });
                         let item = root;
-                        window_tab_data.call_hierarchy_data.root.update(|x| {
+                        workspace_data.call_hierarchy_data.root.update(|x| {
                             *x = Some(root);
                         });
-                        window_tab_data.show_panel(PanelKind::CallHierarchy);
-                        window_tab_data.common.internal_command.send(
+                        workspace_data.show_panel(PanelKind::CallHierarchy);
+                        workspace_data.common.internal_command.send(
                             InternalCommand::CallHierarchyIncoming {
                                 item_id: item.get_untracked().view_id,
                             },
@@ -1075,7 +1075,7 @@ impl EditorData {
         );
     }
 
-    pub fn find_refenrence(&self, window_tab_data: WindowTabData) {
+    pub fn find_refenrence(&self, workspace_data: WorkspaceData) {
         let doc = self.doc();
         let path = match if doc.loaded() {
             doc.content.with_untracked(|c| c.path().cloned())
@@ -1093,18 +1093,18 @@ impl EditorData {
             let position = buffer.offset_to_position(offset);
             (start_position, position)
         });
-        let scope = window_tab_data.scope;
+        let scope = workspace_data.scope;
         let update_implementation = create_ext_action(self.scope, {
-            let window_tab_data = window_tab_data.clone();
+            let workspace_data = workspace_data.clone();
             move |result| {
                 if let Ok(ProxyResponse::ReferencesResolveResponse { items }) =
                     result
                 {
-                    window_tab_data
+                    workspace_data
                         .main_split
                         .references
                         .update(|x| *x = init_implementation_root(items, scope));
-                    window_tab_data.show_panel(PanelKind::References);
+                    workspace_data.show_panel(PanelKind::References);
                 }
             }
         });
@@ -1123,7 +1123,7 @@ impl EditorData {
                                 update_implementation,
                             );
                         } else {
-                            window_tab_data.show_panel(PanelKind::References);
+                            workspace_data.show_panel(PanelKind::References);
                         }
                     }
                 }
@@ -1131,7 +1131,7 @@ impl EditorData {
         );
     }
 
-    pub fn go_to_implementation(&self, window_tab_data: WindowTabData) {
+    pub fn go_to_implementation(&self, workspace_data: WorkspaceData) {
         let doc = self.doc();
         let path = match if doc.loaded() {
             doc.content.with_untracked(|c| c.path().cloned())
@@ -1149,18 +1149,18 @@ impl EditorData {
             let position = buffer.offset_to_position(offset);
             (start_position, position)
         });
-        let scope = window_tab_data.scope;
+        let scope = workspace_data.scope;
         let update_implementation = create_ext_action(self.scope, {
-            let window_tab_data = window_tab_data.clone();
+            let workspace_data = workspace_data.clone();
             move |result| {
                 if let Ok(ProxyResponse::ReferencesResolveResponse { items }) =
                     result
                 {
-                    window_tab_data
+                    workspace_data
                         .main_split
                         .implementations
                         .update(|x| *x = init_implementation_root(items, scope));
-                    window_tab_data.show_panel(PanelKind::Implementation);
+                    workspace_data.show_panel(PanelKind::Implementation);
                 }
             }
         });
@@ -1182,7 +1182,7 @@ impl EditorData {
                                 update_implementation,
                             );
                         } else {
-                            window_tab_data.show_panel(PanelKind::Implementation);
+                            workspace_data.show_panel(PanelKind::Implementation);
                         }
                     }
                 }

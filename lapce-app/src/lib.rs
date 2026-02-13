@@ -43,8 +43,8 @@ pub mod update;
 pub mod wave;
 pub mod web_link;
 pub mod window;
-pub mod window_tab;
 pub mod workspace;
+pub mod workspace_data;
 
 #[cfg(windows)]
 extern crate windows_sys as windows;

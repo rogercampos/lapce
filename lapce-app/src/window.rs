@@ -5,7 +5,7 @@ use floem::{
     action::TimerToken,
     peniko::kurbo::{Point, Size},
     reactive::{
-        Memo, ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith,
+        ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith,
         use_context,
     },
     window::WindowId,
@@ -20,8 +20,8 @@ use crate::{
     keypress::EventRef,
     listener::Listener,
     update::ReleaseInfo,
-    window_tab::WindowTabData,
     workspace::LapceWorkspace,
+    workspace_data::WorkspaceData,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,9 +43,7 @@ pub struct WindowCommonData {
     pub window_command: Listener<WindowCommand>,
     pub window_scale: RwSignal<f64>,
     pub size: RwSignal<Size>,
-    pub num_window_tabs: Memo<usize>,
     pub window_maximized: RwSignal<bool>,
-    pub window_tab_header_height: RwSignal<f64>,
     pub latest_release: ReadSignal<Arc<Option<ReleaseInfo>>>,
     pub ime_allowed: RwSignal<bool>,
     pub cursor_blink_timer: RwSignal<TimerToken>,
@@ -62,17 +60,13 @@ pub struct WindowCommonData {
 /// top-level window, but new ones can be created using the "New Window"
 /// command.
 ///
-/// Each window has its own collection of "window tabs" (again, there is
-/// normally only one window tab), size, position etc.
+/// Each window has a single workspace.
 #[derive(Clone)]
 pub struct WindowData {
     pub window_id: WindowId,
     pub scope: Scope,
-    /// The set of tabs within the window. These tabs are high-level
-    /// constructs for workspaces, in particular they are not **editor tabs**.
-    pub window_tabs: RwSignal<im::Vector<(RwSignal<usize>, Rc<WindowTabData>)>>,
-    pub num_window_tabs: Memo<usize>,
-    /// The index of the active window tab.
+    pub workspaces: RwSignal<im::Vector<(RwSignal<usize>, Rc<WorkspaceData>)>>,
+    /// The index of the active workspace.
     pub active: RwSignal<usize>,
     pub app_command: Listener<AppCommand>,
     pub position: RwSignal<Point>,
@@ -99,15 +93,12 @@ impl WindowData {
         let config = cx.create_rw_signal(Arc::new(config));
         let root_view_id = cx.create_rw_signal(ViewId::new());
 
-        let window_tabs = cx.create_rw_signal(im::Vector::new());
-        let num_window_tabs =
-            cx.create_memo(move |_| window_tabs.with(|tabs| tabs.len()));
+        let workspaces = cx.create_rw_signal(im::Vector::new());
         let active = info.tabs.active_tab;
         let window_command = Listener::new_empty(cx);
         let ime_allowed = cx.create_rw_signal(false);
         let window_maximized = cx.create_rw_signal(false);
         let size = cx.create_rw_signal(Size::ZERO);
-        let window_tab_header_height = cx.create_rw_signal(0.0);
         let cursor_blink_timer = cx.create_rw_signal(TimerToken::INVALID);
         let hide_cursor = cx.create_rw_signal(false);
 
@@ -115,9 +106,7 @@ impl WindowData {
             window_command,
             window_scale,
             size,
-            num_window_tabs,
             window_maximized,
-            window_tab_header_height,
             latest_release,
             ime_allowed,
             cursor_blink_timer,
@@ -127,21 +116,21 @@ impl WindowData {
         });
 
         for w in info.tabs.workspaces {
-            let window_tab =
-                Rc::new(WindowTabData::new(cx, Arc::new(w), common.clone()));
-            window_tabs.update(|window_tabs| {
-                window_tabs.push_back((cx.create_rw_signal(0), window_tab));
+            let workspace =
+                Rc::new(WorkspaceData::new(cx, Arc::new(w), common.clone()));
+            workspaces.update(|workspaces| {
+                workspaces.push_back((cx.create_rw_signal(0), workspace));
             });
         }
 
-        if window_tabs.with_untracked(|window_tabs| window_tabs.is_empty()) {
-            let window_tab = Rc::new(WindowTabData::new(
+        if workspaces.with_untracked(|workspaces| workspaces.is_empty()) {
+            let workspace = Rc::new(WorkspaceData::new(
                 cx,
                 Arc::new(LapceWorkspace::default()),
                 common.clone(),
             ));
-            window_tabs.update(|window_tabs| {
-                window_tabs.push_back((cx.create_rw_signal(0), window_tab));
+            workspaces.update(|workspaces| {
+                workspaces.push_back((cx.create_rw_signal(0), workspace));
             });
         }
 
@@ -151,8 +140,7 @@ impl WindowData {
         let window_data = Self {
             window_id,
             scope: cx,
-            window_tabs,
-            num_window_tabs,
+            workspaces,
             active,
             position,
             root_view_id,
@@ -173,7 +161,7 @@ impl WindowData {
         {
             cx.create_effect(move |_| {
                 let active = active.get();
-                let tab = window_tabs
+                let tab = workspaces
                     .with(|tabs| tabs.get(active).map(|(_, tab)| tab.clone()));
                 if let Some(tab) = tab {
                     tab.common
@@ -193,9 +181,9 @@ impl WindowData {
             &self.common.extra_plugin_paths,
         );
         self.config.set(Arc::new(config));
-        let window_tabs = self.window_tabs.get_untracked();
-        for (_, window_tab) in window_tabs {
-            window_tab.reload_config();
+        let workspaces = self.workspaces.get_untracked();
+        for (_, workspace) in workspaces {
+            workspace.reload_config();
         }
     }
 
@@ -208,118 +196,35 @@ impl WindowData {
                 }
 
                 let active = self.active.get_untracked();
-                self.window_tabs.with_untracked(|window_tabs| {
-                    if !window_tabs.is_empty() {
-                        let active = window_tabs.len().saturating_sub(1).min(active);
+                self.workspaces.with_untracked(|workspaces| {
+                    if !workspaces.is_empty() {
+                        let active = workspaces.len().saturating_sub(1).min(active);
                         if let Err(err) =
-                            db.insert_window_tab(window_tabs[active].1.clone())
+                            db.insert_workspace_data(workspaces[active].1.clone())
                         {
                             tracing::error!("{:?}", err);
                         }
                     }
                 });
 
-                let window_tab = Rc::new(WindowTabData::new(
+                let workspace = Rc::new(WorkspaceData::new(
                     self.scope,
                     Arc::new(workspace),
                     self.common.clone(),
                 ));
-                self.window_tabs.update(|window_tabs| {
-                    if window_tabs.is_empty() {
-                        window_tabs
-                            .push_back((self.scope.create_rw_signal(0), window_tab));
+                self.workspaces.update(|workspaces| {
+                    if workspaces.is_empty() {
+                        workspaces
+                            .push_back((self.scope.create_rw_signal(0), workspace));
                     } else {
-                        let active = window_tabs.len().saturating_sub(1).min(active);
-                        let (_, old_window_tab) = window_tabs.set(
+                        let active = workspaces.len().saturating_sub(1).min(active);
+                        let (_, old_workspace) = workspaces.set(
                             active,
-                            (self.scope.create_rw_signal(0), window_tab),
+                            (self.scope.create_rw_signal(0), workspace),
                         );
-                        old_window_tab.proxy.shutdown();
+                        old_workspace.proxy.shutdown();
                     }
                 })
-            }
-            WindowCommand::NewWorkspaceTab { workspace, end } => {
-                let db: Arc<LapceDb> = use_context().unwrap();
-                if let Err(err) = db.update_recent_workspace(&workspace) {
-                    tracing::error!("{:?}", err);
-                }
-
-                let window_tab = Rc::new(WindowTabData::new(
-                    self.scope,
-                    Arc::new(workspace),
-                    self.common.clone(),
-                ));
-                let active = self.active.get_untracked();
-                let active = self
-                    .window_tabs
-                    .try_update(|tabs| {
-                        if end || tabs.is_empty() {
-                            tabs.push_back((
-                                self.scope.create_rw_signal(0),
-                                window_tab,
-                            ));
-                            tabs.len() - 1
-                        } else {
-                            let index = tabs.len().min(active + 1);
-                            tabs.insert(
-                                index,
-                                (self.scope.create_rw_signal(0), window_tab),
-                            );
-                            index
-                        }
-                    })
-                    .unwrap();
-                self.active.set(active);
-            }
-            WindowCommand::CloseWorkspaceTab { index } => {
-                let active = self.active.get_untracked();
-                let index = index.unwrap_or(active);
-                self.window_tabs.update(|window_tabs| {
-                    if window_tabs.len() < 2 {
-                        return;
-                    }
-
-                    if index < window_tabs.len() {
-                        let (_, old_window_tab) = window_tabs.remove(index);
-                        old_window_tab.proxy.shutdown();
-                        let db: Arc<LapceDb> = use_context().unwrap();
-                        if let Err(err) = db.save_window_tab(old_window_tab) {
-                            tracing::error!("{:?}", err);
-                        }
-                    }
-                });
-
-                let tabs_len = self.window_tabs.with_untracked(|tabs| tabs.len());
-
-                if active > index && active > 0 {
-                    self.active.set(active - 1);
-                } else if active >= tabs_len.saturating_sub(1) {
-                    self.active.set(tabs_len.saturating_sub(1));
-                }
-            }
-            WindowCommand::NextWorkspaceTab => {
-                let active = self.active.get_untracked();
-                let tabs_len = self.window_tabs.with_untracked(|tabs| tabs.len());
-                if tabs_len > 1 {
-                    let active = if active >= tabs_len - 1 {
-                        0
-                    } else {
-                        active + 1
-                    };
-                    self.active.set(active);
-                }
-            }
-            WindowCommand::PreviousWorkspaceTab => {
-                let active = self.active.get_untracked();
-                let tabs_len = self.window_tabs.with_untracked(|tabs| tabs.len());
-                if tabs_len > 1 {
-                    let active = if active == 0 {
-                        tabs_len - 1
-                    } else {
-                        active - 1
-                    };
-                    self.active.set(active);
-                }
             }
             WindowCommand::NewWindow => {
                 self.app_command
@@ -335,14 +240,14 @@ impl WindowData {
 
     pub fn key_down<'a>(&self, event: impl Into<EventRef<'a>> + Copy) -> bool {
         let active = self.active.get_untracked();
-        let window_tab = self.window_tabs.with_untracked(|window_tabs| {
-            window_tabs
+        let workspace = self.workspaces.with_untracked(|workspaces| {
+            workspaces
                 .get(active)
-                .or_else(|| window_tabs.last())
+                .or_else(|| workspaces.last())
                 .cloned()
         });
-        if let Some((_, window_tab)) = window_tab {
-            window_tab.key_down(event)
+        if let Some((_, workspace)) = workspace {
+            workspace.key_down(event)
         } else {
             false
         }
@@ -350,7 +255,7 @@ impl WindowData {
 
     pub fn info(&self) -> WindowInfo {
         let workspaces: Vec<LapceWorkspace> = self
-            .window_tabs
+            .workspaces
             .get_untracked()
             .iter()
             .map(|(_, t)| (*t.workspace).clone())
@@ -366,29 +271,12 @@ impl WindowData {
         }
     }
 
-    pub fn active_window_tab(&self) -> Option<Rc<WindowTabData>> {
-        let window_tabs = self.window_tabs.get_untracked();
+    pub fn active_workspace(&self) -> Option<Rc<WorkspaceData>> {
+        let workspaces = self.workspaces.get_untracked();
         let active = self
             .active
             .get_untracked()
-            .min(window_tabs.len().saturating_sub(1));
-        window_tabs.get(active).map(|(_, tab)| tab.clone())
-    }
-
-    pub fn move_tab(&self, from_index: usize, to_index: usize) {
-        if from_index == to_index {
-            return;
-        }
-
-        let to_index = if from_index < to_index {
-            to_index - 1
-        } else {
-            to_index
-        };
-        self.window_tabs.update(|tabs| {
-            let tab = tabs.remove(from_index);
-            tabs.insert(to_index, tab);
-        });
-        self.active.set(to_index);
+            .min(workspaces.len().saturating_sub(1));
+        workspaces.get(active).map(|(_, tab)| tab.clone())
     }
 }
