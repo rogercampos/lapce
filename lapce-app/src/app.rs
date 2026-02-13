@@ -52,6 +52,7 @@ use floem::{
 };
 use include_dir::{Dir, include_dir};
 use lapce_core::{
+    command::FocusCommand,
     directory::Directory,
     meta,
     syntax::{Syntax, highlight::reset_highlight_configs},
@@ -69,7 +70,7 @@ use tracing_subscriber::{filter::Targets, reload::Handle};
 use crate::{
     about, alert,
     code_action::CodeActionStatus,
-    command::{InternalCommand, LapceCommand, LapceWorkbenchCommand},
+    command::{CommandKind, InternalCommand, LapceCommand, LapceWorkbenchCommand},
     config::{
         LapceConfig, color::LapceColor, icon::LapceIcons, ui::TabSeparatorHeight,
         watcher::ConfigWatcher,
@@ -3432,7 +3433,7 @@ fn listen_local_socket(tx: SyncSender<CoreNotification>) -> Result<()> {
 }
 
 pub fn window_menu(
-    _lapce_command: Listener<LapceCommand>,
+    lapce_command: Listener<LapceCommand>,
     workbench_command: Listener<LapceWorkbenchCommand>,
 ) -> Menu {
     let file_menu = Menu::new("File")
@@ -3467,6 +3468,55 @@ pub fn window_menu(
                     .send(LapceWorkbenchCommand::RevealActiveFileInFileExplorer);
             },
         ));
+
+    let code_menu = Menu::new("Code")
+        .entry(MenuItem::new("Go to Definition").action(move || {
+            lapce_command.send(LapceCommand {
+                kind: CommandKind::Focus(FocusCommand::GotoDefinition),
+                data: None,
+            });
+        }))
+        .entry(MenuItem::new("Go to Type Definition").action(move || {
+            lapce_command.send(LapceCommand {
+                kind: CommandKind::Focus(FocusCommand::GotoTypeDefinition),
+                data: None,
+            });
+        }))
+        .entry(MenuItem::new("Go to Implementation").action(move || {
+            workbench_command.send(LapceWorkbenchCommand::GoToImplementation);
+        }))
+        .entry(MenuItem::new("Find References").action(move || {
+            workbench_command.send(LapceWorkbenchCommand::FindReferences);
+        }))
+        .separator()
+        .entry(MenuItem::new("Show Hover").action(move || {
+            lapce_command.send(LapceCommand {
+                kind: CommandKind::Focus(FocusCommand::ShowHover),
+                data: None,
+            });
+        }))
+        .entry(MenuItem::new("Show Code Actions").action(move || {
+            lapce_command.send(LapceCommand {
+                kind: CommandKind::Focus(FocusCommand::ShowCodeActions),
+                data: None,
+            });
+        }))
+        .entry(MenuItem::new("Show Call Hierarchy").action(move || {
+            workbench_command.send(LapceWorkbenchCommand::ShowCallHierarchy);
+        }))
+        .separator()
+        .entry(MenuItem::new("Rename Symbol").action(move || {
+            lapce_command.send(LapceCommand {
+                kind: CommandKind::Focus(FocusCommand::Rename),
+                data: None,
+            });
+        }))
+        .entry(MenuItem::new("Format Document").action(move || {
+            lapce_command.send(LapceCommand {
+                kind: CommandKind::Focus(FocusCommand::FormatDocument),
+                data: None,
+            });
+        }));
 
     let window_menu = Menu::new("Window")
         .entry(MenuItem::new("New Window").action(move || {
@@ -3582,6 +3632,7 @@ pub fn window_menu(
         .separator()
         .entry(file_menu)
         .entry(view_menu)
+        .entry(code_menu)
         .entry(window_menu)
         .entry(settings_menu)
         .entry(help_menu)
