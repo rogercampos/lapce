@@ -24,11 +24,6 @@ command = "zoom_in"
 key = "ctrl+-"
 command = "zoom_out"
 
-[[keymaps]]
-key = "ctrl+enter"
-command = "source_control_commit"
-when = "source_control_focus"
-
 # --------------------------------- Basic editing ---------------------------------------
 
 [[keymaps]]
@@ -111,7 +106,6 @@ command = "select_all"
 [[keymaps]]
 key = "ctrl+enter"
 command = "new_line_below"
-when = "!source_control_focus"
 
 [[keymaps]]
 key = "ctrl+shift+enter"
