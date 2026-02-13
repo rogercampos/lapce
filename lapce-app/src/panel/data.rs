@@ -1,10 +1,8 @@
-use std::{rc::Rc, sync::Arc};
+use std::rc::Rc;
 
 use floem::{
     kurbo::Size,
-    reactive::{
-        Memo, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith, use_context,
-    },
+    reactive::{Memo, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith},
 };
 use serde::{Deserialize, Serialize};
 
@@ -13,10 +11,7 @@ use super::{
     position::{PanelContainerPosition, PanelPosition},
     style::PanelStyle,
 };
-use crate::{
-    db::LapceDb,
-    workspace_data::{CommonData, Focus},
-};
+use crate::workspace_data::{CommonData, Focus};
 
 pub type PanelOrder = im::HashMap<PanelPosition, im::Vector<PanelKind>>;
 
@@ -58,7 +53,6 @@ pub struct PanelSize {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct PanelInfo {
-    pub panels: PanelOrder,
     pub styles: im::HashMap<PanelPosition, PanelStyle>,
     pub size: PanelSize,
     pub sections: im::HashMap<PanelSection, bool>,
@@ -77,12 +71,11 @@ pub struct PanelData {
 impl PanelData {
     pub fn new(
         cx: Scope,
-        panels: im::HashMap<PanelPosition, im::Vector<PanelKind>>,
         available_size: Memo<Size>,
         sections: im::HashMap<PanelSection, bool>,
         common: Rc<CommonData>,
     ) -> Self {
-        let panels = cx.create_rw_signal(panels);
+        let panels = cx.create_rw_signal(default_panel_order());
 
         let mut styles = im::HashMap::new();
         styles.insert(
@@ -161,7 +154,6 @@ impl PanelData {
 
     pub fn panel_info(&self) -> PanelInfo {
         PanelInfo {
-            panels: self.panels.get_untracked(),
             styles: self.styles.get_untracked(),
             size: self.size.get_untracked(),
             sections: self
@@ -371,48 +363,6 @@ impl PanelData {
                 style.shown = false;
             });
         }
-    }
-
-    pub fn move_panel_to_position(&self, kind: PanelKind, position: &PanelPosition) {
-        let current_position = self.panel_position(&kind);
-        if current_position.as_ref().map(|(_, pos)| pos) == Some(position) {
-            return;
-        }
-
-        let mut new_index_at_old_position = None;
-        let index = self
-            .panels
-            .try_update(|panels| {
-                if let Some((index, current_position)) = current_position {
-                    if let Some(panels) = panels.get_mut(&current_position) {
-                        panels.remove(index);
-
-                        let max_index = panels.len().saturating_sub(1);
-                        if index > max_index {
-                            new_index_at_old_position = Some(max_index);
-                        }
-                    }
-                }
-                let panels = panels.entry(*position).or_default();
-                panels.push_back(kind);
-                panels.len() - 1
-            })
-            .unwrap();
-        self.styles.update(|styles| {
-            if let Some((_, current_position)) = current_position {
-                if let Some(new_index) = new_index_at_old_position {
-                    let style = styles.entry(current_position).or_default();
-                    style.active = new_index;
-                }
-            }
-
-            let style = styles.entry(*position).or_default();
-            style.active = index;
-            style.shown = true;
-        });
-
-        let db: Arc<LapceDb> = use_context().unwrap();
-        db.save_panel_orders(self.panels.get_untracked());
     }
 
     pub fn section_open(&self, section: PanelSection) -> RwSignal<bool> {

@@ -14,7 +14,6 @@ use sha2::{Digest, Sha256};
 use crate::{
     app::{AppData, AppInfo},
     doc::DocInfo,
-    panel::{data::PanelOrder, kind::PanelKind},
     window::{WindowData, WindowInfo},
     workspace::{LapceWorkspace, WorkspaceInfo},
     workspace_data::WorkspaceData,
@@ -24,7 +23,6 @@ const APP: &str = "app";
 const WINDOW: &str = "window";
 const WORKSPACE_INFO: &str = "workspace_info";
 const WORKSPACE_FILES: &str = "workspace_files";
-const PANEL_ORDERS: &str = "panel_orders";
 const DISABLED_VOLTS: &str = "disabled_volts";
 const RECENT_WORKSPACES: &str = "recent_workspaces";
 
@@ -35,7 +33,6 @@ pub enum SaveEvent {
     Doc(DocInfo),
     DisabledVolts(Vec<VoltID>),
     WorkspaceDisabledVolts(Arc<LapceWorkspace>, Vec<VoltID>),
-    PanelOrder(PanelOrder),
 }
 
 #[derive(Clone)]
@@ -102,11 +99,6 @@ impl LapceDb {
                             if let Err(err) = local_db
                                 .insert_workspace_disabled_volts(workspace, volts)
                             {
-                                tracing::error!("{:?}", err);
-                            }
-                        }
-                        SaveEvent::PanelOrder(order) => {
-                            if let Err(err) = local_db.insert_panel_orders(&order) {
                                 tracing::error!("{:?}", err);
                             }
                         }
@@ -360,34 +352,6 @@ impl LapceDb {
 
         self.insert_workspace(&workspace, &workspace_info)?;
 
-        Ok(())
-    }
-
-    pub fn get_panel_orders(&self) -> Result<PanelOrder> {
-        let panel_orders = std::fs::read_to_string(self.folder.join(PANEL_ORDERS))?;
-        let mut panel_orders: PanelOrder = serde_json::from_str(&panel_orders)?;
-
-        use strum::IntoEnumIterator;
-        for kind in PanelKind::iter() {
-            if kind.position(&panel_orders).is_none() {
-                let panels =
-                    panel_orders.entry(kind.default_position()).or_default();
-                panels.push_back(kind);
-            }
-        }
-
-        Ok(panel_orders)
-    }
-
-    pub fn save_panel_orders(&self, order: PanelOrder) {
-        if let Err(err) = self.save_tx.send(SaveEvent::PanelOrder(order)) {
-            tracing::error!("{:?}", err);
-        }
-    }
-
-    fn insert_panel_orders(&self, order: &PanelOrder) -> Result<()> {
-        let info = serde_json::to_string_pretty(order)?;
-        std::fs::write(self.folder.join(PANEL_ORDERS), info)?;
         Ok(())
     }
 

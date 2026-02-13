@@ -2,7 +2,7 @@ use std::{rc::Rc, sync::Arc};
 
 use floem::{
     AnyView, IntoView, View,
-    event::{Event, EventListener, EventPropagation},
+    event::{Event, EventListener},
     kurbo::{Point, Size},
     reactive::{
         ReadSignal, RwSignal, SignalGet, SignalUpdate, SignalWith, create_rw_signal,
@@ -31,7 +31,7 @@ use crate::{
         implementation_view::implementation_panel,
         references_view::references_panel,
     },
-    workspace_data::{DragContent, WorkspaceData},
+    workspace_data::WorkspaceData,
 };
 
 pub fn foldable_panel_section(
@@ -238,57 +238,8 @@ pub fn panel_container_view(
 ) -> impl View {
     let panel = workspace_data.panel.clone();
     let config = workspace_data.common.config;
-    let dragging = workspace_data.common.dragging;
     let current_size = create_rw_signal(Size::ZERO);
     let available_size = workspace_data.panel.available_size;
-    let is_dragging_panel = move || {
-        dragging
-            .with(|d| d.as_ref().map(|d| d.is_panel()))
-            .unwrap_or(false)
-    };
-    let drop_view = {
-        let panel = panel.clone();
-        move |position: PanelPosition| {
-            let panel = panel.clone();
-            let dragging_over = create_rw_signal(false);
-            empty()
-                .on_event(EventListener::DragEnter, move |_| {
-                    if is_dragging_panel() {
-                        dragging_over.set(true);
-                        EventPropagation::Stop
-                    } else {
-                        EventPropagation::Continue
-                    }
-                })
-                .on_event(EventListener::DragLeave, move |_| {
-                    if is_dragging_panel() {
-                        dragging_over.set(false);
-                        EventPropagation::Stop
-                    } else {
-                        EventPropagation::Continue
-                    }
-                })
-                .on_event(EventListener::Drop, move |_| {
-                    if let Some(DragContent::Panel(kind)) = dragging.get_untracked()
-                    {
-                        dragging_over.set(false);
-                        panel.move_panel_to_position(kind, &position);
-                        EventPropagation::Stop
-                    } else {
-                        EventPropagation::Continue
-                    }
-                })
-                .style(move |s| {
-                    s.size_pct(100.0, 100.0).apply_if(dragging_over.get(), |s| {
-                        s.background(
-                            config
-                                .get()
-                                .color(LapceColor::EDITOR_DRAG_DROP_BACKGROUND),
-                        )
-                    })
-                })
-        }
-    };
 
     let resize_drag_view = {
         let panel = panel.clone();
@@ -424,15 +375,6 @@ pub fn panel_container_view(
         panel_view(workspace_data.clone(), position.second()),
         panel_picker(workspace_data.clone(), position.second()),
         resize_drag_view(position),
-        stack((drop_view(position.first()), drop_view(position.second()))).style(
-            move |s| {
-                let is_dragging_panel = is_dragging_panel();
-                s.absolute()
-                    .size_pct(100.0, 100.0)
-                    .apply_if(!is_bottom, |s| s.flex_col())
-                    .apply_if(!is_dragging_panel, |s| s.pointer_events_none())
-            },
-        ),
     ))
     .on_resize(move |rect| {
         let size = rect.size();
@@ -546,7 +488,6 @@ fn panel_picker(
     let panel = workspace_data.panel.clone();
     let panels = panel.panels;
     let config = workspace_data.common.config;
-    let dragging = workspace_data.common.dragging;
     let is_bottom = position.is_bottom();
     let is_first = position.is_first();
     dyn_stack(
@@ -591,25 +532,6 @@ fn panel_picker(
                     move || tooltip,
                     config,
                 )
-                .draggable()
-                .on_event_stop(EventListener::DragStart, move |_| {
-                    dragging.set(Some(DragContent::Panel(p)));
-                })
-                .on_event_stop(EventListener::DragEnd, move |_| {
-                    dragging.set(None);
-                })
-                .dragging_style(move |s| {
-                    let config = config.get();
-                    s.border(1.0)
-                        .border_radius(6.0)
-                        .border_color(config.color(LapceColor::LAPCE_BORDER))
-                        .padding(6.0)
-                        .background(
-                            config
-                                .color(LapceColor::PANEL_BACKGROUND)
-                                .multiply_alpha(0.7),
-                        )
-                })
                 .style(|s| s.padding(1.0)),
                 label(|| "".to_string()).style(move |s| {
                     s.selectable(false)

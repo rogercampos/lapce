@@ -59,7 +59,6 @@ use crate::{
     db::LapceDb,
     doc::DocContent,
     editor::location::{EditorLocation, EditorPosition},
-    editor_tab::EditorTabChild,
     file_explorer::data::FileExplorerData,
     find::Find,
     global_search::GlobalSearchData,
@@ -101,18 +100,6 @@ pub enum Focus {
 }
 
 #[derive(Clone)]
-pub enum DragContent {
-    Panel(PanelKind),
-    EditorTab(EditorTabChild),
-}
-
-impl DragContent {
-    pub fn is_panel(&self) -> bool {
-        matches!(self, DragContent::Panel(_))
-    }
-}
-
-#[derive(Clone)]
 pub struct WorkProgress {
     pub token: ProgressToken,
     pub title: String,
@@ -139,7 +126,6 @@ pub struct CommonData {
     pub proxy: ProxyRpcHandler,
     pub view_id: RwSignal<ViewId>,
     pub ui_line_height: Memo<f64>,
-    pub dragging: RwSignal<Option<DragContent>>,
     pub config: ReadSignal<Arc<LapceConfig>>,
     pub mouse_hover_timer: RwSignal<TimerToken>,
     // the current focused view which will receive keyboard events
@@ -348,7 +334,6 @@ impl WorkspaceData {
             proxy: proxy.proxy_rpc.clone(),
             view_id,
             ui_line_height,
-            dragging: cx.create_rw_signal(None),
             workbench_size: cx.create_rw_signal(Size::ZERO),
             config,
             mouse_hover_timer: cx.create_rw_signal(TimerToken::INVALID),
@@ -406,32 +391,23 @@ impl WorkspaceData {
         });
         let panel = workspace_info
             .as_ref()
-            .map(|i| {
-                let panel_order = db
-                    .get_panel_orders()
-                    .unwrap_or_else(|_| default_panel_order());
-                PanelData {
-                    panels: cx.create_rw_signal(panel_order),
-                    styles: cx.create_rw_signal(i.panel.styles.clone()),
-                    size: cx.create_rw_signal(i.panel.size.clone()),
-                    available_size: panel_available_size,
-                    sections: cx.create_rw_signal(
-                        i.panel
-                            .sections
-                            .iter()
-                            .map(|(key, value)| (*key, cx.create_rw_signal(*value)))
-                            .collect(),
-                    ),
-                    common: common.clone(),
-                }
+            .map(|i| PanelData {
+                panels: cx.create_rw_signal(default_panel_order()),
+                styles: cx.create_rw_signal(i.panel.styles.clone()),
+                size: cx.create_rw_signal(i.panel.size.clone()),
+                available_size: panel_available_size,
+                sections: cx.create_rw_signal(
+                    i.panel
+                        .sections
+                        .iter()
+                        .map(|(key, value)| (*key, cx.create_rw_signal(*value)))
+                        .collect(),
+                ),
+                common: common.clone(),
             })
             .unwrap_or_else(|| {
-                let panel_order = db
-                    .get_panel_orders()
-                    .unwrap_or_else(|_| default_panel_order());
                 PanelData::new(
                     cx,
-                    panel_order,
                     panel_available_size,
                     im::HashMap::new(),
                     common.clone(),

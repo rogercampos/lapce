@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use strum_macros::EnumIter;
 
-use super::{data::PanelOrder, position::PanelPosition};
+use super::position::PanelPosition;
 use crate::config::icon::LapceIcons;
 
 #[derive(
@@ -26,16 +26,6 @@ impl PanelKind {
             PanelKind::References => LapceIcons::REFERENCES,
             PanelKind::Implementation => LapceIcons::IMPLEMENTATION,
         }
-    }
-
-    pub fn position(&self, order: &PanelOrder) -> Option<(usize, PanelPosition)> {
-        for (pos, panels) in order.iter() {
-            let index = panels.iter().position(|k| k == self);
-            if let Some(index) = index {
-                return Some((index, *pos));
-            }
-        }
-        None
     }
 
     pub fn default_position(&self) -> PanelPosition {
