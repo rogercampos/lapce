@@ -293,6 +293,8 @@ Navigation through hierarchical results requires building a flat list of visible
 
 - **Keybinding conflicts with `when` conditions:** When adding a new keybinding, check for conflicts with existing bindings on the same key. A binding with a broader `when` condition (e.g., `!source_control_focus`) will match before a more specific one (e.g., `modal_focus`) if both conditions are true. The first matching binding wins. Use narrow conditions to avoid conflicts (e.g., `editor_focus && !modal_focus`).
 
+- **Native menu items have no keyboard accelerators:** Floem's `MenuItem` (`floem-local/src/menu.rs`) doesn't support accelerators — the `accelerator` parameter is hardcoded to `None` when calling `muda::MenuItem::with_id()`. This means **all keyboard shortcuts must be defined in the keymaps TOML files**, even standard OS shortcuts like Cmd+Q. Adding a menu item in `app.rs` does NOT give it a keyboard shortcut; you must also add a keybinding in `defaults/keymaps-{macos,nonmacos,common}.toml` that triggers the same command.
+
 - **`make_local` editors have no `editor_tab_id`:** Editors created via `main_split.editors.make_local()` get `editor_tab_id = None`. This means `pointer_down()` won't send `FocusEditorTab`, and many focus commands that require `editor_tab_id` (split, close tab, etc.) will return `CommandExecuted::No`. This is by design for preview/local editors.
 
 ## Reusable View Helpers
