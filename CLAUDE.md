@@ -78,9 +78,9 @@ All state uses **Floem reactive signals** (`RwSignal<T>`, `ReadSignal<T>`, `Memo
 | `doc.rs` | Document/buffer: rope text, syntax, diagnostics, find |
 | `command.rs` | All commands: `LapceWorkbenchCommand`, `InternalCommand`, `CommandKind` |
 | `config.rs` + `config/` | Config loading: `CoreConfig`, `EditorConfig`, `UIConfig` |
-| `db.rs` | Persistence: panel order, workspace state, recent files |
+| `db.rs` | Persistence: workspace state, recent files |
 | `proxy.rs` | Proxy process spawning and RPC bridge |
-| `panel/` | Panel system: `kind.rs` (types), `data.rs` (state/order), `view.rs` (rendering) |
+| `panel/` | Panel system: `kind.rs` (types), `data.rs` (state), `view.rs` (rendering) |
 | `palette/` | Command palette: `kind.rs` (modes with prefix symbols like `/`, `@`, `:`) |
 | `recent_files.rs` | Recent files popup: data, KeyPressFocus impl, view (uses `exclusive_popup`) |
 | `search_modal.rs` | Search modal popup: text input + flat results + preview, syncs with GlobalSearchData |
@@ -162,7 +162,7 @@ The `nucleo` crate is available as a dependency. For small lists (< ~1000 items)
 ```
 Vertical stack (flex_col) {
     Horizontal stack {
-        Left panel container    // File Explorer, Plugin
+        Left panel container    // File Explorer
         Editor area (main_split)
         Right panel container   // (empty by default)
     }
@@ -176,9 +176,9 @@ Panel containers hide automatically when empty. Layout defined in `workbench()` 
 
 Panels defined in `panel/kind.rs` as `PanelKind` enum. Each has a default position (`PanelPosition`: LeftTop, LeftBottom, BottomLeft, BottomRight, RightTop, RightBottom).
 
-Default order set in `panel/data.rs` → `default_panel_order()`. Default visibility (shown/hidden) set in `PanelData::new()` via `PanelStyle`.
+**Panel layout is fixed** — the order always comes from `default_panel_order()` in `panel/data.rs`. There is no drag-and-drop reordering. Default visibility (shown/hidden) set in `PanelData::new()` via `PanelStyle`.
 
-**Persistence caveat:** Panel order AND styles are persisted per-workspace in `db/workspaces/<hash>/workspace_info`. Changes to defaults only take effect for new workspaces or after deleting persisted state.
+**Persistence caveat:** Panel styles (active tab, shown, maximized), sizes, and section fold states are persisted per-workspace in `db/workspaces/<hash>/workspace_info`. Changes to style defaults only take effect for new workspaces or after deleting persisted state.
 
 ## Configuration
 
@@ -194,10 +194,9 @@ User config stored at `Directory::config_directory()` (macOS: `~/Library/Applica
 
 - `app` — window positions
 - `window` — window layout
-- `panel_orders` — global panel arrangement
 - `workspaces/<id>/workspace_info` — per-workspace: panel styles, open files, split layout
 
-**Important:** When changing panel defaults, you must delete `db/workspaces/` AND `db/panel_orders` to see changes, because the app loads persisted state over defaults.
+**Important:** When changing panel style defaults, you must delete `db/workspaces/` to see changes, because the app loads persisted state over defaults.
 
 ## Focus System & Keyboard Routing
 
