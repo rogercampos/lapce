@@ -1529,7 +1529,8 @@ fn editor_gutter(
             label(move || {
                 let doc = doc.get();
                 doc.buffer.with(|b| b.last_line() + 1).to_string()
-            }),
+            })
+            .style(|s| s.color(Color::TRANSPARENT)),
             empty().style(move |s| s.width(gutter_padding_right.get())),
         ))
         .debug_name("Centered Last Line Count")
