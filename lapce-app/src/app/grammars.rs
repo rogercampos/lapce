@@ -19,6 +19,9 @@ fn get_github_api(url: &str) -> Result<String> {
     Ok(resp.text()?)
 }
 
+/// Find the appropriate tree-sitter grammar release from GitHub. For stable/release builds,
+/// only grammars with a matching semver version are used (ensuring grammar compatibility).
+/// For debug/nightly builds, any grammar release is accepted to ease development.
 pub fn find_grammar_release() -> Result<ReleaseInfo> {
     let releases: Vec<ReleaseInfo> = serde_json::from_str(&get_github_api(
         "https://api.github.com/repos/lapce/tree-sitter-grammars/releases?per_page=100",
@@ -87,6 +90,9 @@ pub fn fetch_queries(release: &ReleaseInfo) -> Result<bool> {
     Ok(updated)
 }
 
+/// Download and extract a release asset if the local version doesn't match the remote.
+/// A "version" file in the target directory tracks the installed version to avoid
+/// redundant downloads. Returns true if an update was actually performed.
 fn download_release(
     dir: PathBuf,
     release: &ReleaseInfo,

@@ -4,6 +4,10 @@ use directories::{BaseDirs, ProjectDirs};
 
 use crate::meta::NAME;
 
+/// Centralized directory management for all Lapce data paths. Each method
+/// lazily creates the directory on first access. The app name includes the
+/// build type (e.g., "Lapce-Debug" vs "Lapce-Stable"), so different builds
+/// use separate data directories and don't interfere with each other.
 pub struct Directory {}
 
 impl Directory {

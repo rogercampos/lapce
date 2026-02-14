@@ -50,7 +50,10 @@ pub struct CompletionData {
     pub active: RwSignal<usize>,
     /// The current input that the user has typed which is being sent for consideration by the LSP
     pub input: String,
-    /// `(Input, CompletionItems)`
+    /// Maps each input prefix to its completion items from the LSP.
+    /// Multiple entries exist because the LSP may return different results for "" vs "pr" vs "pri".
+    /// When filtering, we first try the current input's items; if empty, we fall back to the
+    /// root "" items. This allows progressive refinement without losing the full result set.
     pub input_items: im::HashMap<String, im::Vector<ScoredCompletionItem>>,
     /// The filtered items that are being displayed to the user
     pub filtered_items: im::Vector<ScoredCompletionItem>,
@@ -161,6 +164,10 @@ impl CompletionData {
         self.filter_items();
     }
 
+    /// Get the best available items for the current input. Prefers items specifically
+    /// returned by the LSP for the current input string. If those are empty (not yet
+    /// received or empty response), falls back to the initial "" items, which provides
+    /// a broader set to filter from locally.
     fn all_items(&self) -> im::Vector<ScoredCompletionItem> {
         self.input_items
             .get(&self.input)
@@ -179,6 +186,8 @@ impl CompletionData {
         }
 
         // Filter the items by the fuzzy matching with the input text.
+        // Unlike the palette, this runs on the UI thread because completion lists
+        // are typically small (< ~100 items) and must update synchronously.
         let mut items: im::Vector<ScoredCompletionItem> = self
             .matcher
             .try_update(|matcher| {
@@ -190,6 +199,9 @@ impl CompletionData {
                 self.all_items()
                     .iter()
                     .filter_map(|i| {
+                        // LSP items have a separate filter_text (what to match against) vs label
+                        // (what to display). The shift accounts for when filter_text is a substring
+                        // of label so highlight indices align correctly with the displayed label.
                         let filter_text =
                             i.item.filter_text.as_ref().unwrap_or(&i.item.label);
                         let shift = i
@@ -339,10 +351,12 @@ impl CompletionData {
     }
 }
 
-/// Get the text of the completion lens for the given completion item.  
-/// Returns `None` if the completion lens should be hidden.
-/// Returns `Some(None)` if the completion lens should be shown, but not changed.
-/// Returns `Some(Some(text))` if the completion lens should be shown and changed to the given text.
+/// Get the text of the completion lens (ghost text shown inline after the cursor).
+/// The three-level return type optimizes re-rendering:
+/// - `None` = hide the lens (no valid completion or cursor moved away)
+/// - `Some(None)` = lens text is unchanged, skip the DOM update
+/// - `Some(Some(text))` = update the lens to show this new text
+/// This avoids flickering by not clearing and re-setting the same text on every keystroke.
 fn completion_lens_text(
     rope_text: impl RopeText,
     cursor_offset: usize,

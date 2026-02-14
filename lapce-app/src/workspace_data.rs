@@ -85,6 +85,11 @@ use crate::{
     workspace::{LapceWorkspace, LapceWorkspaceType, WorkspaceInfo},
 };
 
+/// Application-level focus state that determines which component receives keyboard
+/// events. The `key_down()` dispatcher in WorkspaceData uses this to route events
+/// to the correct KeyPressFocus implementor. Modal popups (About, RecentFiles,
+/// SearchModal) set their respective focus variant when opened and restore
+/// Focus::Workbench when closed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Focus {
     Workbench,
@@ -106,6 +111,10 @@ pub struct WorkProgress {
     pub percentage: Option<u32>,
 }
 
+/// Shared state accessible to all components within a workspace tab.
+/// Passed as `Rc<CommonData>` to avoid deep cloning. Contains the proxy RPC handle,
+/// reactive config signal, focus state, and command listeners that any component
+/// can use to send commands without knowing about the full WorkspaceData hierarchy.
 #[derive(Clone)]
 pub struct CommonData {
     pub workspace: Arc<LapceWorkspace>,
@@ -140,6 +149,10 @@ impl std::fmt::Debug for CommonData {
     }
 }
 
+/// The per-workspace-tab state container. Each OS window tab has its own WorkspaceData
+/// with its own proxy process, editor splits, panels, palette, and configuration.
+/// This is the central orchestrator that wires together all subsystems and handles
+/// command dispatch via the three command listeners (lapce, workbench, internal).
 #[derive(Clone)]
 pub struct WorkspaceData {
     pub scope: Scope,
@@ -248,12 +261,17 @@ impl KeyPressFocus for WorkspaceData {
 }
 
 impl WorkspaceData {
+    /// Master initialization: creates the entire workspace state graph.
+    /// Order matters: proxy must be started before components that send RPC calls,
+    /// and the split tree must be populated from persisted info before the palette
+    /// (which references main_split) is created.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         cx: Scope,
         workspace: Arc<LapceWorkspace>,
         window_common: Rc<WindowCommonData>,
     ) -> Self {
+        // Child scope ensures all signals are cleaned up when this workspace tab is closed.
         let cx = cx.create_child();
         let db: Arc<LapceDb> = use_context().unwrap();
 
@@ -264,6 +282,9 @@ impl WorkspaceData {
         let mut all_disabled_volts = disabled_volts.clone();
         all_disabled_volts.extend(workspace_disabled_volts.clone());
 
+        // Load persisted workspace layout. For workspaces without a folder path
+        // (bare windows), we clear the split children to avoid restoring stale
+        // file editors that would fail to load.
         let workspace_info = if workspace.path.is_some() {
             db.get_workspace_info(&workspace).ok()
         } else {
@@ -284,12 +305,16 @@ impl WorkspaceData {
         let internal_command = Listener::new_empty(cx);
         let keypress = cx.create_rw_signal(KeyPressData::new(cx, &config));
 
+        // Start the proxy backend (runs as a thread in-process for local workspaces).
+        // The proxy handles LSP, plugins, file watching, and global search.
         let proxy = new_proxy(
             workspace.clone(),
             all_disabled_volts,
             window_common.extra_plugin_paths.as_ref().clone(),
             config.plugins.clone(),
         );
+        // Split config into read and write signals so that components only get
+        // read access (via common.config) while only WorkspaceData can update it.
         let (config, set_config) = cx.create_signal(Arc::new(config));
 
         let focus = cx.create_rw_signal(Focus::Workbench);
@@ -346,6 +371,9 @@ impl WorkspaceData {
         let file_explorer =
             FileExplorerData::new(cx, main_split.editors, common.clone());
 
+        // Restore the split tree from persisted workspace info, or create an empty root.
+        // `to_data()` recursively reconstructs the entire split tree, editor tabs,
+        // and editors from the serialized SplitInfo/EditorTabInfo/EditorInfo hierarchy.
         if let Some(info) = workspace_info.as_ref() {
             let root_split = main_split.root_split;
             info.split.to_data(main_split.clone(), None, root_split);
@@ -472,6 +500,9 @@ impl WorkspaceData {
             common,
         };
 
+        // Reset the cursor blink timer whenever focus or active editor changes,
+        // so the cursor is always visible immediately after switching. Also auto-dismiss
+        // the rename popup when focus moves away from it.
         {
             let focus = workspace_data.common.focus;
             let active_editor = workspace_data.main_split.active_editor;
@@ -510,6 +541,10 @@ impl WorkspaceData {
             });
         }
 
+        // Bridge proxy notifications into the reactive system. The proxy's CoreRpcHandler
+        // sends notifications through an mpsc channel, which create_signal_from_channel
+        // converts to a signal. This effect processes each notification (diagnostics,
+        // completion responses, file changes, progress updates, etc.) as it arrives.
         {
             let workspace_data = workspace_data.clone();
             let notification = workspace_data.proxy.notification;
@@ -1644,6 +1679,11 @@ impl WorkspaceData {
         }
     }
 
+    /// Master keyboard event dispatcher. Routes events based on the current Focus:
+    /// 1. First dispatches to the focused component's KeyPressFocus impl
+    /// 2. If unhandled, falls back to WorkspaceData's own KeyPressFocus impl
+    ///    (which handles workbench-level commands like split/close)
+    /// Alert dialog blocks all keyboard input when active.
     pub fn key_down<'a>(&self, event: impl Into<EventRef<'a>> + Copy) -> bool {
         if self.alert_data.active.get_untracked() {
             return false;
@@ -1691,6 +1731,8 @@ impl WorkspaceData {
         }
     }
 
+    /// Serializes the current workspace state (split tree layout + panel configuration)
+    /// for persistence. Called during save operations to capture the complete layout.
     pub fn workspace_info(&self) -> WorkspaceInfo {
         let main_split_data = self
             .main_split

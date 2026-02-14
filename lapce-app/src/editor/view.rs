@@ -133,6 +133,14 @@ pub struct EditorView {
     viewport: RwSignal<Rect>,
 }
 
+/// Create the core editor view widget. This sets up reactive effects that trigger
+/// relayout/repaint when the document, view kind, cursor, or buffer revision changes.
+/// The sticky header computation is also wired as an effect here, using a revision
+/// tuple to avoid redundant recalculations.
+///
+/// IME handling is set up via event listeners: `ImePreedit` for composition preview
+/// text and `ImeCommit` for finalized input. The `is_active` guard prevents inactive
+/// editors (in non-focused splits) from consuming IME events.
 pub fn editor_view(
     e_data: EditorData,
     is_active: impl Fn(bool) -> bool + 'static + Copy,
@@ -629,8 +637,12 @@ impl EditorView {
         }
     }
 
-    /// Paint scope lines between `(start_rvline, start_line, start_col)` and
-    /// `(end_rvline, end_line end_col)`.
+    /// Paint scope lines between matching brackets. Draws an L-shaped indicator:
+    /// a vertical line along the left edge of the scope, with horizontal lines
+    /// connecting to the opening and closing brackets. The vertical line is
+    /// positioned at the minimum indentation of the enclosed lines, creating a
+    /// visual guide that follows the code structure. When brackets are on the
+    /// same line, only a horizontal underline is drawn.
     fn paint_scope_lines(
         &self,
         cx: &mut PaintCx,
@@ -857,6 +869,15 @@ impl View for EditorView {
         }
     }
 
+    /// Compute the layout size of the editor content. The width is determined by the
+    /// widest text line (plus padding), and the height by the total number of visual
+    /// lines times line height. For non-local editors, size is clamped to at least
+    /// the viewport size so the scroll container always fills its parent.
+    ///
+    /// The `text_layout(line)` call for each visible line is a critical side effect:
+    /// it populates the text layout cache, which is needed for `max_line_width()` to
+    /// return an accurate value. Without this, the horizontal scrollbar extent would
+    /// be wrong on first render.
     fn layout(
         &mut self,
         cx: &mut floem::context::LayoutCx,
@@ -873,7 +894,7 @@ impl View for EditorView {
 
             let screen_lines = e_data.screen_lines().get_untracked();
             for (line, _) in screen_lines.iter_lines_y() {
-                // fill in text layout cache so that max width is correct.
+                // Populate text layout cache so that max_line_width() is correct.
                 editor.text_layout(line);
             }
 
@@ -932,6 +953,18 @@ impl View for EditorView {
         None
     }
 
+    /// The main paint entry point. Rendering order matters for correct layering:
+    /// 1. Current line highlight (background)
+    /// 2. Selection rectangles (background)
+    /// 3. Find/search result outlines
+    /// 4. Bracket highlights and scope lines
+    /// 5. Text content (foreground, including phantom text like inlay hints)
+    /// 6. Sticky headers (painted on top of scrolled content)
+    /// 7. Scroll bar
+    ///
+    /// `screen_lines` is re-fetched between paint stages as a safety measure:
+    /// some paint functions could theoretically trigger signal updates that
+    /// invalidate the cached screen lines.
     fn paint(&mut self, cx: &mut PaintCx) {
         let viewport = self.viewport.get_untracked();
         let e_data = &self.editor;
@@ -942,10 +975,6 @@ impl View for EditorView {
         let find_focus = self.editor.find_focus;
         let is_active =
             self.is_active.get_untracked() && !find_focus.get_untracked();
-
-        // We repeatedly get the screen lines because we don't currently carefully manage the
-        // paint functions to avoid potentially needing to recompute them, which could *maybe*
-        // make them invalid.
         // TODO: One way to get around the above issue would be to more careful, since we
         // technically don't need to stop it from *recomputing* just stop any possible changes, but
         // avoiding recomputation seems easiest/clearest.
@@ -973,6 +1002,12 @@ impl View for EditorView {
     }
 }
 
+/// Compute which lines should appear as sticky headers at the top of the editor.
+/// The algorithm walks the syntax tree to find enclosing scope headers (function
+/// definitions, class declarations, etc.) for the first visible line. It then
+/// checks if the next line's headers differ, which determines whether the last
+/// sticky header should scroll out (creating a push-up animation effect when
+/// scrolling past a scope boundary).
 fn get_sticky_header_info(
     editor_data: &EditorData,
     viewport: RwSignal<Rect>,
@@ -1741,6 +1776,12 @@ fn editor_content(
     })
     .scroll_to(move || scroll_to.get().map(|s| s.to_point()))
     .scroll_delta(move || scroll_delta.get())
+    // Ensure the cursor is visible within the scroll viewport. When the cursor
+    // is very far from the viewport (e.g., after a goto-line), we inflate the
+    // rect to center the view rather than scrolling to the edge. The
+    // `cursor_surrounding_lines` config adds padding above/below the cursor,
+    // and `sticky_header_height` is subtracted from the top padding so the
+    // cursor isn't hidden behind sticky headers.
     .ensure_visible(move || {
         let e_data = e_data.get_untracked();
         let cursor = cursor.get();

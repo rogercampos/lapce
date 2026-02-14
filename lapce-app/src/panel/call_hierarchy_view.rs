@@ -19,6 +19,11 @@ use crate::{
     workspace_data::{CommonData, WorkspaceData},
 };
 
+/// Data model for the call hierarchy panel. The tree is lazily loaded: expanding
+/// a node that hasn't been initialized sends a CallHierarchyIncoming command to the
+/// LSP, which populates the children asynchronously. The root is doubly-wrapped in
+/// signals (Option<RwSignal<...>>) so that the entire tree can be replaced when a
+/// new call hierarchy is requested.
 #[derive(Clone, Debug)]
 pub struct CallHierarchyData {
     pub root: RwSignal<Option<RwSignal<CallHierarchyItemData>>>,
@@ -26,11 +31,16 @@ pub struct CallHierarchyData {
     pub scroll_to_line: RwSignal<Option<f64>>,
 }
 
+/// A node in the call hierarchy tree. `init` tracks whether this node's children
+/// have been fetched from the LSP. When false and the user expands the node,
+/// a CallHierarchyIncoming request is sent. `from_range` is the range in the
+/// caller where the call occurs, used for jump-to-location on click.
 #[derive(Debug, Clone)]
 pub struct CallHierarchyItemData {
     pub view_id: ViewId,
     pub item: Rc<CallHierarchyItem>,
     pub from_range: Range,
+    /// Whether children have been fetched from the LSP. False for newly created nodes.
     pub init: bool,
     pub open: RwSignal<bool>,
     pub children: RwSignal<Vec<RwSignal<CallHierarchyItemData>>>,

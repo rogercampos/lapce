@@ -22,6 +22,10 @@ use crate::{
     workspace_data::CommonData,
 };
 
+/// Per-file group of search matches. The `expanded` signal controls whether
+/// individual matches are visible under the file header in the hierarchical
+/// results view. `line_height` is shared from CommonData so that height
+/// calculations stay in sync with the UI.
 #[derive(Clone)]
 pub struct SearchMatchData {
     pub expanded: RwSignal<bool>,
@@ -30,6 +34,8 @@ pub struct SearchMatchData {
 }
 
 impl SearchMatchData {
+    /// The dynamic height used by the virtual_stack's `item_size_fn`. When collapsed,
+    /// only the file header row is counted. When expanded, each match adds one row.
     pub fn height(&self) -> f64 {
         let line_height = self.line_height.get();
         let count = if self.expanded.get() {
@@ -41,19 +47,35 @@ impl SearchMatchData {
     }
 }
 
+/// The shared search backend used by both the search modal and the search panel.
+/// Results are stored as an IndexMap<PathBuf, SearchMatchData> to maintain file
+/// order from the proxy. The `editor` is the panel's input editor, while both
+/// the modal and panel can call `set_pattern()` to programmatically trigger searches.
+/// `preview_editor` is the panel's side-by-side preview; the modal has its own.
 #[derive(Clone, Debug)]
 pub struct GlobalSearchData {
     pub editor: EditorData,
+    /// Hierarchical results: file path -> per-file match data. IndexMap preserves
+    /// insertion order so results appear in the order the proxy returns them.
     pub search_result: RwSignal<IndexMap<PathBuf, SearchMatchData>>,
     pub main_split: MainSplitData,
     pub common: Rc<CommonData>,
     pub preview_editor: EditorData,
     pub has_preview: RwSignal<bool>,
+    /// Currently selected match: (file_path, line, start_col, end_col).
+    /// Used for highlighting and preview synchronization.
     pub selected_match: RwSignal<Option<(PathBuf, usize, usize, usize)>>,
+    /// When true, keyboard input is forwarded to the preview editor instead of
+    /// the result list navigation. Set on click into the preview, cleared on
+    /// list navigation (next/previous).
     pub preview_focused: RwSignal<bool>,
 }
 
 impl KeyPressFocus for GlobalSearchData {
+    /// The preview_focused pattern: when the preview is focused we report
+    /// EditorFocus (not ListFocus) so arrow keys work as editor movement
+    /// rather than list navigation. PanelFocus is always reported so
+    /// panel-specific keybindings (like toggle maximize) still fire.
     fn check_condition(&self, condition: Condition) -> bool {
         if self.preview_focused.get_untracked() {
             matches!(condition, Condition::PanelFocus | Condition::EditorFocus)
@@ -99,6 +121,12 @@ impl KeyPressFocus for GlobalSearchData {
     }
 }
 
+/// VirtualVector impl for the hierarchical results view. total_len counts all
+/// visible rows (file headers + expanded matches) for scroll height calculation.
+/// Note: slice() ignores the range and returns ALL results because the outer
+/// virtual_stack uses `item_size_fn` for variable-height items and needs the
+/// full list. The inner virtual_stack for each file's matches handles its own
+/// virtualization.
 impl VirtualVector<(PathBuf, SearchMatchData)> for GlobalSearchData {
     fn total_len(&self) -> usize {
         self.search_result.with(|result| {
@@ -145,6 +173,10 @@ impl GlobalSearchData {
             preview_focused,
         };
 
+        // Reactive effect: whenever the editor buffer text changes, fire a new search
+        // request to the proxy. The proxy performs the actual file-system search in the
+        // background and sends results back via create_ext_action. This is debounce-free:
+        // every keystroke triggers a new search (the proxy handles cancellation of old ones).
         {
             let global_search = global_search.clone();
             let buffer = global_search.editor.doc().buffer;
@@ -209,6 +241,9 @@ impl GlobalSearchData {
         global_search
     }
 
+    /// Merges new proxy results into the existing result map. Reuses existing
+    /// SearchMatchData (and its RwSignals) for files that were already present,
+    /// preserving their expanded/collapsed state across search updates.
     fn update_matches(&self, matches: IndexMap<PathBuf, Vec<SearchMatch>>) {
         let current = self.search_result.get_untracked();
 
@@ -236,6 +271,10 @@ impl GlobalSearchData {
         );
     }
 
+    /// Flattens the hierarchical results into a linear list of only the matches
+    /// that are currently visible (i.e., their parent file group is expanded).
+    /// This is needed for keyboard navigation (next/previous) through the results
+    /// because the navigation is linear even though the view is hierarchical.
     fn visible_matches(&self) -> Vec<(PathBuf, usize, usize, usize)> {
         self.search_result.with_untracked(|results| {
             let mut flat = Vec::new();

@@ -3,9 +3,15 @@ use std::path::PathBuf;
 use tracing::{Level, event};
 use url::Url;
 
-// Rust-analyzer returns paths in the form of "file:///<drive>:/...", which gets parsed into URL
-// as "/<drive>://" which is then interpreted by PathBuf::new() as a UNIX-like path from root.
-// This function strips the additional / from the beginning, if the first segment is a drive letter.
+/// Converts an LSP file URI to a PathBuf, handling platform-specific quirks.
+///
+/// On Windows, rust-analyzer returns URIs like "file:///C:/..." which URL::to_file_path()
+/// sometimes misparses. This function handles various edge cases:
+/// - Encoded drive letters (e.g., "%3A" instead of ":")
+/// - Extra leading slashes before the drive letter
+/// - Percent-encoded path segments
+///
+/// On Unix, this is straightforward but still handles percent-encoding fallbacks.
 #[cfg(windows)]
 pub fn path_from_url(url: &Url) -> PathBuf {
     use percent_encoding::percent_decode_str;

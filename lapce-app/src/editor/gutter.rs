@@ -12,6 +12,11 @@ use serde::{Deserialize, Serialize};
 use super::EditorData;
 use crate::config::{LapceConfig, color::LapceColor};
 
+/// Custom view for rendering line numbers in the editor gutter.
+/// Line numbers are right-aligned within the gutter width, and the current line
+/// is highlighted with a brighter foreground color. The `width` field is updated
+/// during `compute_layout` from the actual layout size, enabling right-alignment
+/// calculations in `paint`.
 pub struct EditorGutterView {
     id: ViewId,
     editor: EditorData,
@@ -34,6 +39,10 @@ pub fn editor_gutter_view(
 }
 
 impl EditorGutterView {
+    /// Paint the gutter background behind sticky headers. This ensures the gutter area
+    /// under sticky headers has a solid background (with a subtle shadow) so line
+    /// numbers from scrolled content don't show through. The rect is inflated
+    /// horizontally to cover the full gutter width including code lens icons.
     fn paint_sticky_headers(
         &self,
         cx: &mut PaintCx,
@@ -52,6 +61,8 @@ impl EditorGutterView {
             return;
         }
 
+        // The rect extends beyond the gutter width (-25.0 origin + inflate) to ensure
+        // full coverage of the gutter area including the code lens icon column.
         let sticky_area_rect =
             Size::new(self.width + 25.0 + 30.0, sticky_header_height)
                 .to_rect()
@@ -176,6 +187,9 @@ pub struct FoldingRanges(pub Vec<FoldingRange>);
 pub struct FoldedRanges(pub Vec<FoldedRange>);
 
 impl FoldingRanges {
+    /// Extract only the actively folded ranges, skipping any ranges that are
+    /// nested inside an already-folded parent range. The `limit_line` tracks the
+    /// end of the last folded range to skip nested children.
     pub fn get_folded_range(&self) -> FoldedRanges {
         let mut range = Vec::new();
         let mut limit_line = 0;
@@ -311,6 +325,10 @@ pub enum FoldingRangeStatus {
 }
 
 impl FoldingRangeStatus {
+    /// Toggle fold state. Currently a no-op because code folding is not yet
+    /// fully implemented (the folding range view is hidden via `.hide()` in
+    /// `editor_gutter_folding_range`). The commented-out toggle logic is the
+    /// intended implementation.
     pub fn click(&mut self) {
         // match self {
         //     FoldingRangeStatus::Fold => {

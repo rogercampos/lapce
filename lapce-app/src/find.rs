@@ -15,6 +15,9 @@ use lapce_xi_rope::{
 use regex::{Regex, RegexBuilder};
 use serde::{Deserialize, Serialize};
 
+/// Safety limit on compiled regex size to prevent denial-of-service from
+/// pathological patterns (e.g., deeply nested quantifiers). 1MB is generous
+/// for typical search patterns.
 const REGEX_SIZE_LIMIT: usize = 1000000;
 
 /// Indicates what changed in the find state.
@@ -193,6 +196,11 @@ impl Find {
         }));
     }
 
+    /// Find the next (or previous if reverse=true) occurrence of the search pattern
+    /// relative to the given offset. When wrap=true, wraps around the document boundaries.
+    /// Returns the (start, end) byte offsets of the match, or None if not found.
+    /// For reverse search, we must collect all matches before the offset and take the last,
+    /// because the underlying find() only searches forward.
     pub fn next(
         &self,
         text: &Rope,
@@ -344,6 +352,10 @@ impl Find {
         })
     }
 
+    /// Search for all occurrences of the pattern within the [start, end] range and add
+    /// them to `occurrences`. The "slop" expands the search range by 2x the search string
+    /// length on each side -- this catches matches that span the region boundaries
+    /// (e.g., a match that starts just before `start` and ends within the range).
     #[allow(clippy::too_many_arguments)]
     pub fn find(
         text: &Rope,
@@ -515,6 +527,11 @@ impl Find {
     }
 }
 
+/// Per-document find results. Each open document has its own FindResult which stores
+/// the computed match occurrences. The `progress` signal tracks incremental search state
+/// so the editor can show partial results while a large document is still being searched.
+/// The signals here mirror the Find settings so each document can detect when it needs
+/// to re-run the search (e.g., find settings changed but the document hasn't been re-scanned yet).
 #[derive(Clone)]
 pub struct FindResult {
     pub find_rev: RwSignal<u64>,

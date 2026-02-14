@@ -153,39 +153,61 @@ pub type CodeActions =
 
 pub type AllCodeLens = im::HashMap<usize, (PluginId, usize, im::Vector<CodeLens>)>;
 
+/// The document model -- the source of truth for a file's text content and associated
+/// metadata (syntax, diagnostics, inlay hints, completions, etc.).
+///
+/// A `Doc` is shared (via `Rc`) across all `EditorData` instances viewing the same file.
+/// Multiple editors can view the same `Doc` (e.g., split views). The `Doc` is responsible
+/// for:
+/// - Holding the `Buffer` (rope text) behind a reactive signal
+/// - Triggering async operations on edit (syntax re-parse, LSP requests)
+/// - Managing phantom text (inlay hints, error lens, completion lens, inline completion)
+/// - Caching computed data (line styles, sticky headers)
+///
+/// The `cache_rev` signal is incremented whenever cached text layouts should be
+/// invalidated (e.g., after edits, style changes, diagnostics updates). The floem
+/// editor checks this to know when to recompute text layouts.
 #[derive(Clone)]
 pub struct Doc {
     pub scope: Scope,
     pub buffer_id: BufferId,
     pub content: RwSignal<DocContent>,
+    /// Monotonically increasing revision that invalidates text layout caches.
+    /// Incremented by `clear_text_cache()` whenever visual representation changes
+    /// even if the underlying text hasn't (e.g., new inlay hints arrived).
     pub cache_rev: RwSignal<u64>,
     /// Whether the buffer's content has been loaded/initialized into the buffer.
     pub loaded: RwSignal<bool>,
     pub buffer: RwSignal<Buffer>,
     pub syntax: RwSignal<Syntax>,
+    /// Semantic token styles from LSP. Takes priority over tree-sitter syntax styles
+    /// when present (see `styles()` method).
     semantic_styles: RwSignal<Option<Spans<Style>>>,
-    /// Inlay hints for the document
+    /// Inlay hints from LSP, stored as spans over the buffer so they can be
+    /// efficiently updated when the buffer is edited (via `apply_shape`).
     pub inlay_hints: RwSignal<Option<Spans<InlayHint>>>,
-    /// Current completion lens text, if any.
-    /// This will be displayed even on views that are not focused.
+    /// Completion lens: ghost text showing the top completion item inline.
     pub completion_lens: RwSignal<Option<String>>,
-    /// (line, col)
+    /// (line, col) position where the completion lens is anchored.
     pub completion_pos: RwSignal<(usize, usize)>,
 
-    /// Current inline completion text, if any.
-    /// This will be displayed even on views that are not focused.
+    /// Inline completion (e.g., Copilot-style) ghost text.
     pub inline_completion: RwSignal<Option<String>>,
-    /// (line, col)
+    /// (line, col) position where the inline completion is anchored.
     pub inline_completion_pos: RwSignal<(usize, usize)>,
 
     /// (Offset -> (Plugin the code actions are from, Code Actions))
+    /// Cleared on every edit to force re-fetching from LSP at the new cursor position.
     pub code_actions: RwSignal<CodeActions>,
 
     pub code_lens: RwSignal<AllCodeLens>,
 
     pub folding_ranges: RwSignal<FoldingRanges>,
 
+    /// Per-line syntax highlight style cache. Cleared on every edit/style change.
+    /// This avoids recomputing `line_styles()` from `Spans<Style>` on every paint.
     line_styles: Rc<RefCell<LineStyles>>,
+    /// Bracket pair colorization parser, separate from tree-sitter syntax.
     pub parser: Rc<RefCell<BracketParser>>,
 
     /// A cache for the sticky headers which maps a line to the lines it should show in the header.
@@ -198,6 +220,8 @@ pub struct Doc {
     /// The diagnostics for the document
     pub diagnostics: DiagnosticData,
 
+    /// Reference to the editors registry, used to look up `EditorData` by `EditorId`
+    /// when the floem `Editor` delegates commands back through the `Document` trait.
     editors: Editors,
     pub common: Rc<CommonData>,
 }
@@ -572,6 +596,18 @@ impl Doc {
         deltas
     }
 
+    /// Apply text deltas to all document-level state. This is the central post-edit
+    /// hook that keeps everything in sync:
+    /// 1. Update style spans (semantic + syntax) by shifting positions
+    /// 2. Update inlay hint positions
+    /// 3. Update diagnostic span positions
+    /// 4. Update completion/inline-completion lens positions
+    /// 5. Update find result positions
+    /// 6. Notify the proxy (LSP) of the buffer change for incremental sync
+    /// 7. Trigger syntax re-parse on a background thread
+    ///
+    /// The `rev` calculation accounts for multiple deltas: each delta increments
+    /// the buffer revision, so the base revision for proxy sync is `current_rev - len`.
     pub fn apply_deltas(&self, deltas: &[(Rope, RopeDelta, InvalLines)]) {
         let rev = self.rev() - deltas.len() as u64;
         batch(|| {
@@ -619,6 +655,11 @@ impl Doc {
         self.buffer.with_untracked(|b| b.line_ending())
     }
 
+    /// Called after every buffer modification. Triggers all async and sync side effects:
+    /// syntax re-parse, auto-save check, LSP requests (inlay hints, diagnostics,
+    /// semantic tokens, code lens), find reset, bracket colorization, and cache
+    /// invalidation. The `edits` parameter enables incremental syntax parsing when
+    /// available (passed as `None` for full re-parses like initial load).
     fn on_update(&self, edits: Option<SmallVec<[SyntaxEdit; 3]>>) {
         batch(|| {
             self.trigger_syntax_change(edits);
@@ -750,6 +791,11 @@ impl Doc {
         });
     }
 
+    /// Trigger an async syntax re-parse on a rayon thread pool. Before spawning,
+    /// the old parse's cancel flag is set to abort it early if still running.
+    /// A new cancel flag is created so the new parse can be independently cancelled.
+    /// When the parse completes, it only applies results if the buffer revision
+    /// hasn't changed (stale results are discarded).
     pub fn trigger_syntax_change(&self, edits: Option<SmallVec<[SyntaxEdit; 3]>>) {
         let (rev, text) =
             self.buffer.with_untracked(|b| (b.rev(), b.text().clone()));
@@ -802,8 +848,10 @@ impl Doc {
         self.sticky_headers.borrow_mut().clear();
     }
 
-    /// Get the active style information, either the semantic styles or the
-    /// tree-sitter syntax styles.
+    /// Get the active style information. Semantic styles (from LSP semantic tokens)
+    /// take priority over tree-sitter syntax styles because they are generally more
+    /// accurate -- LSP understands the full type system while tree-sitter only does
+    /// syntactic analysis. Falls back to tree-sitter when no semantic tokens are available.
     fn styles(&self) -> Option<Spans<Style>> {
         if let Some(semantic_styles) = self.semantic_styles.get_untracked() {
             Some(semantic_styles)
@@ -1367,6 +1415,14 @@ impl Doc {
             })
     }
 }
+/// Implementation of the floem `Document` trait, which is the interface that the
+/// floem `Editor` uses to interact with the document. This bridges Lapce's `Doc`
+/// into floem's editor framework. Key methods:
+/// - `compute_screen_lines`: delegates to Lapce's custom implementation
+/// - `run_command` / `receive_char`: look up the `EditorData` by editor ID and
+///   delegate, connecting floem's editor command system to Lapce's command pipeline
+/// - `find_unmatched` / `find_matching_pair`: use syntax-aware bracket matching
+///   when tree-sitter is available, falling back to simple text scanning
 impl Document for Doc {
     fn text(&self) -> Rope {
         self.buffer.with_untracked(|buffer| buffer.text().clone())
@@ -1478,6 +1534,17 @@ impl Document for Doc {
     }
 }
 
+/// Phantom text implementation. Phantom text is virtual text rendered inline within
+/// the editor but not part of the actual buffer content. This includes:
+/// - Inlay hints (type annotations, parameter names from LSP)
+/// - Error lens (diagnostic messages at end of line)
+/// - Completion lens (ghost text from top completion item)
+/// - Inline completion (Copilot-style suggestions)
+/// - IME preedit text
+///
+/// All phantom texts for a line are collected, sorted by column, and returned as a
+/// `PhantomTextLine`. The floem editor uses this to insert virtual spans into the
+/// text layout, adjusting column positions for cursor movement and rendering.
 impl DocumentPhantom for Doc {
     fn phantom_text(
         &self,
@@ -1506,6 +1573,13 @@ impl DocumentPhantom for Doc {
                 interval.start >= start_offset && interval.start < end_offset
             })
             .map(|(interval, inlay_hint)| {
+                // Determine the visual affinity of this inlay hint -- whether it
+                // should appear before or after the character at its position.
+                // The heuristic looks at surrounding characters:
+                // - After punctuation (CharClassification::Other): hint goes before (Backward)
+                // - After whitespace/newline: hint goes after (Forward)
+                // This places type hints after variable names and parameter hints
+                // before argument values, matching user expectations.
                 let (col, affinity) = self.buffer.with_untracked(|b| {
                     let mut cursor =
                         lapce_xi_rope::Cursor::new(b.text(), interval.start);
@@ -1873,6 +1947,16 @@ impl Styling for DocStyling {
         }
     }
 
+    /// Apply extra visual styles to a text layout line after it has been created.
+    /// This adds:
+    /// 1. Background colors for phantom text (inlay hint backgrounds)
+    /// 2. Wave/underline decorations for diagnostics (squiggly lines under errors)
+    /// 3. Full-line background tinting for error lens (colored background for lines
+    ///    with diagnostics)
+    ///
+    /// The diagnostic severity determines the color: errors get a red tint, warnings
+    /// get yellow, and everything else gets a neutral color. Only the worst severity
+    /// on a line determines the background color.
     fn apply_layout_styles(
         &self,
         edid: EditorId,

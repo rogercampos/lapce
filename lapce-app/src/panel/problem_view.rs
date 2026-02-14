@@ -24,6 +24,10 @@ use crate::{
     workspace_data::WorkspaceData,
 };
 
+/// The problem panel displays LSP diagnostics in two foldable sections: Errors and
+/// Warnings. Each section shows diagnostics grouped by file, with individual
+/// diagnostic messages indented under the file header. Clicking a diagnostic
+/// navigates to its location in the editor.
 pub fn problem_panel(
     workspace_data: Rc<WorkspaceData>,
     position: PanelPosition,
@@ -80,6 +84,11 @@ fn problem_section(
     .style(|s| s.size_pct(100.0, 100.0))
 }
 
+/// Renders a single file's diagnostics. Uses create_effect to reactively filter
+/// diagnostics by severity from two possible sources: diagnostics_span (when the
+/// document has been opened and parsed, providing byte offset ranges) or plain
+/// diagnostics (LSP-reported line/col ranges). The effect re-runs whenever either
+/// source changes, keeping the display in sync with live LSP updates.
 fn file_view(
     workspace: Arc<LapceWorkspace>,
     path: PathBuf,
@@ -91,6 +100,10 @@ fn file_view(
     let collpased = create_rw_signal(false);
 
     let diagnostics = create_rw_signal(im::Vector::new());
+    // The effect bridges two different diagnostic representations: diagnostics_span
+    // (from the document's interval tree, with byte offsets) and plain diagnostics
+    // (from LSP, with Position ranges). The span version is preferred when available
+    // because it provides more precise jump-to-location behavior.
     create_effect(move |_| {
         let span = diagnostic_data.diagnostics_span.get();
         let d = if !span.is_empty() {

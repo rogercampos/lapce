@@ -9,6 +9,10 @@ use smallvec::SmallVec;
 
 use crate::config::{LapceConfig, color::LapceColor};
 
+/// Represents a rendered block of markdown content. The parser breaks markdown into
+/// these blocks so the view layer can lay them out vertically -- each Text block is
+/// a self-contained TextLayout that handles its own word wrapping and styling.
+/// Images and separators are handled as distinct view elements.
 #[derive(Clone)]
 pub enum MarkdownContent {
     Text(TextLayout),
@@ -37,6 +41,9 @@ pub fn parse_markdown(
 
     let mut pos = 0;
 
+    // Tag stack tracks the byte offset where each tag opened, so we can apply
+    // styling spans retroactively when the closing tag is encountered. SmallVec<4>
+    // avoids heap allocation for typical nesting depths.
     let mut tag_stack: SmallVec<[(usize, Tag); 4]> = SmallVec::new();
 
     let parser = Parser::new_ext(
@@ -48,8 +55,9 @@ pub fn parse_markdown(
             | Options::ENABLE_HEADING_ATTRIBUTES,
     );
     let mut last_text = CowStr::from("");
-    // Whether we should add a newline on the next entry
-    // This is used so that we don't emit newlines at the very end of the generation
+    // Deferred newline: we don't emit the newline immediately after a block tag closes,
+    // but rather before the next content. This prevents trailing newlines at the end of
+    // the output, which would create unwanted blank space in the rendered hover popup.
     let mut add_newline = false;
     for event in parser {
         // Add the newline since we're going to be outputting more
@@ -272,7 +280,10 @@ fn md_language_to_lapce_language(lang: &str) -> Option<LapceLanguage> {
     LapceLanguage::from_name(lang)
 }
 
-/// Highlight the text in a richtext builder like it was a markdown codeblock
+/// Apply syntax highlighting to a code block in the rendered markdown.
+/// This uses Lapce's tree-sitter-based syntax engine to parse the code text and
+/// then maps the resulting style spans onto the TextLayout's attribute list.
+/// If the language is not recognized, the block is rendered with default code styling only.
 pub fn highlight_as_code(
     attr_list: &mut AttrsList,
     default_attrs: Attrs,

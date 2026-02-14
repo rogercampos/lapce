@@ -1,5 +1,10 @@
 use strum_macros::EnumString;
 
+/// Result of parsing the first operator in a condition expression string.
+/// The parser finds the first `||` or `&&` and splits there. This gives
+/// left-to-right evaluation without parentheses or operator precedence --
+/// "a && b || c" is parsed as "a" AND "b || c", not "(a && b) || c".
+/// The right side is recursively parsed by the caller.
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum CheckCondition<'a> {
     Single(&'a str),
@@ -8,6 +13,9 @@ pub(super) enum CheckCondition<'a> {
 }
 
 impl<'a> CheckCondition<'a> {
+    /// Splits a condition string at the first binary operator found.
+    /// The left part is always a single condition atom (possibly negated with !).
+    /// The right part may contain further operators and is evaluated recursively.
     pub(super) fn parse_first(condition: &'a str) -> Self {
         let or = condition.match_indices("||").next();
         let and = condition.match_indices("&&").next();
@@ -20,6 +28,7 @@ impl<'a> CheckCondition<'a> {
             (None, Some((pos, _))) => {
                 CheckCondition::And(&condition[..pos], &condition[pos + 2..])
             }
+            // When both operators appear, split at whichever comes first.
             (Some((or_pos, _)), Some((and_pos, _))) => {
                 if or_pos < and_pos {
                     CheckCondition::Or(

@@ -5,6 +5,15 @@ use tracing_subscriber::{filter::Targets, reload::Handle};
 
 use crate::tracing::*;
 
+/// Set up the dual-output logging system:
+/// 1. **File logger**: writes to daily-rotated log files in the logs directory, filtered at
+///    DEBUG/TRACE level for Lapce crates. The filter handle is returned so log levels can
+///    be changed at runtime via the UpdateLogLevel internal command.
+/// 2. **Console logger**: writes to stderr, filtered by the LAPCE_LOG environment variable
+///    (defaults to off). Useful for development.
+///
+/// Returns the reload handle (for runtime log level changes) and a WorkerGuard that
+/// must be held alive for the duration of the process to ensure buffered logs are flushed.
 #[inline(always)]
 pub(super) fn logging() -> (Handle<Targets>, Option<WorkerGuard>) {
     use tracing_subscriber::{filter, fmt, prelude::*, reload};
@@ -63,6 +72,9 @@ pub(super) fn logging() -> (Handle<Targets>, Option<WorkerGuard>) {
     (reload_handle, guard)
 }
 
+/// Install a custom panic hook that logs panics with full backtraces via tracing,
+/// ensuring they appear in the log files. On Windows, also shows a native error dialog
+/// since there may be no console to display the panic.
 pub(super) fn panic_hook() {
     std::panic::set_hook(Box::new(move |info| {
         let thread = std::thread::current();

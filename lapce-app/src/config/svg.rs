@@ -8,12 +8,18 @@ use include_dir::{Dir, include_dir};
 
 use crate::config::LOGO;
 
+// Three icon directories embedded at compile time via include_dir!.
+// This means the app carries all default icons without needing external files.
 const CODICONS_ICONS_DIR: Dir =
     include_dir!("$CARGO_MANIFEST_DIR/../icons/codicons");
 const LAPCE_ICONS_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/../icons/lapce");
 const FILETYPES_ICONS_DIR: Dir =
     include_dir!("$CARGO_MANIFEST_DIR/../icons/filetypes");
 
+/// Caches SVG content strings to avoid re-reading embedded or on-disk files.
+/// Two separate caches: `svgs` for embedded defaults (keyed by name), and
+/// `svgs_on_disk` for plugin theme icons (keyed by absolute path, with None
+/// for files that failed to read, so we don't retry).
 #[derive(Debug, Clone)]
 pub struct SvgStore {
     svgs: HashMap<String, String>,

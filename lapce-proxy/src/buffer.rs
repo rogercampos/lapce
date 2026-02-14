@@ -27,6 +27,10 @@ pub struct Buffer {
 }
 
 impl Buffer {
+    /// Creates a buffer by loading a file from disk. Error handling is intentionally
+    /// permissive: instead of propagating errors, the buffer is created with a
+    /// placeholder message. This allows the editor to show "Permission Denied" etc.
+    /// inline rather than crashing.  NotFound is treated as a new (empty) file.
     pub fn new(id: BufferId, path: PathBuf) -> Buffer {
         let (s, read_only) = match load_file(&path) {
             Ok(s) => (s, false),
@@ -48,6 +52,9 @@ impl Buffer {
             }
         };
         let rope = Rope::from(s);
+        // Start revision at 1 for non-empty files, 0 for empty. This ensures the
+        // first edit to a new (empty) file produces rev=1, while existing files
+        // that the user hasn't modified yet already have rev=1.
         let rev = u64::from(!rope.is_empty());
         let language_id = language_id_from_path(&path).unwrap_or("");
         let mod_time = get_mod_time(&path);
@@ -62,6 +69,13 @@ impl Buffer {
         }
     }
 
+    /// Saves the buffer to disk using a backup-and-replace strategy:
+    /// 1. Copy original to .bak (crash safety -- if write fails, .bak survives)
+    /// 2. Truncate and write the new content
+    /// 3. Remove .bak on success
+    ///
+    /// The `rev` check ensures we don't save stale content if the buffer was
+    /// modified between the save request being sent and arriving here.
     pub fn save(&mut self, rev: u64, create_parents: bool) -> Result<()> {
         if self.read_only {
             return Err(anyhow!("can't save to read only file"));
@@ -78,6 +92,8 @@ impl Buffer {
                 ext
             },
         );
+        // Resolve symlinks so we write to the actual file, not replace the symlink
+        // with a regular file (which would break the link).
         let path = if self.path.is_symlink() {
             self.path.canonicalize()?
         } else {
@@ -113,6 +129,13 @@ impl Buffer {
         Ok(())
     }
 
+    /// Applies a text edit delta to the buffer. Returns an incremental LSP content
+    /// change event if the delta is a simple insert or delete; otherwise returns a
+    /// full-document change (None -> caller falls back to full text).
+    ///
+    /// The rev check enforces strict sequential ordering -- if edits arrive out of
+    /// order, we reject them. This can happen if the UI sends multiple rapid edits
+    /// and one gets reordered.
     pub fn update(
         &mut self,
         delta: &RopeDelta,
@@ -301,6 +324,10 @@ pub fn language_id_from_path(path: &Path) -> Option<&'static str> {
     })
 }
 
+/// Attempts to compute an incremental LSP TextDocumentContentChangeEvent from a
+/// rope delta. Only handles the two most common cases: simple insert and simple
+/// delete. More complex edits (e.g., replace, transpose) fall through to None,
+/// causing the caller to send the full document text instead.
 fn get_document_content_changes(
     delta: &RopeDelta,
     buffer: &Buffer,

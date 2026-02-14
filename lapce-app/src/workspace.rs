@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{main_split::SplitInfo, panel::data::PanelInfo};
 
+/// The type of workspace connection. Currently only Local is supported.
+/// Remote workspace support was previously available but has been removed.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum LapceWorkspaceType {
     Local,
@@ -17,6 +19,9 @@ impl std::fmt::Display for LapceWorkspaceType {
     }
 }
 
+/// Identifies a workspace (project folder). `path` is None for empty/bare windows.
+/// `last_open` is a Unix timestamp used for sorting the recent workspaces list.
+/// The Display impl produces "Local:/path/to/project" which is used as the persistence key.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LapceWorkspace {
     pub kind: LapceWorkspaceType,
@@ -57,6 +62,10 @@ impl std::fmt::Display for LapceWorkspace {
     }
 }
 
+/// The complete serializable state of a workspace, persisted to disk.
+/// Contains the recursive split tree layout and panel configuration.
+/// This is what gets saved to db/workspaces/<id>/workspace_info and
+/// restored on next launch to recreate the exact editor layout.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct WorkspaceInfo {
     pub split: SplitInfo,

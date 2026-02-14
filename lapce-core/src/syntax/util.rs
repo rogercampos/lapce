@@ -12,8 +12,10 @@ impl<'a> Iterator for RopeChunksIterBytes<'a> {
     }
 }
 
-/// This allows tree-sitter to iterate over our Rope without us having to convert it into
-/// a contiguous byte-list.
+/// Adapter that lets tree-sitter read directly from a Rope's internal chunks
+/// without materializing the entire text into a single contiguous buffer.
+/// This is critical for performance on large files since Ropes store text
+/// in a balanced tree of small string chunks.
 pub struct RopeProvider<'a>(pub &'a Rope);
 impl<'a> TextProvider<&'a [u8]> for RopeProvider<'a> {
     type I = RopeChunksIterBytes<'a>;

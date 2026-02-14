@@ -4,11 +4,16 @@ use floem::{
     keyboard::{Key, KeyCode, Modifiers, NamedKey, PhysicalKey},
     pointer::{MouseButton, PointerButton},
 };
+/// Result of attempting to match a key sequence against the keymap table.
 #[derive(PartialEq, Debug, Clone)]
 pub enum KeymapMatch {
+    /// Exactly one keymap matches the complete key sequence.
     Full(String),
+    /// Multiple keymaps match the complete key sequence (tried in reverse order).
     Multiple(Vec<String>),
+    /// The key sequence is a valid prefix of one or more longer keymaps.
     Prefix,
+    /// No keymap starts with this key sequence.
     None,
 }
 
@@ -19,6 +24,10 @@ pub struct KeyMap {
     pub command: String,
 }
 
+/// The key component of a keymap entry. Three variants because keys come from
+/// different input sources: mouse buttons, logical keys (layout-dependent, what
+/// the user types), and physical keys (layout-independent, used for non-ASCII
+/// characters and dead keys on international keyboards).
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum KeyMapKey {
     Pointer(PointerButton),
@@ -109,6 +118,10 @@ impl KeyMapPress {
         keys
     }
 
+    /// Parses a key binding string like "Ctrl+Shift+K" or "Ctrl+W L" into a
+    /// sequence of KeyMapPress values. Spaces separate chord steps. The "+"
+    /// character is used both as a modifier separator and as a literal key,
+    /// so special cases handle bare "+" and trailing "++" (modifier + plus key).
     pub fn parse(key: &str) -> Vec<Self> {
         key.split(' ')
             .filter_map(|k| {
@@ -154,6 +167,11 @@ impl KeyMapPress {
 impl FromStr for KeyMapKey {
     type Err = anyhow::Error;
 
+    /// Parses a single key string into a KeyMapKey. Two forms:
+    ///   - "[PhysicalName]" (brackets) -> Physical key code (layout-independent)
+    ///   - "KeyName" (no brackets) -> Logical key (layout-dependent)
+    /// Named keys like "Esc", "Enter", "F1" are recognized; anything else
+    /// is treated as a character key (lowercased for consistent matching).
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let key = if s.starts_with('[') && s.ends_with(']') {
             let code = match s[1..s.len() - 2].to_lowercase().as_str() {

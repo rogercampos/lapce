@@ -231,10 +231,15 @@ pub struct EditorConfig {
 }
 
 impl EditorConfig {
+    /// Clamps the font size to a safe range to prevent rendering issues.
     pub fn font_size(&self) -> usize {
         self.font_size.clamp(6, 32)
     }
 
+    /// Interprets line_height as either a multiplier (when < 5.0, e.g. 1.5x) or
+    /// an absolute pixel value (when >= 5.0). This dual interpretation is
+    /// controlled by SCALE_OR_SIZE_LIMIT and matches the convention used by
+    /// many editors.
     pub fn line_height(&self) -> usize {
         let line_height = if self.line_height < SCALE_OR_SIZE_LIMIT {
             self.line_height * self.font_size as f64

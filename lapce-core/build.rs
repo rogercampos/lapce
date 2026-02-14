@@ -36,6 +36,11 @@ fn main() -> Result<()> {
     Ok(())
 }
 
+/// Determines the release info (version string and branch type) based on
+/// environment variables and git state. The priority order is:
+/// 1. `distribution` feature flag -> always "Stable" (for distro packagers)
+/// 2. `RELEASE_TAG_NAME` env var starting with 'v' -> "Stable"
+/// 3. Otherwise -> "Nightly" (release) or "Debug" (debug) with git hash appended
 fn get_info() -> Result<ReleaseInfo> {
     // CARGO_PKG_* are always available, even in build scripts
     let cargo_tag = env!("CARGO_PKG_VERSION");

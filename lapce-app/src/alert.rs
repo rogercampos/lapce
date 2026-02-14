@@ -52,6 +52,10 @@ impl AlertBoxData {
     }
 }
 
+/// A modal alert dialog similar to exclusive_popup but with its own styling.
+/// Shows a warning icon, title, message, dynamic action buttons, and a Cancel button.
+/// Unlike exclusive_popup, the backdrop click does NOT dismiss -- clicking the outer
+/// overlay is stopped but not wired to close, so the user must click Cancel or an action.
 pub fn alert_box(alert_data: AlertBoxData) -> impl View {
     let config = alert_data.config;
     let active = alert_data.active;

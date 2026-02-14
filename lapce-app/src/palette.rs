@@ -47,6 +47,8 @@ use crate::{
 pub mod item;
 pub mod kind;
 
+/// Tracks the lifecycle of a palette operation. `Started` means items are being loaded
+/// (e.g., file list from proxy), `Done` means filtering is complete and results are displayed.
 #[derive(Clone, PartialEq, Eq)]
 pub enum PaletteStatus {
     Inactive,
@@ -70,13 +72,21 @@ impl PaletteInput {
 
 #[derive(Clone)]
 pub struct PaletteData {
+    /// Monotonically increasing counter shared with the background filter thread.
+    /// Used to detect stale filter operations so they can bail out early.
     run_id_counter: Arc<AtomicU64>,
+    /// The current run_id on the UI side; compared against filter results to discard stale responses.
     pub run_id: RwSignal<u64>,
     pub workspace: Arc<LapceWorkspace>,
     pub status: RwSignal<PaletteStatus>,
+    /// The currently highlighted/selected index in the filtered items list.
     pub index: RwSignal<usize>,
+    /// When set, the filter thread will use this index instead of 0 for the initial selection.
+    /// Used by theme/language pickers to pre-select the currently active value.
     pub preselect_index: RwSignal<Option<usize>>,
+    /// The raw unfiltered items populated by the palette kind's data-loading function.
     pub items: RwSignal<im::Vector<PaletteItem>>,
+    /// Derived from `items` via the background fuzzy-filter thread; this is what the view renders.
     pub filtered_items: ReadSignal<im::Vector<PaletteItem>>,
     pub input: RwSignal<PaletteInput>,
     kind: RwSignal<PaletteKind>,
@@ -120,6 +130,9 @@ impl PaletteData {
         let run_id = cx.create_rw_signal(0);
         let run_id_counter = Arc::new(AtomicU64::new(0));
 
+        // Two reactive effects feed a background thread that performs fuzzy filtering.
+        // One triggers on items changes (new data loaded), the other on input changes (user typing).
+        // They both send work to the same channel so the filter thread can batch/coalesce requests.
         let (run_tx, run_rx) = channel();
         {
             let run_id = run_id.read_only();
@@ -128,7 +141,8 @@ impl PaletteData {
             let tx = run_tx;
             {
                 let tx = tx.clone();
-                // this effect only monitors items change
+                // This effect triggers when items change (e.g., file list loaded from proxy).
+                // It uses get_untracked for input/run_id to avoid subscribing to those signals.
                 cx.create_effect(move |_| {
                     let items = items.get();
                     let input = input.get_untracked();
@@ -142,7 +156,10 @@ impl PaletteData {
                     }
                 });
             }
-            // this effect only monitors input change
+            // This effect triggers when the user types in the palette input.
+            // It tracks the palette kind so that when the kind changes (e.g., switching
+            // from file to line mode), it skips sending a filter request -- the kind
+            // change will be handled by run_inner() which reloads items entirely.
             cx.create_effect(move |last_kind| {
                 let input = input.get();
                 let kind = input.kind;
@@ -157,6 +174,10 @@ impl PaletteData {
                 kind
             });
         }
+        // Spawn a dedicated background thread for fuzzy filtering. This keeps the UI
+        // responsive even with large item lists (e.g., thousands of files in a workspace).
+        // The thread receives (run_id, input, items, preselect_index) tuples, coalesces
+        // rapid updates, runs nucleo matching, and sends filtered results back.
         let (resp_tx, resp_rx) = channel();
         {
             let run_id = run_id_counter.clone();
@@ -167,6 +188,9 @@ impl PaletteData {
                 })
                 .unwrap();
         }
+        // Receive filtered results from the background thread. We validate that the
+        // run_id and input still match the current state before applying, which prevents
+        // stale results from overwriting newer ones (race condition protection).
         let (filtered_items, set_filtered_items) =
             cx.create_signal(im::Vector::new());
         {
@@ -739,6 +763,8 @@ impl PaletteData {
     }
 
     /// Cancel the palette, doing cleanup specific to the palette kind.
+    /// For theme pickers, canceling must revert the live preview back to the saved config,
+    /// which is why we reload the full config here.
     fn cancel(&self) {
         if let PaletteKind::ColorTheme | PaletteKind::IconTheme =
             self.kind.get_untracked()
@@ -815,6 +841,9 @@ impl PaletteData {
         CommandExecuted::Yes
     }
 
+    /// Perform fuzzy filtering of palette items on the background thread.
+    /// Returns `None` if the run_id changed mid-filter (meaning a newer request superseded this one),
+    /// allowing the thread to skip sending stale results.
     fn filter_items(
         run_id: Arc<AtomicU64>,
         current_run_id: u64,
@@ -822,6 +851,7 @@ impl PaletteData {
         items: im::Vector<PaletteItem>,
         matcher: &mut nucleo::Matcher,
     ) -> Option<im::Vector<PaletteItem>> {
+        // Empty input means show all items unfiltered (no fuzzy matching needed).
         if input.is_empty() {
             return Some(items);
         }
@@ -870,11 +900,17 @@ impl PaletteData {
         Some(filtered_items.into())
     }
 
+    /// Background thread loop that receives filter requests, coalesces rapid updates
+    /// (draining the channel to take only the latest), runs fuzzy filtering, and sends
+    /// results back. The batch-receive pattern prevents the filter from running on every
+    /// keystroke when the user types quickly.
     fn update_process(
         run_id: Arc<AtomicU64>,
         receiver: Receiver<(u64, String, im::Vector<PaletteItem>, Option<usize>)>,
         resp_tx: Sender<(u64, String, im::Vector<PaletteItem>, Option<usize>)>,
     ) {
+        /// Drain all pending messages from the channel, keeping only the latest one.
+        /// This coalesces rapid-fire updates so the filter only runs once.
         fn receive_batch(
             receiver: &Receiver<(
                 u64,

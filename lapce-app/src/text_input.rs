@@ -52,11 +52,21 @@ prop_extractor! {
 }
 
 /// Builder for creating a [`TextInput`] easily.
+/// The builder pattern allows callers to configure focus behavior, initial value,
+/// and keyboard routing before constructing the actual view.
+/// Common usage: `TextInputBuilder::new().is_focused(fn).build_editor(editor)`
 pub struct TextInputBuilder {
+    /// External focus signal (e.g., checking `Focus::Palette`). Combined with
+    /// keyboard_focus via OR so the input is focused when either condition is true.
     is_focused: Option<Memo<bool>>,
     // TODO: it'd be nice to not need to box this
+    /// Optional override for keyboard routing. When set, keydown events go to this
+    /// implementor instead of the editor. Used by the palette, rename, etc. to intercept
+    /// ESC, Enter, and navigation keys before they reach the underlying editor.
     key_focus: Option<Box<dyn KeyPressFocus>>,
     value: Option<Rope>,
+    /// Tracks whether this specific widget has native keyboard focus (via FocusGained/Lost).
+    /// This is separate from the app-level focus system.
     keyboard_focus: RwSignal<bool>,
 }
 
@@ -127,11 +137,11 @@ impl TextInputBuilder {
     }
 }
 
-/// Create a basic single line text input  
-/// `e_data` is the editor data that this input is associated with.  
-/// `supplied_editor`
-/// `key_focus` is what receives the keydown events, leave as `None` to default to editor.  
-/// `is_focused` is a function that returns if the input is focused, used for certain events.
+/// Create a basic single line text input backed by an EditorData.
+/// This is a custom Floem View (not a standard widget) that handles its own text layout,
+/// cursor rendering, selection painting, IME composition, and scroll viewport.
+/// `key_focus` overrides keyboard routing (None = editor handles keys directly).
+/// `is_focused` drives cursor visibility and IME cursor area positioning.
 fn text_input_full<T: KeyPressFocus + 'static>(
     e_data: EditorData,
     key_focus: Option<T>,
@@ -151,6 +161,10 @@ fn text_input_full<T: KeyPressFocus + 'static>(
 
     {
         let doc = doc.get();
+        // This effect converts the rope buffer into a plain String for rendering.
+        // When an IME preedit composition is active, it splices the preedit text
+        // into the content at the cursor position so the user can see their
+        // in-progress composition inline.
         create_effect(move |_| {
             let offset = cursor.with(|c| c.offset());
             let (content, offset, preedit_range) = {
@@ -433,6 +447,9 @@ impl TextInput {
         })
     }
 
+    /// Constrains the text viewport (the visible window into the text) so it doesn't
+    /// scroll past the text boundaries. This is needed because the text input can be
+    /// narrower than its content, creating a horizontally scrollable area.
     fn clamp_text_viewport(&mut self, text_viewport: Rect) {
         let text_rect = self.text_rect;
         let actual_size = text_rect.size();
@@ -466,7 +483,12 @@ impl TextInput {
         }
     }
 
+    /// Auto-scroll the text viewport so the cursor is always visible. This is called
+    /// after cursor position changes (e.g., typing, clicking, arrow keys). It computes
+    /// the minimal scroll delta needed to bring the cursor into view.
     fn ensure_cursor_visible(&mut self) {
+        /// Returns the signed distance needed to scroll `val` into the [min, max] range.
+        /// Returns 0 if already in range.
         fn closest_on_axis(val: f64, min: f64, max: f64) -> f64 {
             assert!(min <= max);
             if val > min && val < max {

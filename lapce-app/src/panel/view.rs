@@ -28,6 +28,9 @@ use crate::{
     workspace_data::WorkspaceData,
 };
 
+/// Creates a foldable section with a clickable header that toggles child visibility.
+/// The fold icon (chevron) rotates to indicate state. The child content is hidden via
+/// style rather than removed from the tree, so state is preserved across folds.
 pub fn foldable_panel_section(
     header: impl View + 'static,
     child: impl View + 'static,
@@ -83,6 +86,11 @@ impl PanelBuilder {
         }
     }
 
+    /// Core method that wraps content in a foldable section and applies sizing rules.
+    /// When open: uses explicit height if provided, otherwise flex-grows to fill space.
+    /// When closed on bottom panels: still takes some flex space (0.3) so the header
+    /// remains visible alongside its peer section. On side panels, collapsed sections
+    /// shrink to just the header height (no explicit size set).
     fn add_general_with_header(
         mut self,
         header: impl View + 'static,
@@ -217,7 +225,8 @@ impl PanelBuilder {
         )
     }
 
-    /// Build the panel into a view
+    /// Build the panel into a view. Bottom panels lay out sections horizontally
+    /// (side by side), while side panels lay out sections vertically (stacked).
     pub fn build(self) -> impl View {
         stack_from_iter(self.views).style(move |s| {
             s.width_full()
@@ -226,6 +235,10 @@ impl PanelBuilder {
     }
 }
 
+/// Builds the full container view for one of the three panel areas (Left, Bottom, Right).
+/// Contains: two panel pickers (icon strips for tab selection), two panel content views
+/// (one per position half), and a drag handle for resizing. The container auto-hides
+/// when neither position half is shown.
 pub fn panel_container_view(
     workspace_data: Rc<WorkspaceData>,
     position: PanelContainerPosition,
@@ -235,6 +248,9 @@ pub fn panel_container_view(
     let current_size = create_rw_signal(Size::ZERO);
     let available_size = workspace_data.panel.available_size;
 
+    // The resize drag view is an invisible 4px-wide/tall strip placed on the edge
+    // of the panel container. On drag, it updates panel size while clamping to
+    // min/max bounds. For the bottom panel, dragging past a threshold toggles maximize.
     let resize_drag_view = {
         let panel = panel.clone();
         let panel_size = panel.size;
@@ -411,6 +427,10 @@ pub fn panel_container_view(
     .debug_name(format!("{:?} Pannel Container View", position))
 }
 
+/// Renders the active panel content for a given position using a `tab` view that
+/// switches between panel kinds. The tab view is reactive: when `active` changes
+/// in the style, the displayed panel kind switches without recreating the view tree.
+/// Hidden when the position is not shown or has no panels assigned.
 fn panel_view(
     workspace_data: Rc<WorkspaceData>,
     position: PanelPosition,
@@ -463,6 +483,10 @@ pub fn panel_header(
     })
 }
 
+/// Renders the icon strip for switching between panel kinds at a given position.
+/// Each icon shows the panel's SVG and has an active indicator (a colored border line).
+/// The picker is hidden when only one or zero panels exist at this position (no
+/// need to switch). Clicking an icon toggles that panel's visibility.
 fn panel_picker(
     workspace_data: Rc<WorkspaceData>,
     position: PanelPosition,

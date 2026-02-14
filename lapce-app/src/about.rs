@@ -53,6 +53,8 @@ impl AboutData {
 }
 
 impl KeyPressFocus for AboutData {
+    /// Returns true for all conditions when visible, so that no keybindings
+    /// leak through to the workbench behind this modal.
     fn check_condition(
         &self,
         _condition: crate::keypress::condition::Condition,
@@ -84,6 +86,8 @@ impl KeyPressFocus for AboutData {
 
     fn receive_char(&self, _c: &str) {}
 
+    /// Returning true prevents keyboard events from reaching the workbench behind this modal,
+    /// ensuring the modal is truly exclusive while visible.
     fn focus_only(&self) -> bool {
         true
     }
@@ -172,6 +176,11 @@ pub fn about_popup(workspace_data: Rc<WorkspaceData>) -> impl View {
     .debug_name("About Popup")
 }
 
+/// Reusable modal overlay pattern: a full-screen semi-transparent backdrop that
+/// centers its content and closes when clicking outside. The inner content wrapper
+/// stops PointerDown propagation so clicks inside the modal don't trigger the close.
+/// The outer container also stops PointerMove to prevent hover effects on elements
+/// behind the modal backdrop.
 pub fn exclusive_popup<V: View + 'static>(
     config: ReadSignal<Arc<LapceConfig>>,
     visibility: RwSignal<bool>,

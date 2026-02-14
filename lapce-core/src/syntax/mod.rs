@@ -48,15 +48,21 @@ pub mod edit;
 pub mod highlight;
 pub mod util;
 
+/// Limits the number of in-progress matches per tree-sitter query cursor
+/// to prevent pathological grammars from consuming unbounded memory.
 const TREE_SITTER_MATCH_LIMIT: u32 = 256;
 
 // Uses significant portions Helix's implementation, and on tree-sitter's highlighter implementation
 
+/// Thread-local tree-sitter parser state. The `cursors` pool avoids
+/// repeatedly allocating QueryCursors, which are reusable across queries.
 pub struct TsParser {
     parser: tree_sitter::Parser,
     pub cursors: Vec<QueryCursor>,
 }
 
+/// Each thread gets its own parser instance because tree-sitter parsers
+/// are not thread-safe. The cursor pool is also per-thread.
 thread_local! {
     pub static PARSER: RefCell<TsParser> = RefCell::new(TsParser {
         parser: Parser::new(),
@@ -173,6 +179,10 @@ impl BracketParser {
         *(self.active.borrow_mut()) = false;
     }*/
 
+    /// Recomputes bracket colorization for the given source code. If a tree-sitter
+    /// syntax tree is available, uses AST-aware bracket matching (more accurate).
+    /// Otherwise falls back to a naive text-based parser that tracks quote
+    /// characters to skip string contents.
     pub fn update_code(
         &mut self,
         code: String,
@@ -456,6 +466,10 @@ impl LanguageLayer {
     }
 }
 
+/// Manages a tree of language layers for syntax highlighting with injections.
+/// The root layer covers the entire document; child layers handle injected
+/// languages (e.g., JS inside HTML). Uses a HopSlotMap for stable layer IDs
+/// that survive insertions/deletions of other layers.
 #[derive(Clone)]
 pub struct SyntaxLayers {
     layers: HopSlotMap<LayerId, LanguageLayer>,
@@ -499,6 +513,13 @@ impl SyntaxLayers {
         syntax
     }
 
+    /// Incrementally updates all language layers after a text edit.
+    /// Uses a BFS queue starting from the root layer. For each layer:
+    /// 1. Adjusts injection ranges based on the edit deltas
+    /// 2. Re-parses the tree (incrementally if edits are available)
+    /// 3. Discovers new injections from the updated tree
+    /// 4. Reuses existing layers when an identical one already exists
+    /// 5. Removes layers that were not visited (no longer relevant)
     pub fn update(
         &mut self,
         current_rev: u64,
@@ -820,6 +841,14 @@ impl SyntaxLayers {
     }
 
     /// Iterate over the highlighted regions for a given slice of source code.
+    /// Collects all layers into HighlightIterLayer instances, sorted by byte
+    /// offset. The iterator merges highlights from multiple injection layers,
+    /// giving priority to deeper layers (inner injections override outer ones).
+    ///
+    /// SAFETY: Uses transmute to extend the lifetime of the QueryCursor reference.
+    /// This is sound because the cursor is heap-allocated and outlives the captures
+    /// iterator, but the borrow checker cannot prove this since both are moved
+    /// into the same struct.
     pub fn highlight_iter<'a>(
         &'a self,
         source: &'a Rope,
@@ -949,6 +978,11 @@ impl Syntax {
         }
     }
 
+    /// Main entry point for re-parsing a document. Updates the tree-sitter parse
+    /// tree, then regenerates: highlight styles (as Spans), normal_lines for
+    /// code glance, and the lens structure for minimap rendering. Edits are only
+    /// applied incrementally if the revision chain is contiguous (new_rev ==
+    /// self.rev + number_of_edits).
     pub fn parse(
         &mut self,
         new_rev: u64,
@@ -1062,6 +1096,9 @@ impl Syntax {
         builder.build()
     }
 
+    /// Finds the matching bracket/paren/brace for the character at `offset`.
+    /// Uses tree-sitter's AST to find the exact node at the offset, then
+    /// searches siblings in both directions for the matching delimiter.
     pub fn find_matching_pair(&self, offset: usize) -> Option<usize> {
         let tree = self.layers.as_ref()?.try_tree()?;
         let node = tree
@@ -1203,6 +1240,9 @@ impl Syntax {
         }
     }
 
+    /// Finds the innermost bracket pair that encloses `offset` by walking the
+    /// AST upward through siblings and parents. Markdown is excluded because
+    /// its tree-sitter grammar can cause infinite loops in prev_sibling traversal.
     pub fn find_enclosing_pair(&self, offset: usize) -> Option<(usize, usize)> {
         if self.language == LapceLanguage::Markdown {
             // TODO: fix the issue that sometimes node.prev_sibling can stuck for markdown

@@ -3,6 +3,13 @@ use std::str;
 use lapce_rpc::style::{LineStyle, Style};
 use lapce_xi_rope::{LinesMetric, Rope, spans::Spans};
 
+/// The set of recognized tree-sitter highlight scope names. These are matched
+/// against capture names in tree-sitter query files (e.g., `@keyword`, `@type`).
+/// The index of each scope in this array becomes the `Highlight(usize)` value,
+/// which is then used to look up the corresponding theme color at render time.
+///
+/// Order matters: longer prefix matches are preferred, so more specific scopes
+/// like "type.builtin" must appear alongside their parent "type".
 pub const SCOPES: &[&str] = &[
     "constant",
     "type",
@@ -43,6 +50,9 @@ pub const SCOPES: &[&str] = &[
     "markup.link.text",
 ];
 
+/// Extracts the syntax highlighting styles for a single line from the
+/// document-wide Spans structure. Converts absolute byte offsets to
+/// line-relative column offsets for rendering.
 pub fn line_styles(
     text: &Rope,
     line: usize,

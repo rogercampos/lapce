@@ -20,6 +20,9 @@ use crate::{
     workspace_data::WorkspaceData,
 };
 
+/// Left side of the title bar. On macOS, includes a 75px spacer for the native
+/// traffic-light window buttons. On other platforms, shows the Lapce logo and
+/// a hamburger menu. The remaining space is a drag area for moving the window.
 fn left(
     lapce_command: Listener<LapceCommand>,
     workbench_command: Listener<LapceWorkbenchCommand>,
@@ -27,6 +30,7 @@ fn left(
 ) -> impl View {
     let is_macos = cfg!(target_os = "macos");
     stack((
+        // Reserve space for macOS traffic-light buttons (close/minimize/maximize)
         empty().style(move |s| s.width(75.0).apply_if(!is_macos, |s| s.hide())),
         container(svg(move || config.get().ui_svg(LapceIcons::LOGO)).style(
             move |s| {
@@ -203,6 +207,9 @@ pub fn title(workspace_data: Rc<WorkspaceData>) -> impl View {
     .debug_name("Title / Top Bar")
 }
 
+/// Custom window control buttons (minimize, maximize/restore, close) for platforms
+/// using the custom titlebar (non-macOS with custom_titlebar enabled). Hidden on macOS
+/// since the native traffic-light buttons handle these functions.
 pub fn window_controls_view(
     window_command: Listener<WindowCommand>,
     window_maximized: RwSignal<bool>,

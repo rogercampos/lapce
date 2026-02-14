@@ -110,9 +110,13 @@ use crate::{
 mod grammars;
 mod logging;
 
+// Embed the defaults/plugins directory into the binary at compile time.
+// This allows shipping bundled plugins without requiring a separate download step.
 const BUNDLED_PLUGINS_DIR: Dir =
     include_dir!("$CARGO_MANIFEST_DIR/../defaults/plugins");
 
+/// Extract bundled plugins to the user's plugins directory on first run.
+/// Existing plugins are not overwritten, preserving any user customizations.
 fn install_bundled_plugins() {
     let plugins_dir = match Directory::plugins_directory() {
         Some(dir) => dir,
@@ -156,10 +160,13 @@ fn extract_dir(dir: &Dir, target: &std::path::Path) -> std::io::Result<()> {
 #[clap(version=meta::VERSION)]
 #[derive(Debug)]
 struct Cli {
-    /// Launch new window even if Lapce is already running
+    /// Launch new window even if Lapce is already running.
+    /// Without this flag, Lapce tries to reuse an already-running instance via local socket.
     #[clap(short, long, action)]
     new: bool,
-    /// Don't return instantly when opened in a terminal
+    /// Don't return instantly when opened in a terminal.
+    /// When --wait is NOT set, the process re-spawns itself with --wait and exits immediately
+    /// so the terminal prompt returns. The re-spawned child is the actual long-lived UI process.
     #[clap(short, long, action)]
     wait: bool,
 
@@ -184,12 +191,18 @@ pub struct AppInfo {
     pub windows: Vec<WindowInfo>,
 }
 
+/// Commands sent to the top-level application.
+/// These are dispatched from windows/workspaces upward to AppData via the app_command Listener.
 #[derive(Clone)]
 pub enum AppCommand {
     SaveApp,
-    NewWindow { folder: Option<PathBuf> },
+    NewWindow {
+        folder: Option<PathBuf>,
+    },
     CloseWindow(WindowId),
     WindowGotFocus(WindowId),
+    /// Fired by the Floem WindowClosed event. Cleans up the window's scope/signals
+    /// and persists app state. Distinguished from CloseWindow which initiates the close.
     WindowClosed(WindowId),
 }
 
@@ -239,6 +252,8 @@ impl AppData {
             .or_else(|| windows.iter().next().map(|(_, window)| window.clone()))
     }
 
+    /// Base window configuration. Disables Floem's default theme because Lapce
+    /// applies its own color theme system from config files and plugins.
     fn default_window_config(&self) -> WindowConfig {
         WindowConfig::default()
             .apply_default_theme(false)
@@ -337,6 +352,10 @@ impl AppData {
         }
     }
 
+    /// Determine which OS windows to create based on CLI arguments and persisted state.
+    /// Priority: (1) directories from CLI -> one window per dir, (2) no args -> restore
+    /// from last session, (3) fallback -> single empty window. Files from CLI are opened
+    /// in the first directory window, or in the fallback window if no dirs were specified.
     fn create_windows(
         &self,
         db: Arc<LapceDb>,
@@ -524,6 +543,10 @@ impl AppData {
         let config = window_data.config;
         // The KeyDown and PointerDown event handlers both need ownership of a WindowData object.
         let key_down_window_data = window_data.clone();
+        // The top-level view is a stack of the actual window content and invisible drag-resize
+        // areas around the edges. These resize areas implement custom window chrome for platforms
+        // (non-macOS) where we hide the native titlebar. They are 4px wide/tall edge strips
+        // and 20px corner zones, positioned absolutely to overlay the window edges.
         let view = stack((
             window(window_data.clone()),
             stack((
@@ -632,6 +655,9 @@ impl AppData {
 
         view_id.request_focus();
 
+        // All keyboard and pointer events are captured at this top-level view and routed
+        // through WindowData::key_down, which dispatches to the active workspace's focus system.
+        // This is the single entry point for the entire keyboard routing pipeline.
         view.window_scale(move || window_scale.get())
             .keyboard_navigable()
             .on_event(EventListener::KeyDown, move |event| {
@@ -697,7 +723,9 @@ impl AppData {
     }
 }
 
-/// The top bar of an Editor tab. Includes the tab forward/back buttons, the tab scroll bar and the new split and tab close all button.
+/// The top bar of an Editor tab. Includes the tab icons, labels, close buttons, the horizontally
+/// scrollable tab strip, and buttons for splitting/closing the entire editor tab group.
+/// Tabs support drag-and-drop reordering with visual drop indicators.
 fn editor_tab_header(
     workspace_data: Rc<WorkspaceData>,
     active_editor_tab: ReadSignal<Option<EditorTabId>>,
@@ -1234,6 +1262,9 @@ fn editor_tab_content(
         .debug_name("Editor Tab Content")
 }
 
+/// Indicates which quadrant of an editor tab content area the user is dragging over.
+/// Used to determine whether to split the target tab (Top/Bottom/Left/Right) or
+/// merge into it (Middle) when dropping a dragged tab.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum DragOverPosition {
     Top,
@@ -1447,6 +1478,10 @@ fn editor_tab(
     .debug_name("Editor Tab (Content + Header)")
 }
 
+/// Renders invisible drag handles between split children. These overlay the split borders
+/// and allow the user to resize panes by dragging. The resize works by computing
+/// proportional sizes relative to the total width/height and updating each child's
+/// flex-grow ratio, which preserves the layout invariant that all children fill the container.
 fn split_resize_border(
     splits: ReadSignal<im::HashMap<SplitId, RwSignal<SplitData>>>,
     editor_tabs: ReadSignal<im::HashMap<EditorTabId, RwSignal<EditorTabData>>>,
@@ -1992,6 +2027,14 @@ fn tooltip_tip<V: View + 'static>(
     })
 }
 
+/// The main workbench layout: a vertical stack containing:
+///   1. A horizontal row of [left panel | main editor split | right panel]
+///   2. The bottom panel (search, problems, etc.)
+///   3. Window-level message notifications (LSP errors, warnings)
+///
+/// The horizontal row uses flex-grow so the editor area fills remaining space
+/// after the side panels. The bottom panel sits below and can be maximized
+/// to hide the editor area entirely.
 fn workbench(workspace_data: Rc<WorkspaceData>) -> impl View {
     let workbench_size = workspace_data.common.workbench_size;
     let main_split_width = workspace_data.main_split.width;
@@ -2852,6 +2895,11 @@ fn rename(workspace_data: Rc<WorkspaceData>) -> impl View {
     .debug_name("Rename Layer")
 }
 
+/// The full view for a single workspace tab. This is the root of the per-workspace UI tree.
+/// It uses a layered stack where the base layer (title + workbench + status bar) is overlaid
+/// by floating elements in z-order: completion, hover, code actions, rename, palette,
+/// search modal, recent files, about popup, plugin popup, and alert dialog.
+/// If no folder is open, shows a simplified "Open Folder" landing page instead.
 fn workspace_view(workspace_data: Rc<WorkspaceData>) -> impl View {
     let window_origin = workspace_data.common.window_origin;
     let layout_rect = workspace_data.layout_rect;
@@ -2979,6 +3027,17 @@ fn window(window_data: WindowData) -> impl View {
     .debug_name("Window")
 }
 
+/// Application entry point. Orchestrates the entire startup sequence:
+/// 1. Parse CLI args
+/// 2. Set up logging and panic hooks
+/// 3. Load vendored fonts (if feature enabled)
+/// 4. Load shell environment (for non-terminal launches, e.g. from dock/Finder)
+/// 5. Re-spawn as background process if not --wait (for terminal detach)
+/// 6. Try to connect to existing Lapce instance via local socket (single-instance)
+/// 7. Initialize database, config, file watchers, bundled plugins
+/// 8. Create windows from CLI paths or restored session
+/// 9. Spawn background threads for grammar updates, release checks, socket listener
+/// 10. Run the Floem event loop
 pub fn launch() {
     let cli = Cli::parse();
 
@@ -3020,8 +3079,9 @@ pub fn launch() {
         load_shell_env();
     }
 
-    // small hack to unblock terminal if launched from it
-    // launch it as a separate process that waits
+    // When launched from a terminal without --wait, re-spawn ourselves as a detached child
+    // with --wait so the parent process can exit immediately and return the shell prompt.
+    // The child inherits our args plus --wait, with stdout/stderr redirected to log files.
     if !cli.wait {
         let mut args = std::env::args().collect::<Vec<_>>();
         args.push("--wait".to_string());
@@ -3064,8 +3124,9 @@ pub fn launch() {
         return;
     }
 
-    // If the cli is not requesting a new window, and we're not developing a plugin, we try to open
-    // in the existing Lapce process
+    // Single-instance behavior: try to send the paths to an already-running Lapce via
+    // local socket. If successful, exit this process. If the socket doesn't exist or the
+    // connection fails, we become the primary instance and proceed with full initialization.
     if !cli.new {
         match get_socket() {
             Ok(socket) => {
@@ -3299,6 +3360,9 @@ pub fn launch() {
 }
 
 /// Uses a login shell to load the correct shell environment for the current user.
+/// This is needed when Lapce is launched from a GUI (e.g. macOS dock) where the process
+/// doesn't inherit the user's shell PATH and other env vars. We spawn a login shell,
+/// run `printenv`, and merge the results into our process environment.
 pub fn load_shell_env() {
     use std::process::Command;
 

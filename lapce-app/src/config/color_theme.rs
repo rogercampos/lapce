@@ -87,6 +87,11 @@ impl ThemeBaseConfig {
         base
     }
 
+    /// Recursively resolves a single variable reference. A value starting with '$'
+    /// is a reference to another variable. This method follows the chain until a
+    /// literal color string is found, up to THEME_RECURSION_LIMIT depth.
+    /// The lookup order is: current theme first, then defaults. This allows a
+    /// custom theme to override base variables that the default theme defines.
     fn resolve_variable<'a>(
         &'a self,
         defaults: &'a ThemeBaseConfig,
@@ -94,6 +99,7 @@ impl ThemeBaseConfig {
         value: &'a str,
         i: usize,
     ) -> Result<Option<&'a str>, LoadThemeError> {
+        // Base case: not a variable reference, it's a literal color string.
         let Some(value) = value.strip_prefix('$') else {
             return Ok(Some(value));
         };
@@ -138,6 +144,12 @@ pub struct ColorThemeConfig {
 }
 
 impl ColorThemeConfig {
+    /// Resolves a map of color definitions (ui or syntax) to concrete Color values.
+    /// Each value is either:
+    ///   - A "$variable" reference resolved through the base color palette
+    ///   - A literal hex color string like "#FF0000"
+    /// If neither resolves, falls back to the default theme's value for that key,
+    /// and finally to black as a last resort.
     fn resolve_color(
         colors: &BTreeMap<String, String>,
         base: &ThemeBaseColor,

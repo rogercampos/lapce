@@ -21,6 +21,10 @@ use crate::{
     workspace_data::WorkspaceData,
 };
 
+/// The search panel shows a 50/50 horizontal split: hierarchical results on the left,
+/// preview editor on the right. Unlike the search modal (flat list + centered popup),
+/// this is a persistent bottom panel that groups results by file with collapsible
+/// file headers.
 pub fn global_search_panel(
     workspace_data: Rc<WorkspaceData>,
     _position: PanelPosition,
@@ -45,6 +49,11 @@ pub fn global_search_panel(
     .debug_name("Global Search Panel")
 }
 
+/// Renders the hierarchical search results. Uses a nested virtual_stack pattern:
+/// the outer stack has variable-height items (one per file, height depends on
+/// expanded match count), and each file's inner stack virtualizes the individual
+/// matches. Single-click on a match previews it in the right pane; double-click
+/// navigates to it in the main editor.
 fn search_result(
     workspace: Arc<LapceWorkspace>,
     global_search_data: GlobalSearchData,
@@ -249,6 +258,9 @@ fn search_result(
     .style(|s| s.size_pct(100.0, 100.0))
 }
 
+/// The preview editor pane, shown to the right of the results list when a match
+/// is selected. Clicking into it sets preview_focused, which enables full editor
+/// keybindings (cursor movement, selection, etc.) while the preview is active.
 fn search_preview_editor(
     workspace_data: Rc<WorkspaceData>,
     config: ReadSignal<Arc<LapceConfig>>,

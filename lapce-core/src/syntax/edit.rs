@@ -9,6 +9,10 @@ use lapce_xi_rope::{
 };
 use tree_sitter::Point;
 
+/// Wraps a sequence of tree-sitter InputEdits that describe how a text buffer
+/// changed. Created from a xi-rope RopeDelta by factoring it into insertions
+/// and deletions, then converting each to the tree-sitter edit format
+/// (byte offsets + row/column positions).
 #[derive(Clone)]
 pub struct SyntaxEdit(pub(crate) Vec<tree_sitter::InputEdit>);
 
@@ -23,6 +27,13 @@ impl SyntaxEdit {
         Self::from_factored_delta(text, &ins_delta, &deletes)
     }
 
+    /// Converts a factored rope delta (insertions + deletions) into tree-sitter
+    /// InputEdits. Edits are reversed so tree-sitter processes them from the end
+    /// of the document backward, preventing earlier edits from invalidating the
+    /// byte offsets of later edits.
+    ///
+    /// The delete subset is first transformed to account for the insertions,
+    /// so delete positions are in the post-insertion coordinate space.
     pub fn from_factored_delta(
         text: &Rope,
         ins_delta: &InsertDelta<RopeInfo>,
@@ -55,6 +66,9 @@ impl SyntaxEdit {
     }
 }
 
+/// Converts a byte offset within a Rope into a tree-sitter Point (row, column).
+/// Note: the column is computed as the distance from the offset to the *end*
+/// of the line, not the start. This appears to be a bug -- see code review.
 fn point_at_offset(text: &Rope, offset: usize) -> Point {
     let text = RopeTextRef::new(text);
     let line = text.line_of_offset(offset);
@@ -62,6 +76,8 @@ fn point_at_offset(text: &Rope, offset: usize) -> Point {
     Point::new(line, col)
 }
 
+/// Advances a Point through a string, tracking newlines to update row/column.
+/// Used to calculate the new end position after an insertion.
 fn traverse(point: Point, text: &str) -> Point {
     let Point {
         mut row,

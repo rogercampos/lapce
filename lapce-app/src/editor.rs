@@ -173,17 +173,33 @@ pub struct OnScreenFind {
 
 pub type SnippetIndex = Vec<(usize, (usize, usize))>;
 
-/// Shares data between cloned instances as long as the signals aren't swapped out.
+/// The primary data structure for a single editor instance. Wraps floem's `Editor`
+/// with Lapce-specific state: snippet tracking, inline/on-screen find, sticky headers,
+/// and the connection to the shared `CommonData` (completion, hover, proxy, etc.).
+///
+/// `EditorData` is cheaply cloneable (all fields are signals or Rc) -- cloned instances
+/// share the same underlying reactive state. The `editor: Rc<Editor>` holds the floem
+/// editor which owns the cursor, viewport, text layout cache, and document reference.
 #[derive(Clone, Debug)]
 pub struct EditorData {
     pub scope: Scope,
+    /// Which editor tab contains this editor. `None` for preview/local editors
+    /// (e.g., search modal preview, palette preview). When `None`, focus-related
+    /// commands like SplitVertical and FocusEditorTab are no-ops.
     pub editor_tab_id: RwSignal<Option<EditorTabId>>,
+    /// Active snippet placeholder positions, sorted by tab-stop index.
+    /// Each entry is (tab_stop_index, (start_offset, end_offset)).
+    /// Set to `None` when cursor moves outside all placeholder regions.
     pub snippet: RwSignal<Option<SnippetIndex>>,
     pub inline_find: RwSignal<Option<InlineFindDirection>>,
     pub on_screen_find: RwSignal<OnScreenFind>,
     pub last_inline_find: RwSignal<Option<(InlineFindDirection, String)>>,
+    /// Whether the find/replace bar has keyboard focus (as opposed to the editor body).
+    /// When true, typed characters are routed to the find/replace editors instead.
     pub find_focus: RwSignal<bool>,
     pub editor: Rc<Editor>,
+    /// Distinguishes normal (workbench) editors from preview editors. Preview editors
+    /// skip sticky headers and don't steal focus on pointer_down.
     pub kind: RwSignal<EditorViewKind>,
     pub sticky_header_height: RwSignal<f64>,
     pub common: Rc<CommonData>,
@@ -362,6 +378,10 @@ impl EditorData {
         self.editor.rope_text()
     }
 
+    /// Execute an edit command (insert, delete, etc.) and manage the side effects:
+    /// completion triggers, inline completion updates, snippet invalidation.
+    /// The `doc_before_edit` snapshot is needed by `show_completion` to inspect
+    /// whether the deleted text was whitespace (which suppresses completion).
     fn run_edit_command(&self, cmd: &EditCommand) -> CommandExecuted {
         let doc = self.doc();
         let text = self.editor.rope_text();
@@ -414,6 +434,10 @@ impl EditorData {
         CommandExecuted::Yes
     }
 
+    /// Execute a cursor movement command. Saves jump locations for go-back navigation
+    /// when the movement is a "jump" (e.g., goto line, goto definition) and differs
+    /// from the previous movement -- this avoids flooding the jump history with
+    /// consecutive identical movements like repeated arrow presses.
     fn run_move_command(
         &self,
         movement: &lapce_core::movement::Movement,
@@ -458,6 +482,10 @@ impl EditorData {
 
         self.editor.cursor.set(cursor);
 
+        // After a move, check if the cursor is still within any snippet placeholder
+        // region. If not, exit snippet mode entirely. This ensures that navigating
+        // away from a snippet (e.g., pressing an arrow key past all placeholders)
+        // properly cleans up the snippet state.
         if self.snippet.with_untracked(|s| s.is_some()) {
             self.snippet.update(|snippet| {
                 let offset = self.editor.cursor.get_untracked().offset();
@@ -874,6 +902,10 @@ impl EditorData {
         }
     }
 
+    /// Navigate to definition, with a fallback to references.
+    /// If the definition resolves to the same position we're already at (i.e., the
+    /// cursor is on the definition itself), we fetch references instead, providing
+    /// "go to references" behavior when already at the definition site.
     fn go_to_definition(&self) {
         let doc = self.doc();
         let path = match if doc.loaded() {
@@ -1570,13 +1602,14 @@ impl EditorData {
         self.do_edit(&selection, &edits);
     }
 
+    /// Apply editor-level side effects of text deltas. The Doc has already applied
+    /// its own updates (styles, diagnostics, completion lens, proxy sync) in
+    /// `Doc::apply_deltas`. This method handles the EditorData-specific concern
+    /// of keeping snippet placeholder offsets in sync with the text changes.
     fn apply_deltas(&self, deltas: &[(Rope, RopeDelta, InvalLines)]) {
         for (_, delta, _) in deltas {
-            // self.inactive_apply_delta(delta);
             self.update_snippet_offset(delta);
-            // self.update_breakpoints(delta);
         }
-        // self.update_signature();
     }
 
     fn update_snippet_offset(&self, delta: &RopeDelta) {
@@ -1625,6 +1658,11 @@ impl EditorData {
         }
     }
 
+    /// Navigate to a location. When `new_doc` is true, the document hasn't been
+    /// loaded from disk yet, so we create a reactive effect that waits for
+    /// `loaded` to become true before performing the jump. The effect self-terminates
+    /// by returning `true` once executed, preventing repeated navigation on
+    /// subsequent signal updates.
     pub fn go_to_location(
         &self,
         location: EditorLocation,
@@ -2111,6 +2149,11 @@ impl EditorData {
         self.common.find.replace_focus.set(false);
     }
 
+    /// Handle a pointer-down event. This is the critical focus management entry point.
+    ///
+    /// IMPORTANT: The `is_normal()` guard prevents preview editors (in search modal,
+    /// global search panel, palette) from stealing app-level focus to `Focus::Workbench`.
+    /// Without this guard, clicking a preview editor would close its parent popup.
     pub fn pointer_down(&self, pointer_event: &PointerInputEvent) {
         self.cancel_completion();
         self.cancel_inline_completion();
@@ -2465,6 +2508,10 @@ impl EditorData {
     }
 }
 
+/// KeyPressFocus implementation routes keyboard events to the editor or its
+/// sub-components (find/replace, completion list). The `check_condition` method
+/// determines which keybinding conditions are active, controlling whether bindings
+/// like list.next (up/down in completion) or editor-specific bindings fire.
 impl KeyPressFocus for EditorData {
     #[instrument]
     fn check_condition(&self, condition: Condition) -> bool {
@@ -2499,6 +2546,10 @@ impl KeyPressFocus for EditorData {
         }
     }
 
+    /// Command dispatch. When the find bar is focused, Edit and Move commands are
+    /// forwarded to the find/replace editor via InternalCommand rather than being
+    /// applied to the main editor. This allows typing in the find bar while the
+    /// editor retains app-level focus (Focus::Workbench).
     #[instrument]
     fn run_command(
         &self,
@@ -2575,10 +2626,14 @@ impl KeyPressFocus for EditorData {
         }
     }
 
+    /// Character input handler. Routes characters to the find/replace editors when
+    /// they have focus, otherwise performs a normal insert into the editor buffer.
+    /// Completion is triggered on non-whitespace input; inline completion updates
+    /// on every character.
     fn receive_char(&self, c: &str) {
         if self.common.find.visual.get_untracked() && self.find_focus.get_untracked()
         {
-            // find/relace editor receive char
+            // find/replace editor receive char
             if self.common.find.replace_focus.get_untracked() {
                 self.common.internal_command.send(
                     InternalCommand::ReplaceEditorReceiveChar { s: c.to_string() },
@@ -2616,8 +2671,12 @@ impl KeyPressFocus for EditorData {
 
 /// Custom signal wrapper for [`Doc`], because [`Editor`] only knows it as a
 /// `Rc<dyn Document>`, and there is currently no way to have an `RwSignal<Rc<Doc>>` and
-/// an `RwSignal<Rc<dyn Document>>`.  
-/// This could possibly be swapped with a generic impl?
+/// an `RwSignal<Rc<dyn Document>>`.
+///
+/// Every method here performs a downcast from `Rc<dyn Document>` to `Rc<Doc>`.
+/// This is safe because Lapce always stores a `Doc` behind the trait object.
+/// The `with` / `with_untracked` methods clone the `Rc` before downcasting because
+/// `Rc::downcast` requires ownership; this is cheap (just a refcount bump).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DocSignal {
     // TODO: replace with ReadSignal once that impls `track`
@@ -2663,8 +2722,11 @@ impl DocSignal {
     }
 }
 
-/// Checks if completion should be triggered if the received command
-/// is one that inserts whitespace or deletes whitespace
+/// Determines whether autocompletion should be triggered after a delete command.
+/// Only delete commands can trigger completion (not inserts -- those go through
+/// `receive_char`). The deleted range is extracted from the delta to check if
+/// only whitespace was removed; if so, completion is suppressed to avoid noisy
+/// popups when cleaning up blank space.
 fn show_completion(
     cmd: &EditCommand,
     doc: &Rope,
@@ -2711,7 +2773,11 @@ fn show_inline_completion(cmd: &EditCommand) -> bool {
     )
 }
 
-// TODO(minor): Should we just put this on view, since it only requires those values?
+/// Compute which visual lines are visible in the current viewport and build the
+/// ScreenLines structure used by the paint pipeline. This maps viewport Y coordinates
+/// to visual lines (VLine) and then to render lines (RVLine), which account for
+/// line wrapping. The resulting `ScreenLines` is cached and used by all paint methods
+/// to avoid redundant line-to-position calculations.
 pub(crate) fn compute_screen_lines(
     config: ReadSignal<Arc<LapceConfig>>,
     base: RwSignal<ScreenLinesBase>,

@@ -31,6 +31,10 @@ pub fn implementation_panel(
     })
     .debug_name("implementation panel")
 }
+/// Shared panel view for both implementations and references. The tree is a
+/// two-level hierarchy: file nodes (collapsible) containing line-level references.
+/// Uses VirtualVector on the ReferencesRoot to flatten the tree for virtual scrolling,
+/// similar to how the file explorer works but simpler (only two levels deep).
 pub fn common_reference_panel(
     workspace_data: Rc<WorkspaceData>,
     _position: PanelPosition,
@@ -238,6 +242,10 @@ pub fn init_implementation_root(
     ReferencesRoot { children: refs }
 }
 
+/// Root of the reference tree used for implementations and references panels.
+/// Each child is a file-level Reference::File containing line-level Reference::Line
+/// children. The VirtualVector impl flattens this into a linear list with level
+/// indentation, only including children of expanded file nodes.
 #[derive(Clone, Default)]
 pub struct ReferencesRoot {
     pub(crate) children: Vec<Reference>,
@@ -330,6 +338,8 @@ impl Reference {
             Reference::Line { location } => location.clone(),
         }
     }
+    /// Counts this node plus all children (recursively) to compute the total
+    /// number of visible rows when fully expanded. Used by VirtualVector::total_len.
     pub fn total_len(&self) -> usize {
         match self {
             Reference::File { children, .. } => {

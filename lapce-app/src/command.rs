@@ -25,12 +25,18 @@ use crate::{
     workspace::LapceWorkspace,
 };
 
+/// A command that can be executed by the application. Wraps a CommandKind variant
+/// plus optional JSON data for parameterized commands (e.g. GoToLocation with a path).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LapceCommand {
     pub kind: CommandKind,
     pub data: Option<Value>,
 }
 
+/// Unified command type that wraps all command families. Workbench commands are Lapce-specific,
+/// while Edit/Move/Scroll/Focus/MotionMode/MultiSelection come from floem_editor_core
+/// (re-exported via lapce-core). This allows the keypress system to resolve a single
+/// keybinding to any kind of command regardless of origin.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CommandKind {
     Workbench(LapceWorkbenchCommand),
@@ -82,6 +88,9 @@ impl From<Command> for CommandKind {
     }
 }
 
+/// Build a registry of all available commands, keyed by their strum serialization string.
+/// This registry is used by the palette (command search) and keybinding resolution.
+/// Only commands registered here appear in the palette and can be bound to keys.
 pub fn lapce_internal_commands() -> IndexMap<String, LapceCommand> {
     let mut commands = IndexMap::new();
 
@@ -383,6 +392,9 @@ pub enum LapceWorkbenchCommand {
     GoToLocation,
 }
 
+/// Internal commands are sent between components via the internal_command Listener.
+/// Unlike LapceWorkbenchCommand (which appears in the palette and keybindings),
+/// these are programmatic-only commands carrying rich data payloads.
 #[derive(Clone, Debug)]
 pub enum InternalCommand {
     ReloadConfig,

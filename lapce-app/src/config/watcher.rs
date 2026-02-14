@@ -1,5 +1,9 @@
 use std::sync::{Arc, atomic::AtomicBool, mpsc::Sender};
 
+/// Watches for config file changes (create/modify/remove) and debounces
+/// notifications. Uses an AtomicBool as a simple lock so that rapid successive
+/// file changes (e.g. from an editor doing write-rename) only trigger one
+/// config reload after a 500ms quiet period.
 pub struct ConfigWatcher {
     tx: Sender<()>,
     delay_handler: Arc<AtomicBool>,
@@ -12,6 +16,8 @@ impl notify::EventHandler for ConfigWatcher {
                 notify::EventKind::Create(_)
                 | notify::EventKind::Modify(_)
                 | notify::EventKind::Remove(_) => {
+                    // Use compare_exchange as a mutex: only the first event in a
+                    // burst spawns the delay thread; subsequent events are dropped.
                     if self
                         .delay_handler
                         .compare_exchange(

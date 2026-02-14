@@ -39,6 +39,9 @@ use crate::{
     workspace_data::CommonData,
 };
 
+/// Typed representation of a config value, used to choose the appropriate UI
+/// widget: text input for Float/Integer/String, checkbox for Bool, dropdown
+/// for enum-like values, and hidden for headers (Empty).
 #[derive(Debug, Clone)]
 pub enum SettingsValue {
     Float(f64),
@@ -81,12 +84,20 @@ struct SettingsItem {
     header: bool,
 }
 
+/// Holds the settings UI state. Items are built by introspecting the config
+/// structs via FieldNames (a derive macro that exposes field names and
+/// descriptions at runtime). Section headers are interleaved with settings
+/// items so the virtual list renders both in a single scroll container.
 #[derive(Clone, Debug)]
 struct SettingsData {
+    /// All built-in settings items (Core, Editor, UI sections).
     items: RwSignal<im::Vector<SettingsItem>>,
+    /// Section headers with their scroll positions for the left-side switcher.
     kinds: RwSignal<im::Vector<(String, RwSignal<Point>)>>,
+    /// Plugin-provided settings, loaded from installed Volt metadata.
     plugin_items: RwSignal<im::Vector<SettingsItem>>,
     plugin_kinds: RwSignal<im::Vector<(String, RwSignal<Point>)>>,
+    /// The currently visible items after search filtering.
     filtered_items: RwSignal<im::Vector<SettingsItem>>,
     common: Rc<CommonData>,
 }
@@ -571,6 +582,10 @@ fn settings_item_view(
                 let kind = item.kind.clone();
                 let field = item.field.clone();
                 let item_value = item.value.clone();
+                // Auto-save effect: watches the editor buffer's revision counter
+                // and debounces writes to the settings file (500ms delay). This
+                // avoids writing on every keystroke while still persisting changes
+                // shortly after the user stops typing.
                 create_effect(move |last| {
                     let doc = doc.get_untracked();
                     let rev = doc.buffer.with(|b| b.rev());

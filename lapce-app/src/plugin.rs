@@ -46,6 +46,10 @@ use crate::{
     workspace_data::{CommonData, Focus},
 };
 
+/// Combined plugin info tuple used by the detail view. The fields are:
+/// (installed_metadata, display_info, icon, latest_available_version, installing_signal).
+/// installed_metadata is None for uninstalled plugins; latest is None for available-only plugins.
+/// The installing signal tracks whether an install is in progress (for the "Installing" button state).
 type PluginInfo = Option<(
     Option<VoltMetadata>,
     VoltInfo,
@@ -316,6 +320,10 @@ impl PluginData {
         plugin
     }
 
+    /// Called when a plugin installation completes (or on startup when scanning installed plugins).
+    /// If the plugin is already tracked, just update its metadata and icon. Otherwise, create
+    /// a new InstalledVoltData entry. If we already have this plugin in the available list,
+    /// we know its latest version; otherwise we fetch it from the API asynchronously.
     pub fn volt_installed(&self, volt: &VoltMetadata, icon: &Option<Vec<u8>>) {
         let volt_id = volt.id();
         let (existing, is_latest, volt_data) = self
@@ -324,6 +332,7 @@ impl PluginData {
                 if let Some(v) = installed.get(&volt_id) {
                     (true, true, v.to_owned())
                 } else {
+                    // Check the available-volts cache first to avoid an extra network request.
                     let (info, is_latest) = if let Some(volt) = self
                         .available
                         .volts
@@ -409,6 +418,10 @@ impl PluginData {
         }
     }
 
+    /// Fetch a page of available plugins from the Lapce plugin registry API.
+    /// Uses a loading guard to prevent concurrent requests. The query_id check
+    /// in the response handler ensures results from an outdated query string
+    /// (user changed search text) are discarded.
     fn load_available_volts(
         &self,
         query: &str,
@@ -486,6 +499,9 @@ impl PluginData {
         });
     }
 
+    /// Download and cache a plugin icon. Icons are cached on disk using a SHA-256 hash
+    /// of the URL as the filename. The `updated_at_ts` query parameter in the URL ensures
+    /// cache invalidation when the icon is updated upstream.
     fn load_icon(volt: &VoltInfo) -> Result<VoltIcon> {
         let url = format!(
             "https://plugins.lapce.dev/api/v1/plugins/{}/{}/{}/icon?id={}",

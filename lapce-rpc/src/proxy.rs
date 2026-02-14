@@ -31,6 +31,10 @@ use crate::{
     style::SemanticStyles,
 };
 
+/// Internal message type used on the crossbeam channel between the UI thread
+/// and the proxy handler. This is the in-process representation -- not
+/// serialized. ProxyRequest/ProxyNotification are the serializable wire formats
+/// used when communicating over stdio.
 #[allow(clippy::large_enum_variant)]
 pub enum ProxyRpc {
     Request(RequestId, ProxyRequest),
@@ -46,6 +50,9 @@ pub struct SearchMatch {
     pub line_content: String,
 }
 
+/// Messages from the UI to the proxy that expect a response. Serialized as
+/// tagged JSON: `{"method": "new_buffer", "params": {...}, "id": 42}`.
+/// Each variant maps to an LSP or file-system operation handled by the proxy.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "method", content = "params")]
@@ -197,6 +204,11 @@ pub enum ProxyRequest {
     },
 }
 
+/// Fire-and-forget messages from the UI to the proxy (no response expected).
+/// These include text edits (Update), plugin management, and initialization.
+/// Completions and signature help are notifications rather than requests because
+/// the proxy sends results back as CoreNotifications (allowing multiple
+/// responses from multiple language servers).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "method", content = "params")]
@@ -372,6 +384,10 @@ pub trait ProxyCallback: Send + FnOnce(Result<ProxyResponse, RpcError>) {}
 
 impl<F: Send + FnOnce(Result<ProxyResponse, RpcError>)> ProxyCallback for F {}
 
+/// Two ways to handle a proxy response: a one-shot callback (for async requests
+/// that process the result on the UI thread) or a channel (for synchronous
+/// blocking requests). The callback variant is used by the vast majority of
+/// requests; the channel variant is only used by `get_open_files_content`.
 enum ResponseHandler {
     Callback(Box<dyn ProxyCallback>),
     Chan(Sender<Result<ProxyResponse, RpcError>>),
@@ -395,6 +411,11 @@ pub trait ProxyHandler {
     fn handle_request(&mut self, id: RequestId, rpc: ProxyRequest);
 }
 
+/// The UI-side handle for communicating with the proxy process. Cloneable
+/// and thread-safe. Sends requests/notifications via the crossbeam channel
+/// and tracks pending requests in a mutex-protected map keyed by request ID.
+/// When a response arrives, `handle_response` looks up and invokes the
+/// corresponding callback or unblocks the waiting channel.
 #[derive(Clone)]
 pub struct ProxyRpcHandler {
     tx: Sender<ProxyRpc>,

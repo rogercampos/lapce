@@ -3,9 +3,13 @@ use lsp_types::Position;
 
 use crate::encoding::{offset_utf8_to_utf16, offset_utf16_to_utf8};
 
+/// Extension trait that adds LSP Position conversion methods to any RopeText.
+/// LSP positions use (line, utf16_column), while the internal rope uses
+/// byte offsets. This trait bridges the two coordinate systems.
 pub trait RopeTextPosition: RopeText {
-    /// Converts a UTF8 offset to a UTF16 LSP position
-    /// Returns None if it is not a valid UTF16 offset
+    /// Converts a UTF8 byte offset to an LSP Position (line + utf16 column).
+    /// First finds the line, then converts the byte column offset within that
+    /// line to utf16 code units for LSP compatibility.
     fn offset_to_position(&self, offset: usize) -> Position {
         let (line, col) = self.offset_to_line_col(offset);
         let line_offset = self.offset_of_line(line);

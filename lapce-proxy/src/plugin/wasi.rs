@@ -42,6 +42,10 @@ use super::{
 };
 use crate::plugin::psp::PluginServerRpcHandler;
 
+/// In-memory pipe for WASI plugin I/O. Unlike OS pipes, this is a simple VecDeque
+/// that the WASM runtime reads from and writes to synchronously. The pipe is wrapped
+/// in Arc<RwLock<>> and shared between the host (Lapce) and the WASI guest (plugin),
+/// enabling bidirectional communication without OS-level IPC.
 #[derive(Default)]
 pub struct WasiPipe {
     buffer: VecDeque<u8>,
@@ -413,6 +417,18 @@ pub fn enable_volt(
     Ok(())
 }
 
+/// Starts a WASI plugin by compiling its WASM module and setting up the runtime.
+/// This is the WASI equivalent of `LspClient::start` for native LSP servers.
+///
+/// The WASI runtime gets:
+/// - Environment variables for the host OS, architecture, and libc variant
+/// - A preopened directory at "/" mapped to the plugin's installation directory
+/// - HTTP capability via wasi-experimental-http (allows plugins to make HTTP requests)
+/// - Custom host functions (`host_handle_rpc`, `host_handle_stderr`) imported under
+///   the "lapce" module, which the plugin calls to communicate with the host
+///
+/// Communication uses the same JSON-RPC protocol as native LSPs, but routed through
+/// in-memory WasiPipes instead of OS stdin/stdout.
 pub fn start_volt(
     workspace: Option<PathBuf>,
     configurations: Option<HashMap<String, serde_json::Value>>,
@@ -521,6 +537,10 @@ pub fn start_volt(
         }
     })?;
     linker.module(&mut store, "", &module)?;
+    // WASI I/O thread: feeds JSON-RPC messages from the io_rx channel into the
+    // plugin's stdin pipe and then calls the plugin's `handle_rpc` export to
+    // process them. Unlike native LSPs (which have their own event loop), WASI
+    // plugins are passive -- they only execute when we explicitly call handle_rpc.
     let local_rpc = rpc.clone();
     thread::spawn(move || {
         let mut exist_id = None;
@@ -608,6 +628,10 @@ fn wasi_read_string(stdout: &Arc<RwLock<WasiPipe>>) -> Result<String> {
     Ok(buf)
 }
 
+/// Converts a flat key-value map with dotted keys (e.g., {"a.b.c": "d"}) into a
+/// nested JSON object (e.g., {"a": {"b": {"c": "d"}}}). This is needed because
+/// plugin configurations are stored flat in the user's settings but LSP servers
+/// expect nested initialization options.
 fn unflatten_map(map: &HashMap<String, serde_json::Value>) -> serde_json::Value {
     let mut new = serde_json::json!({});
     for (key, value) in map.iter() {

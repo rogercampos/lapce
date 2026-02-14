@@ -2,6 +2,10 @@ use anyhow::{Result, anyhow};
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
+/// A thin wrapper around a serde_json::Value that provides RPC-aware parsing.
+/// Distinguishes between requests (have "id" + "method"), responses (have "id"
+/// but no "method"), and notifications (have "method" but no "id") based on
+/// which JSON fields are present.
 #[derive(Debug, Clone)]
 pub struct RpcObject(pub Value);
 
@@ -43,6 +47,9 @@ impl RpcObject {
         }
     }
 
+    /// Parses a response message, returning Ok(Ok(result)) for success or
+    /// Ok(Err(error)) for an error response. Returns Err(String) if the
+    /// message is malformed (missing id, or has both/neither result and error).
     pub fn into_response(mut self) -> Result<Result<Value, Value>, String> {
         let _ = self
             .get_id()

@@ -8,6 +8,9 @@ use serde::{Deserialize, Serialize};
 
 /// Returns the first item yielded from `items` if at least one item is yielded, all yielded items
 /// are `Some`, and all yielded items compare equal, else returns `None`.
+///
+/// Used to ensure that when multiple files are selected, they all share the same
+/// file type (extension or filename) before showing a unified icon.
 fn try_all_equal_value<T: PartialEq, I: IntoIterator<Item = Option<T>>>(
     items: I,
 ) -> Option<T> {
@@ -36,6 +39,10 @@ impl IconThemeConfig {
     /// If all paths in `paths` have the same file type (as determined by the file name or
     /// extension), and there is an icon associated with that file type, returns the path of the
     /// icon.
+    ///
+    /// Priority: exact filename match (e.g. "Dockerfile") > extension match (e.g. ".rs").
+    /// This ordering ensures special filenames like Makefile get their own icon even
+    /// if a generic extension mapping exists.
     pub fn resolve_path_to_icon(&self, paths: &[&Path]) -> Option<PathBuf> {
         let file_names = paths
             .iter()

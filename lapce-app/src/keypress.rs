@@ -39,11 +39,16 @@ const DEFAULT_KEYMAPS_MACOS: &str =
 const DEFAULT_KEYMAPS_NONMACOS: &str =
     include_str!("../../defaults/keymaps-nonmacos.toml");
 
+/// Trait implemented by every component that handles keyboard input.
+/// The keypress system uses this to determine whether a keybinding's condition
+/// matches, to dispatch matched commands, and to forward unmatched characters.
 pub trait KeyPressFocus: std::fmt::Debug {
     fn get_mode(&self) -> Mode {
         Mode::Insert
     }
 
+    /// Reports whether a given condition (e.g. EditorFocus, ListFocus) is active
+    /// for this component. Used to evaluate `when` clauses in keybindings.
     fn check_condition(&self, condition: Condition) -> bool;
 
     fn run_command(
@@ -53,10 +58,14 @@ pub trait KeyPressFocus: std::fmt::Debug {
         mods: Modifiers,
     ) -> CommandExecuted;
 
+    /// When true, single-character keybindings are suppressed so the character
+    /// goes to receive_char instead. Used by editors expecting text input.
     fn expect_char(&self) -> bool {
         false
     }
 
+    /// When true, the keypress system does not propagate events to background
+    /// components. Used by modal popups to capture all input.
     fn focus_only(&self) -> bool {
         false
     }
@@ -138,12 +147,21 @@ pub struct KeyPressHandle {
     pub keymatch: KeymapMatch,
 }
 
+/// Central keypress state. Holds the full keymap lookup tables and a buffer for
+/// multi-key chord sequences (e.g. "Ctrl+K Ctrl+S" requires two key presses).
 #[derive(Clone, Debug)]
 pub struct KeyPressData {
+    /// Accumulates key presses for multi-key chords. The SystemTime tracks when
+    /// the last key was pressed; chords expire after 1 second of inactivity.
     pending_keypress: RwSignal<(Vec<KeyPress>, Option<SystemTime>)>,
+    /// All registered commands by their string name.
     pub commands: Rc<IndexMap<String, LapceCommand>>,
+    /// Maps key sequences to their matching keymaps. A prefix like [Ctrl+K]
+    /// maps to all keymaps that start with Ctrl+K (enabling prefix detection).
     pub keymaps: Rc<IndexMap<Vec<KeyMapPress>, Vec<KeyMap>>>,
+    /// Reverse lookup: command name -> all keymaps bound to it.
     pub command_keymaps: Rc<IndexMap<String, Vec<KeyMap>>>,
+    /// Pre-computed lists for the keyboard shortcuts settings UI.
     pub commands_with_keymap: Rc<Vec<KeyMap>>,
     pub commands_without_keymap: Rc<Vec<LapceCommand>>,
 }
@@ -255,6 +273,9 @@ impl KeyPressData {
             }
         };
 
+        // If more than 1 second has passed since the last keypress, clear the
+        // pending chord buffer. This prevents stale partial chords from
+        // accidentally matching after a long pause.
         self.pending_keypress
             .update(|(pending_keypress, last_time)| {
                 let last_time = last_time.replace(SystemTime::now());
@@ -339,6 +360,10 @@ impl KeyPressData {
                         pending_keypress.clear();
                         last_time.take();
                     });
+                // Special handling for Shift+key: if no keybinding matched with
+                // Shift, try again without Shift. If the result is a Move command,
+                // execute it. This allows Shift+Arrow to extend selection even when
+                // only Arrow is bound to a move command.
                 {
                     let old_keypress = keypress.clone();
                     let mut keypress = keypress.clone();
@@ -362,6 +387,10 @@ impl KeyPressData {
             }
         }
 
+        // Character input fallback: strip modifiers that naturally combine with
+        // characters (Shift on all OSes, Alt on macOS for special chars, AltGr on
+        // other OSes for international chars). If no "real" modifiers remain, the
+        // key is treated as a character input rather than a command shortcut.
         let mut mods = keypress.mods;
 
         #[cfg(target_os = "macos")]
@@ -401,6 +430,10 @@ impl KeyPressData {
         }
     }
 
+    /// Extracts the modifier state, but removes the modifier bit for the key
+    /// itself. E.g. pressing Shift alone reports modifiers=SHIFT, but we want
+    /// mods=empty so the Shift key can match keybindings like "Shift" without
+    /// also requiring a Shift modifier.
     fn get_key_modifiers(key_event: &KeyEvent) -> Modifiers {
         let mut mods = key_event.modifiers;
 
@@ -416,6 +449,20 @@ impl KeyPressData {
         mods
     }
 
+    /// Core keymap matching algorithm. Given accumulated keypresses, looks up all
+    /// keymaps whose key sequence is a prefix or exact match.
+    ///
+    /// Returns:
+    /// - `Full(cmd)` if exactly one keymap matches the complete sequence
+    /// - `Multiple(cmds)` if multiple keymaps match exactly (tried in reverse
+    ///   order, so later-defined bindings have priority)
+    /// - `Prefix` if the current sequence is a prefix of a longer keymap (keep
+    ///   collecting keys)
+    /// - `None` if no keymap starts with this sequence
+    ///
+    /// Filtering: keymaps with unsatisfied `when` conditions are excluded.
+    /// If the focused component expects character input, single-character
+    /// keypresses are suppressed so they go to receive_char instead.
     fn match_keymap<T: KeyPressFocus + ?Sized>(
         &self,
         keypresses: &[KeyPress],
@@ -430,6 +477,8 @@ impl KeyPressData {
                 keymaps
                     .iter()
                     .filter(|keymap| {
+                        // When the component expects character input (e.g. an editor),
+                        // don't match single-character keybindings so the char is typed.
                         if check.expect_char()
                             && keypresses.len() == 1
                             && keypresses[0].is_char()
@@ -450,18 +499,26 @@ impl KeyPressData {
         if matches.is_empty() {
             KeymapMatch::None
         } else if matches.len() == 1 && matches[0].key == keypresses {
+            // Exactly one keymap matches and the full key sequence is consumed.
             KeymapMatch::Full(matches[0].command.clone())
         } else if matches.len() > 1
             && matches.iter().filter(|m| m.key != keypresses).count() == 0
         {
+            // Multiple keymaps all match exactly (same key, different conditions
+            // all passing). Try them in reverse so later-loaded bindings win.
             KeymapMatch::Multiple(
                 matches.iter().rev().map(|m| m.command.clone()).collect(),
             )
         } else {
+            // Some matches have longer key sequences: we are in a prefix state.
             KeymapMatch::Prefix
         }
     }
 
+    /// Evaluates a condition expression string from a keybinding's `when` clause.
+    /// Supports `&&` (AND), `||` (OR), and `!` (NOT) operators. The parsing is
+    /// left-to-right without operator precedence -- the first `||` or `&&` found
+    /// splits the expression, and the right side is recursively evaluated.
     fn check_condition<T: KeyPressFocus + ?Sized>(
         condition: &str,
         check: &T,
@@ -503,6 +560,13 @@ impl KeyPressData {
         }
     }
 
+    /// Builds the keymap lookup tables by loading keybindings in priority order:
+    ///   1. Common defaults (keymaps-common.toml) -- shared across all platforms
+    ///   2. OS-specific defaults (keymaps-macos.toml or keymaps-nonmacos.toml)
+    ///   3. User overrides from the keymaps file (~/.config/.../keymaps.toml)
+    ///
+    /// Later loads can override or unbind earlier ones using the "-command"
+    /// prefix syntax (see KeyMapLoader::load_from_str).
     #[allow(clippy::type_complexity)]
     fn get_keymaps(
         _config: &LapceConfig,

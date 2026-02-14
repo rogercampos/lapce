@@ -24,6 +24,10 @@ use floem::{
     },
 };
 
+/// State for the keyboard shortcut picker dialog. When a user clicks a command
+/// row, the picker opens and captures raw key events to define a new binding.
+/// The bool in `keys` tracks whether each key press has been "confirmed" by a
+/// subsequent KeyUp event (distinguishing held modifiers from tapped keys).
 #[derive(Clone)]
 pub struct KeymapPicker {
     cmd: RwSignal<Option<LapceCommand>>,
@@ -451,6 +455,9 @@ fn keyboard_picker_view(
         }),
     )
     .keyboard_navigable()
+    // Capture key events for the picker. On KeyDown, if the last key is still
+    // unconfirmed and is a modifier-only press, replace it (user is still
+    // building the chord). Max 2 steps in a chord; after that, reset.
     .on_event_stop(EventListener::KeyDown, move |event| {
         if let Event::KeyDown(key_event) = event {
             if let Some(keypress) = KeyPressData::keypress(key_event) {
@@ -470,6 +477,8 @@ fn keyboard_picker_view(
             }
         }
     })
+    // On KeyUp, mark the last key as confirmed. This distinguishes between
+    // holding a modifier (unconfirmed, may be replaced) and tapping a key.
     .on_event_stop(EventListener::KeyUp, move |event| {
         if let Event::KeyUp(_key_event) = event {
             picker.keys.update(|keys| {

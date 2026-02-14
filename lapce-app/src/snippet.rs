@@ -5,6 +5,12 @@ use anyhow::Error;
 use once_cell::sync::Lazy;
 use regex::Regex;
 
+/// Represents a single element in a parsed LSP snippet.
+/// Snippets follow the TextMate/LSP snippet syntax: `$1`, `${2:default}`, `$0` (final cursor).
+/// - `Text` is literal text to insert
+/// - `PlaceHolder(n, children)` is `${n:children}` -- a tabstop with default content
+/// - `Tabstop(n)` is `$n` -- a cursor position with no default content
+/// Placeholders can be nested: `${1:${2:inner}}` creates linked editing groups.
 #[derive(Debug, PartialEq)]
 pub enum SnippetElement {
     Text(String),
@@ -94,6 +100,11 @@ impl Display for Snippet {
 }
 
 impl Snippet {
+    /// Core recursive parser: scans the string from `pos` trying each extraction method in order
+    /// (tabstop, placeholder, text). `escs` are characters that stop text extraction when
+    /// encountered (they signal the start of a new element). `loose_escs` are characters that
+    /// can be escaped with backslash but don't stop text extraction on their own.
+    /// Returns the parsed elements and the position after the last consumed character.
     #[inline]
     fn extract_elements(
         s: &str,
@@ -248,6 +259,9 @@ impl Snippet {
         fmt::Result::Ok(())
     }
 
+    /// Compute tabstop positions as (tab_number, (start_offset, end_offset)) pairs.
+    /// `pos` is the base offset in the document where the snippet starts.
+    /// The editor uses these to implement tab-cycling through snippet placeholders.
     #[inline]
     pub fn tabs(&self, pos: usize) -> Vec<(usize, (usize, usize))> {
         Self::elements_tabs(&self.elements, pos)

@@ -6,6 +6,10 @@ use serde_json::Value;
 
 use crate::counter::Counter;
 
+/// Runtime identifier for a plugin instance. Different from VoltID (which
+/// identifies a plugin by author/name). A single Volt can be reinstalled
+/// or reloaded, getting a new PluginId each time. Used to route LSP responses
+/// back to the correct language server instance.
 #[derive(Eq, PartialEq, Hash, Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct PluginId(pub u64);
 
@@ -24,6 +28,9 @@ pub struct PluginConfiguration {
     pub description: String,
 }
 
+/// Lightweight plugin info as returned by the plugin registry/catalog.
+/// Contains only the metadata needed for display and installation decisions.
+/// Contrast with VoltMetadata which has the full manifest including WASM paths.
 #[derive(Deserialize, Clone, Debug, Serialize, PartialEq, Eq)]
 pub struct VoltInfo {
     pub name: String,
@@ -55,6 +62,10 @@ pub struct VoltConfig {
     pub description: String,
 }
 
+/// Full plugin manifest, deserialized from volt.toml. Contains everything
+/// needed to activate and run a plugin: WASM binary path, color/icon themes,
+/// activation conditions, and user-configurable settings. The `dir` field
+/// is populated at runtime with the plugin's installation directory.
 #[derive(Deserialize, Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub struct VoltMetadata {
@@ -92,6 +103,9 @@ impl VoltMetadata {
     }
 }
 
+/// Uniquely identifies a plugin by author and name (e.g., "lapce.rust").
+/// This is the stable identity used to track installations, enable/disable
+/// state, and configuration -- unlike PluginId which changes on each reload.
 #[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VoltID {
     pub author: String,

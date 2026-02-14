@@ -23,6 +23,13 @@ use crate::{
     workspace_data::{WorkProgress, WorkspaceData},
 };
 
+/// The status bar at the bottom of the workspace. Layout is a three-section row:
+/// Left: diagnostic counts (errors/warnings) + LSP progress indicators
+/// Center-Right: panel toggle buttons (left, bottom, right panels)
+/// Far-Right: cursor position, line ending, language mode (click to open palette)
+///
+/// Each right-side status text is clickable and opens the relevant palette mode
+/// (e.g. clicking line info opens "Go to Line", clicking language opens "Change Language").
 pub fn status(
     workspace_data: Rc<WorkspaceData>,
     status_height: RwSignal<f64>,
@@ -270,6 +277,9 @@ pub fn status(
     .debug_name("Status/Bottom Bar")
 }
 
+/// Renders LSP progress notifications (e.g. "indexing: 50%") as a dynamic horizontal stack.
+/// Uses AtomicU64 for unique keys because progress items can change content without changing
+/// their ProgressToken identity, so a monotonically increasing ID ensures the view updates.
 fn progress_view(
     config: ReadSignal<Arc<LapceConfig>>,
     progresses: RwSignal<IndexMap<ProgressToken, WorkProgress>>,
@@ -299,6 +309,8 @@ fn progress_view(
     .style(move |s| s.flex_row().height_pct(100.0).min_width(0.0))
 }
 
+/// A reusable status bar text item that auto-hides when no file/scratch document is active.
+/// Only shows for File and Scratch docs, not for settings/keymap/plugin views.
 fn status_text<S: std::fmt::Display + 'static>(
     config: ReadSignal<Arc<LapceConfig>>,
     editor: Memo<Option<EditorData>>,

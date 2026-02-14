@@ -4,10 +4,16 @@ use floem::{
     style::TextColor,
 };
 
+/// Create a WaveBox view that renders a squiggly wave underline, used for
+/// diagnostic error/warning indicators under text (similar to VS Code's wavy underline).
 pub fn wave_box() -> WaveBox {
     WaveBox { id: ViewId::new() }
 }
 
+/// A custom Floem View that draws a wave pattern using quadratic Bezier curves.
+/// The wave is drawn both along the bottom and top edges to create a filled squiggle shape.
+/// The color comes from the TextColor style property, allowing callers to tint it
+/// for errors (red), warnings (yellow), etc.
 pub struct WaveBox {
     id: ViewId,
 }

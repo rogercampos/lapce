@@ -30,6 +30,8 @@ use crate::{
     workspace_data::WorkspaceData,
 };
 
+/// Serializable snapshot of an editor tab child for persistence.
+/// Used when saving workspace state to disk and restoring it on launch.
 #[derive(Clone, Serialize, Deserialize)]
 pub enum EditorTabChildInfo {
     Editor(EditorInfo),
@@ -64,6 +66,8 @@ impl EditorTabChildInfo {
     }
 }
 
+/// Serializable snapshot of an entire editor tab pane for workspace persistence.
+/// `is_focus` records which tab pane was focused when saved, so it can be restored.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct EditorTabInfo {
     pub active: usize,
@@ -113,6 +117,9 @@ impl EditorTabInfo {
     }
 }
 
+/// Describes what kind of content to open in a tab. Used as input to
+/// `get_editor_tab_child()` to determine what to create or reuse.
+/// `Editor` carries a pre-loaded Doc to avoid redundant file loading.
 pub enum EditorTabChildSource {
     Editor { path: PathBuf, doc: Rc<Doc> },
     NewFileEditor,
@@ -122,6 +129,10 @@ pub enum EditorTabChildSource {
     Volt(VoltID),
 }
 
+/// A live child within an editor tab pane. Each variant holds an ID for its specific
+/// content type. Editor children reference an EditorId in the Editors registry;
+/// special views (Settings, Keymap, etc.) have their own ID types to distinguish
+/// multiple instances and enable deduplication in get_editor_tab_child().
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum EditorTabChild {
     Editor(EditorId),
@@ -174,6 +185,10 @@ impl EditorTabChild {
         }
     }
 
+    /// Creates a reactive Memo that computes the tab header display info (icon, name,
+    /// color, pristine state) for this child. The Memo subscribes to the relevant
+    /// signals so tab headers automatically update when files are renamed, modified,
+    /// or when the config/theme changes.
     pub fn view_info(
         &self,
         editors: Editors,
@@ -288,15 +303,27 @@ impl EditorTabChild {
     }
 }
 
+/// A leaf node in the split tree representing a tabbed editor pane.
+/// Contains a list of children (file editors, settings views, etc.) with exactly
+/// one active child displayed at a time. Each child's tuple contains:
+/// - RwSignal<usize>: the child's index (used by view for animation/ordering)
+/// - RwSignal<Rect>: the child's tab header rect (used for drag-and-drop hit testing)
+/// - EditorTabChild: the content reference
+///
+/// `locations` / `current_location` provide per-pane back/forward navigation,
+/// independent of the global navigation history in MainSplitData.
 #[derive(Clone)]
 pub struct EditorTabData {
     pub scope: Scope,
+    /// The parent split node this tab pane belongs to.
     pub split: SplitId,
     pub editor_tab_id: EditorTabId,
+    /// Index into `children` of the currently visible tab.
     pub active: usize,
     pub children: Vec<(RwSignal<usize>, RwSignal<Rect>, EditorTabChild)>,
     pub window_origin: Point,
     pub layout_rect: Rect,
+    /// Per-pane navigation history for local back/forward jumping.
     pub locations: RwSignal<im::Vector<EditorLocation>>,
     pub current_location: RwSignal<usize>,
 }

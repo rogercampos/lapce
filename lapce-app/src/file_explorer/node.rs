@@ -1,6 +1,10 @@
 use floem::views::VirtualVector;
 use lapce_rpc::file::{FileNodeItem, FileNodeViewData, Naming};
 
+/// Adapter that makes the recursive FileNodeItem tree usable with Floem's
+/// virtual_stack. The total_len is O(1) thanks to the pre-computed
+/// children_open_count. The slice method delegates to FileNodeItem::append_view_slice
+/// which walks the tree to extract only the visible items in the requested range.
 pub struct FileNodeVirtualList {
     file_node_item: FileNodeItem,
     naming: Naming,

@@ -26,6 +26,9 @@ const WORKSPACE_FILES: &str = "workspace_files";
 const DISABLED_VOLTS: &str = "disabled_volts";
 const RECENT_WORKSPACES: &str = "recent_workspaces";
 
+/// Events sent to the background save thread. All persistence operations are
+/// asynchronous: callers send events through a channel and don't block on I/O.
+/// This prevents file writes from causing UI jank.
 pub enum SaveEvent {
     App(AppInfo),
     Workspace(LapceWorkspace, WorkspaceInfo),
@@ -35,6 +38,19 @@ pub enum SaveEvent {
     WorkspaceDisabledVolts(Arc<LapceWorkspace>, Vec<VoltID>),
 }
 
+/// File-based persistence layer. All data is stored as JSON files in the config
+/// directory (e.g., ~/Library/Application Support/dev.lapce.Lapce-Debug/db/).
+///
+/// Structure:
+/// - db/app: global app state (window positions/sizes)
+/// - db/window: window layout info
+/// - db/workspaces/<encoded-workspace>/workspace_info: split tree + panel layout
+/// - db/workspaces/<encoded-workspace>/workspace_files/<sha256>: per-file cursor/scroll state
+/// - db/disabled_volts: globally disabled plugins
+/// - db/recent_workspaces: recently opened workspace list
+///
+/// Write operations are non-blocking: they're sent to a dedicated background thread
+/// via crossbeam channel. Read operations are synchronous (called during startup).
 #[derive(Clone)]
 pub struct LapceDb {
     folder: PathBuf,
@@ -43,6 +59,9 @@ pub struct LapceDb {
 }
 
 impl LapceDb {
+    /// Creates the db directory structure and spawns the background save thread.
+    /// The save thread runs an infinite loop processing SaveEvents from the channel.
+    /// Errors during individual saves are logged but don't crash the app.
     pub fn new() -> Result<Self> {
         let folder = Directory::config_directory()
             .ok_or_else(|| anyhow!("can't get config directory"))?
@@ -183,6 +202,8 @@ impl LapceDb {
         Ok(())
     }
 
+    /// Updates the recent workspaces list: either updates the timestamp of an existing
+    /// entry or appends a new one. The list is sorted by most-recently-opened first.
     fn insert_recent_workspace(&self, workspace: LapceWorkspace) -> Result<()> {
         let mut workspaces = self.recent_workspaces().unwrap_or_default();
 
@@ -401,12 +422,17 @@ impl LapceDb {
     }
 }
 
+/// URL-encodes the workspace identifier (e.g., "Local:/path/to/project") to create
+/// a filesystem-safe folder name for per-workspace persistence data.
 fn workspace_folder_name(workspace: &LapceWorkspace) -> String {
     url::form_urlencoded::Serializer::new(String::new())
         .append_key_only(&workspace.to_string())
         .finish()
 }
 
+/// SHA-256 hashes the file path to generate a fixed-length, filesystem-safe filename
+/// for per-document persistence (cursor position, scroll offset). The hash avoids
+/// issues with deep paths or special characters while ensuring uniqueness.
 fn doc_path_name(path: &Path) -> String {
     let mut hasher = Sha256::new();
     hasher.update(path.to_string_lossy().as_bytes());

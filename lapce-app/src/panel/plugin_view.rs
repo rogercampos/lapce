@@ -31,6 +31,8 @@ use crate::{
 
 pub const VOLT_DEFAULT_PNG: &[u8] = include_bytes!("../../../extra/images/volt.png");
 
+/// Adapter to make an IndexMap usable with Floem's virtual_stack. Provides indexed
+/// access to key-value pairs by range, preserving the map's insertion order.
 struct IndexMapItems<K, V>(IndexMap<K, V>);
 
 impl<K: Clone, V: Clone> IndexMapItems<K, V> {
@@ -63,6 +65,10 @@ impl<K: Clone + 'static, V: Clone + 'static> VirtualVector<(usize, K, V)>
     }
 }
 
+/// The plugin popup (exclusive_popup) showing installed and available plugins.
+/// The available list uses infinite scrolling: `on_scroll` detects when the user
+/// nears the bottom and calls `load_more_available` to fetch the next page from
+/// the plugin registry.
 pub fn plugin_popup(workspace_data: Rc<WorkspaceData>) -> impl View {
     let plugin_popup_data = workspace_data.plugin_popup_data.clone();
     let config = workspace_data.common.config;

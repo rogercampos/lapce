@@ -20,9 +20,13 @@ prop_extractor! {
     }
 }
 
+/// State updates sent to the FocusText view via ViewId::update_state.
+/// Each variant triggers a re-layout of the text with updated styling.
 enum FocusTextState {
     Text(String),
     FocusColor(Color),
+    /// Byte indices into the text where fuzzy match highlights should be drawn.
+    /// These come from the nucleo fuzzy matcher and are rendered in bold + focus_color.
     FocusIndices(Vec<usize>),
 }
 
@@ -62,15 +66,24 @@ pub fn focus_text(
     }
 }
 
+/// A text view that highlights specific character positions (fuzzy match indices) in bold
+/// and a distinct color. When the text overflows available width, it truncates with "..."
+/// and maintains highlight positions within the truncated text.
+/// Used in palette items, completion labels, and search results.
 pub struct FocusText {
     id: ViewId,
+    /// The full text content.
     text: String,
+    /// Pre-computed TextLayout with highlight spans applied.
     text_layout: Option<TextLayout>,
     focus_color: Color,
     focus_indices: Vec<usize>,
     text_node: Option<NodeId>,
+    /// Truncated version of text (with "..." suffix) when the full text exceeds available_width.
     available_text: Option<String>,
+    /// The width at which truncation was computed. Cached to avoid re-computing on every layout.
     available_width: Option<f32>,
+    /// TextLayout for the truncated text, used when the full text doesn't fit.
     available_text_layout: Option<TextLayout>,
     style: Extractor,
 }

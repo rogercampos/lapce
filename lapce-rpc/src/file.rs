@@ -260,18 +260,26 @@ pub struct FileNodeViewData {
     pub level: usize,
 }
 
+/// A node in the file explorer tree. Represents a single file or directory.
+/// Children are stored in a HashMap keyed by full path for O(1) lookups,
+/// and sorted only when needed for display (via `sorted_children()`).
+///
+/// `children_open_count` is a cached count used for virtual list sizing --
+/// it represents the total number of visible descendant nodes (including
+/// recursively open subdirectories). This avoids walking the entire tree
+/// on every frame to compute the list length.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FileNodeItem {
     pub path: PathBuf,
     pub is_dir: bool,
-    /// Whether the directory's children have been read.
-    /// Does nothing if not a directory.
+    /// Whether the directory's children have been read from disk.
+    /// Directories start as `read: false` and are populated lazily on open.
     pub read: bool,
-    /// Whether the directory is open in the explorer view.
+    /// Whether the directory is expanded in the explorer view.
     pub open: bool,
     pub children: HashMap<PathBuf, FileNodeItem>,
-    /// The number of child (directories) that are open themselves
-    /// Used for sizing of the explorer list
+    /// Cached count of all visible descendant nodes. Updated via
+    /// `update_node_count()` whenever the tree structure changes.
     pub children_open_count: usize,
 }
 
@@ -281,6 +289,9 @@ impl PartialOrd for FileNodeItem {
     }
 }
 
+/// Sorting: directories come before files, then alphabetical with human-sort
+/// (so "file2" comes before "file10"). Uses `human_sort::compare` for
+/// natural number ordering within filenames.
 impl Ord for FileNodeItem {
     fn cmp(&self, other: &Self) -> Ordering {
         match (self.is_dir, other.is_dir) {

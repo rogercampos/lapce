@@ -15,6 +15,11 @@ pub enum PathObjectType {
     File,
 }
 
+/// Parses a CLI path argument that may include line and column numbers in the
+/// format `path:line:column`. Splits from the RIGHT using `:` to handle paths
+/// that may contain colons (e.g., Windows drive letters like `C:\foo`).
+/// Falls back gracefully: if the rightmost segments aren't valid numbers,
+/// they're treated as part of the path.
 pub fn parse_file_line_column(path: &str) -> Result<PathObject, Error> {
     if let Ok(path) = PathBuf::from(path).canonicalize() {
         return Ok(PathObject {
@@ -77,6 +82,11 @@ pub fn parse_file_line_column(path: &str) -> Result<PathObject, Error> {
     })
 }
 
+/// Attempts to send an "open paths" message to an already-running Lapce instance
+/// via a local socket (Unix domain socket / named pipe). This enables the
+/// `lapce-proxy path/to/file` CLI workflow where a second invocation hands off
+/// to the first. If no instance is listening, the connection fails and the caller
+/// should exit.
 pub fn try_open_in_existing_process(paths: &[PathObject]) -> Result<()> {
     let local_socket = Directory::local_socket()
         .ok_or_else(|| anyhow!("can't get local socket folder"))?;

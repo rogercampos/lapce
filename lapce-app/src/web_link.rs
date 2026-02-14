@@ -7,6 +7,9 @@ use floem::{
 
 use crate::{command::InternalCommand, listener::Listener};
 
+/// A clickable text label that opens a URL in the system browser.
+/// Uses InternalCommand::OpenWebUri rather than opening directly, so the
+/// workspace_data handler can use the `open` crate in a centralized way.
 pub fn web_link(
     text: impl Fn() -> String + 'static,
     uri: impl Fn() -> String + 'static,

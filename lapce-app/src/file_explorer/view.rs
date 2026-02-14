@@ -56,6 +56,10 @@ fn blend_colors(background: Color, foreground: Color) -> Color {
     Color::from_rgba8(r, g, b, 255)
 }
 
+/// Builds the complete file explorer panel with two foldable sections:
+/// "Open Editors" (showing tabs from all editor groups) and "File Explorer"
+/// (the tree view). The "Open Editors" section has a fixed height and can
+/// be hidden via config.
 pub fn file_explorer_panel(
     workspace_data: Rc<WorkspaceData>,
     position: PanelPosition,
@@ -110,10 +114,11 @@ pub fn file_explorer_panel(
 }
 
 /// Initialize the file explorer's naming (renaming, creating, etc.) editor with the given path.
+/// Selects just the stem portion (before the extension) so the user can quickly type
+/// a new name without re-typing the extension. Handles dotfiles (e.g., ".gitignore")
+/// by treating the leading dot as part of the stem.
 fn initialize_naming_editor_with_path(data: &FileExplorerData, path: &Path) {
     let file_name = path.file_name().unwrap_or_default().to_string_lossy();
-    // Start with the part of the file or directory name before the extension
-    // selected.
     let selection_end = {
         let without_leading_dot = file_name.strip_prefix('.').unwrap_or(&file_name);
         let idx = without_leading_dot
@@ -219,7 +224,9 @@ fn file_node_text_view(data: FileExplorerData, node: FileNodeViewData) -> impl V
     }
 }
 
-/// Input used for naming a file/directory
+/// Input used for naming a file/directory. When an error is present (e.g., the
+/// target path already exists), it shows a floating error label below the input
+/// using absolute positioning and z_index to overlay on top of subsequent tree items.
 fn file_node_input_view(data: FileExplorerData, err: Option<String>) -> Container {
     let ui_line_height = data.common.ui_line_height;
 
@@ -285,6 +292,12 @@ fn file_node_input_view(data: FileExplorerData, err: Option<String>) -> Containe
     .style(move |s| s.width_full())
 }
 
+/// The main file tree view. Uses a virtual_stack for efficient rendering of
+/// potentially thousands of file nodes. The FileNodeVirtualList adapter flattens
+/// the recursive tree into a linear list for the virtual stack, using the
+/// pre-computed children_open_count for O(1) total_len(). Each node renders
+/// differently based on its kind: Path (normal file/dir), Renaming, Naming
+/// (new file), or Duplicating.
 fn file_explorer_view(data: FileExplorerData) -> impl View {
     let root = data.root;
     let ui_line_height = data.common.ui_line_height;

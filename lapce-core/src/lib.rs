@@ -8,6 +8,9 @@ pub mod meta;
 pub mod rope_text_pos;
 pub mod style;
 pub mod syntax;
-// This is primarily being re-exported to avoid changing every single usage
-// in lapce-app. We should probably remove this at some point.
+
+// Re-export everything from floem_editor_core (rope, buffer, commands, cursor,
+// etc.) so that downstream crates can import them as `lapce_core::*` instead
+// of depending on floem_editor_core directly. This keeps the dependency graph
+// cleaner -- only lapce-core needs to know about the floem crate.
 pub use floem_editor_core::*;

@@ -42,9 +42,21 @@ use crate::{
     watcher::{FileWatcher, Notify, WatchToken},
 };
 
+/// Token for file-level watches (individual open files). Events with this token
+/// trigger content-reload checks for buffers the user has open.
 const OPEN_FILE_EVENT_TOKEN: WatchToken = WatchToken(1);
+/// Token for workspace-level watches (recursive directory watching). Events with
+/// this token trigger file explorer refresh after a debounce period.
 const WORKSPACE_EVENT_TOKEN: WatchToken = WatchToken(2);
 
+/// Central dispatch hub for the proxy process. Owns all proxy-side state:
+/// open buffers, file watcher, and the plugin catalog RPC handle. Receives
+/// `ProxyRequest` and `ProxyNotification` messages from the app process and
+/// routes them to the appropriate subsystem (buffers, plugins, filesystem).
+///
+/// Runs on a single thread -- all mutable state access is sequential. Heavy
+/// operations (search, file listing, directory reads) are spawned onto separate
+/// threads to avoid blocking the dispatch loop.
 pub struct Dispatcher {
     workspace: Option<PathBuf>,
     pub proxy_rpc: ProxyRpcHandler,
@@ -104,6 +116,8 @@ impl ProxyHandler for Dispatcher {
             OpenFileChanged { path } => {
                 if path.exists() {
                     if let Some(buffer) = self.buffers.get(&path) {
+                        // Compare modification timestamps to avoid reloading when
+                        // we ourselves just saved the file (our save updates mod_time).
                         if get_mod_time(&buffer.path) == buffer.mod_time {
                             return;
                         }
@@ -149,6 +163,8 @@ impl ProxyHandler for Dispatcher {
             }
             Update { path, delta, rev } => {
                 let buffer = self.buffers.get_mut(&path).unwrap();
+                // Clone the old text before applying the delta because the LSP
+                // needs both old and new text to compute incremental changes.
                 let old_text = buffer.rope.clone();
                 buffer.update(&delta, rev);
                 self.catalog_rpc.did_change_text_document(
@@ -236,10 +252,16 @@ impl ProxyHandler for Dispatcher {
                 whole_word,
                 is_regex,
             } => {
+                // WORKER_ID is a monotonically increasing counter used for search
+                // cancellation. Each new search bumps the counter; the search loop
+                // checks if WORKER_ID has moved past its own ID, meaning a newer
+                // search has started and this one should abort early.
                 static WORKER_ID: AtomicU64 = AtomicU64::new(0);
                 let our_id = WORKER_ID.fetch_add(1, Ordering::SeqCst) + 1;
 
                 let workspace = self.workspace.clone();
+                // Include both workspace files and any open buffers (which may be
+                // outside the workspace) in the search.
                 let buffers = self
                     .buffers
                     .iter()
@@ -556,8 +578,13 @@ impl ProxyHandler for Dispatcher {
             GetFiles { .. } => {
                 let workspace = self.workspace.clone();
                 let proxy_rpc = self.proxy_rpc.clone();
+                // File listing is done on a background thread since large
+                // workspaces can take significant time to walk.
                 thread::spawn(move || {
                     let result = if let Some(workspace) = workspace {
+                        // Exclude the .git directory from file listings. We use
+                        // hidden(false) to show dotfiles but override .git/ specifically,
+                        // because .git can be enormous and is never user-editable.
                         let git_folder =
                             ignore::overrides::OverrideBuilder::new(&workspace)
                                 .add("!.git/")
@@ -1052,6 +1079,17 @@ impl FileWatchNotifier {
         }
     }
 
+    /// Debounces workspace filesystem events to avoid flooding the UI with
+    /// file-explorer refresh requests. Only structural changes (create, remove,
+    /// rename) trigger an explorer refresh; content modifications are ignored
+    /// here since they're handled by OPEN_FILE_EVENT_TOKEN for open files.
+    ///
+    /// The debounce mechanism works as follows:
+    /// 1. First event in a quiet period creates a channel and spawns a timer thread.
+    /// 2. Subsequent events within 500ms are funneled into the existing channel.
+    /// 3. After 500ms, the timer thread clears the handler (allowing new debounce
+    ///    cycles), drains the channel, and sends a single refresh notification if
+    ///    any structural changes were observed.
     fn handle_workspace_fs_event(&self, event: notify::Event) {
         let explorer_change = match &event.kind {
             notify::EventKind::Create(_)
@@ -1064,7 +1102,6 @@ impl FileWatchNotifier {
         let mut handler = self.workspace_fs_change_handler.lock();
         if let Some(sender) = handler.as_mut() {
             if explorer_change {
-                // only send the value if we need to update file explorer as well
                 if let Err(err) = sender.send(explorer_change) {
                     tracing::error!("{:?}", err);
                 }
@@ -1073,7 +1110,6 @@ impl FileWatchNotifier {
         }
         let (sender, receiver) = crossbeam_channel::unbounded();
         if explorer_change {
-            // only send the value if we need to update file explorer as well
             if let Err(err) = sender.send(explorer_change) {
                 tracing::error!("{:?}", err);
             }
@@ -1084,10 +1120,12 @@ impl FileWatchNotifier {
         thread::spawn(move || {
             thread::sleep(Duration::from_millis(500));
 
+            // Clear the handler so new events start a fresh debounce cycle
             {
                 local_handler.lock().take();
             }
 
+            // Drain the channel -- the sender is dropped so this terminates
             let mut explorer_change = false;
             for e in receiver {
                 if e {
@@ -1146,10 +1184,11 @@ fn search_in_path(
 
                     let mymatch = matcher.find(line.as_bytes())?.unwrap();
                     let line = if line.len() > 200 {
-                        // Shorten the line to avoid sending over absurdly long-lines
-                        // (such as in minified javascript)
-                        // Note that the start/end are column based, not absolute from the
-                        // start of the file.
+                        // Truncate extremely long lines (e.g. minified JS) to ~200
+                        // chars around the match. We keep 100 chars on each side of
+                        // the match, counting by UTF-8 code points to avoid splitting
+                        // multi-byte characters. The start/end offsets in SearchMatch
+                        // become relative to this truncated snippet.
                         let left_keep = line[..mymatch.start()]
                             .chars()
                             .rev()

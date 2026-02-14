@@ -38,16 +38,22 @@ impl ScoredCodeActionItem {
     }
 }
 
+/// State for the code action popup (lightbulb menu / quick fix).
+/// Unlike completion, code actions are displayed as-is without fuzzy filtering --
+/// the LSP returns a short, curated list that doesn't need narrowing.
 #[derive(Clone, Debug)]
 pub struct CodeActionData {
     pub status: RwSignal<CodeActionStatus>,
     pub active: RwSignal<usize>,
     pub request_id: usize,
     pub input_id: usize,
+    /// The document offset where code actions were requested (for positioning the popup).
     pub offset: usize,
     pub items: im::Vector<ScoredCodeActionItem>,
     pub filtered_items: im::Vector<ScoredCodeActionItem>,
     pub layout_rect: Rect,
+    /// Whether the code action was triggered by a mouse click (vs keyboard shortcut).
+    /// This affects popup positioning: mouse-triggered actions anchor at the click position.
     pub mouse_click: bool,
     pub common: Rc<CommonData>,
 }

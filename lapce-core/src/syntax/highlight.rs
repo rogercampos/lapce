@@ -28,6 +28,10 @@ use tree_sitter::{
 use super::{PARSER, util::RopeProvider};
 use crate::{language::LapceLanguage, style::SCOPES};
 
+/// Per-thread cache of HighlightConfigurations keyed by language. Creating a
+/// HighlightConfiguration involves parsing query files and compiling them,
+/// which is expensive. Caching here avoids redoing this work when switching
+/// between files of the same language.
 thread_local! {
     static HIGHLIGHT_CONFIGS: RefCell<HashMap<LapceLanguage, Result<Arc<HighlightConfiguration>, HighlightIssue>>> = Default::default();
 }
@@ -89,8 +93,14 @@ pub enum InjectionLanguageMarker<'a> {
     Shebang(String),
 }
 
+/// Regex to extract the interpreter name from a shebang line (e.g., "#!/usr/bin/env python3"
+/// captures "python3"). Handles common patterns: direct paths, `env` with flags, and
+/// Windows-style backslashes.
 const SHEBANG: &str = r"#!\s*(?:\S*[/\\](?:env\s+(?:\-\S+\s+)*)?)?([^\s\.\d]+)";
 
+/// How often the highlight iterator checks the cancellation flag (every N iterations).
+/// Lower values mean more responsive cancellation but slightly more overhead from
+/// the atomic load. 100 is a good balance for typical document sizes.
 const CANCELLATION_CHECK_INTERVAL: usize = 100;
 
 /// Contains the data needed to highlight code written in a particular language.
@@ -232,16 +242,13 @@ impl HighlightConfiguration {
         self.query.capture_names()
     }
 
-    /// Set the list of recognized highlight names.
+    /// Maps tree-sitter capture names to indices into the recognized highlight names.
     ///
-    /// Tree-sitter syntax-highlighting queries specify highlights in the form of dot-separated
-    /// highlight names like `punctuation.bracket` and `function.method.builtin`. Consumers of
-    /// these queries can choose to recognize highlights with different levels of specificity.
-    /// For example, the string `function.builtin` will match against `function.builtin.constructor`
-    /// but will not match `function.method.builtin` and `function.method`.
+    /// Uses a "best prefix match" algorithm: for each capture name (e.g., "function.method.builtin"),
+    /// finds the recognized name whose dot-separated parts form the longest matching prefix.
+    /// This allows themes to define highlights at varying levels of specificity.
     ///
-    /// When highlighting, results are returned as `Highlight` values, which contain the index
-    /// of the matched highlight this list of highlight names.
+    /// The result is stored in an ArcSwap for lock-free reads from the highlighting thread.
     pub fn configure(&self, recognized_names: &[&str]) {
         let mut capture_parts = Vec::new();
         let indices: Vec<_> = self

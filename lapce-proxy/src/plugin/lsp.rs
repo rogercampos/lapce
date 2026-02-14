@@ -59,6 +59,14 @@ pub enum LspRpc {
     },
 }
 
+/// Manages a single language server process. Owns the child process handle and
+/// coordinates three background threads:
+/// - Writer thread: serializes JSON-RPC messages to the LSP's stdin
+/// - Reader thread: reads JSON-RPC messages from the LSP's stdout
+/// - Stderr thread: captures LSP stderr output and forwards to the log panel
+///
+/// The LSP protocol uses Content-Length framed messages over stdio, which is
+/// handled by `read_message` and the writer thread's formatting logic.
 pub struct LspClient {
     plugin_rpc: PluginCatalogRpcHandler,
     server_rpc: PluginServerRpcHandler,
@@ -216,6 +224,9 @@ impl LspClient {
             plugin_id,
             io_tx.clone(),
         );
+        // Writer thread: serializes JSON-RPC messages with Content-Length headers
+        // and writes them to the LSP's stdin. Exits on Shutdown to allow the
+        // process to terminate cleanly.
         thread::spawn(move || {
             for msg in io_rx {
                 if msg
@@ -239,6 +250,10 @@ impl LspClient {
             }
         });
 
+        // Reader thread: continuously reads Content-Length framed messages from
+        // the LSP's stdout and dispatches them through handle_plugin_server_message.
+        // If a response message needs to be sent back (e.g., for host requests),
+        // it's forwarded to the writer via io_tx.
         let local_server_rpc = server_rpc.clone();
         let core_rpc = plugin_rpc.core_rpc.clone();
         let volt_id_closure = volt_id.clone();
@@ -441,6 +456,9 @@ impl LspClient {
         }
     }
 
+    /// Spawns the language server child process. The resolved shell environment
+    /// is passed in to ensure version managers (mise, asdf, nvm, etc.) are active
+    /// and the correct tool versions are found.
     fn process(
         workspace: Option<&PathBuf>,
         server: &str,
@@ -457,6 +475,8 @@ impl LspClient {
             process.envs(env);
         }
 
+        // CREATE_NO_WINDOW (0x08000000) prevents a console window from flashing
+        // on Windows when spawning the language server.
         #[cfg(target_os = "windows")]
         let process = process.creation_flags(0x08000000);
         let child = process

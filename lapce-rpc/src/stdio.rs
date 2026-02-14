@@ -10,6 +10,14 @@ use serde_json::{Value, json};
 
 use crate::{RpcError, RpcMessage, RpcObject};
 
+/// Sets up bidirectional JSON-over-newline-delimited transport on stdin/stdout
+/// (or any Read/Write pair). Spawns two threads:
+/// - Writer thread: serializes outgoing RpcMessages as single-line JSON
+/// - Reader thread: reads newline-delimited JSON and deserializes into RpcMessages
+///
+/// The two type parameter sets (Req1/Notif1/Resp1 vs Req2/Notif2/Resp2) allow
+/// the reader and writer to use different message types, since UI->Proxy and
+/// Proxy->UI have different request/notification schemas.
 pub fn stdio_transport<W, R, Req1, Notif1, Resp1, Req2, Notif2, Resp2>(
     mut writer: W,
     writer_receiver: Receiver<RpcMessage<Req2, Notif2, Resp2>>,

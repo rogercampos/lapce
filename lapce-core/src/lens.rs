@@ -6,20 +6,38 @@ use lapce_xi_rope::{
     tree::{DefaultMetric, Leaf, Node, NodeInfo, TreeBuilder},
 };
 
+/// Lens uses the xi-rope balanced tree infrastructure to store per-line height
+/// information. These leaf size bounds control when tree nodes split/merge,
+/// balancing between tree depth and per-node overhead.
 const MIN_LEAF: usize = 5;
 const MAX_LEAF: usize = 10;
 
 pub type LensNode = Node<LensInfo>;
 
+/// A data structure mapping line numbers to pixel heights in the code glance
+/// (minimap). "Important" lines (function defs, struct defs, etc.) get full
+/// `line_height`, while other lines get a smaller `lens_height`. This allows
+/// the minimap to compress unimportant code while keeping key structures visible.
+///
+/// Built on xi-rope's balanced tree, enabling O(log n) lookups for:
+/// - line_of_height: given a pixel offset, which line is it?
+/// - height_of_line: given a line number, what's its pixel offset?
 #[derive(Clone)]
 pub struct Lens(LensNode);
 
+/// Stores the cumulative pixel height for a subtree of lines.
+/// This is the "measured units" in the xi-rope Metric system.
 #[derive(Clone, Debug)]
 pub struct LensInfo(usize);
 
+/// Represents a run of consecutive lines that all share the same pixel height.
+/// This run-length encoding keeps the tree compact -- a 1000-line file with
+/// only 10 "important" lines needs at most ~21 LensData entries.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct LensData {
+    /// Number of consecutive lines in this run
     len: usize,
+    /// Pixel height per line in this run
     line_height: usize,
 }
 
@@ -73,6 +91,10 @@ impl Lens {
         }
     }
 
+    /// Placeholder for applying rope deltas to the lens structure.
+    /// Currently a no-op -- the lens is rebuilt from scratch on every parse
+    /// via `lens_from_normal_lines`. Incremental updates could be a future
+    /// optimization for large files.
     pub fn apply_delta<M: NodeInfo>(&mut self, _delta: &Delta<M>) {}
 }
 
@@ -153,6 +175,9 @@ impl Leaf for LensLeaf {
     }
 }
 
+/// The "height" metric -- maps from line counts (base units) to cumulative
+/// pixel heights (measured units). This enables the xi-rope tree to answer
+/// queries like "which line is at pixel offset Y?" in O(log n) time.
 #[derive(Copy, Clone)]
 pub struct LensMetric(());
 
@@ -220,6 +245,9 @@ impl DefaultMetric for LensInfo {
     type DefaultMetric = LensBaseMetric;
 }
 
+/// The identity metric where measured units equal base units (line count).
+/// Required by the xi-rope tree as the DefaultMetric -- used for basic
+/// positional lookups that don't involve height conversion.
 #[derive(Copy, Clone)]
 pub struct LensBaseMetric(());
 

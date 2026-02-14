@@ -28,6 +28,10 @@ struct Cli {
     paths: Vec<PathObject>,
 }
 
+/// Entry point for the `lapce-proxy` binary. When invoked from the command line,
+/// it attempts to forward the requested paths to an already-running Lapce instance
+/// via a local socket. If no running instance is found (connection fails), we exit
+/// with code 1 -- the GUI process is the one that spawns the proxy internally.
 pub fn mainloop() {
     let cli = Cli::parse();
     if let Err(e) = cli::try_open_in_existing_process(&cli.paths) {
@@ -36,12 +40,17 @@ pub fn mainloop() {
     exit(1);
 }
 
+/// Ensures the directory containing the Lapce binary is on the PATH.
+/// This is important so that plugins and language servers spawned by the proxy
+/// can find the `lapce-proxy` binary (e.g., for CLI integration).
+/// Prepends the exe directory to PATH only if it's not already present.
 pub fn register_lapce_path() -> Result<()> {
     let exedir = std::env::current_exe()?
         .parent()
         .ok_or(anyhow::anyhow!("can't get parent dir of exe"))?
         .canonicalize()?;
 
+    // Check if the exe directory is already on the PATH to avoid duplication
     let current_path = std::env::var("PATH")?;
     let paths = std::env::split_paths(&current_path);
     for path in paths {
@@ -49,6 +58,7 @@ pub fn register_lapce_path() -> Result<()> {
             return Ok(());
         }
     }
+    // Prepend (not append) so our binary takes priority
     let paths = std::env::split_paths(&current_path);
     let paths = std::env::join_paths(std::iter::once(exedir).chain(paths))?;
 
@@ -59,6 +69,10 @@ pub fn register_lapce_path() -> Result<()> {
     Ok(())
 }
 
+/// HTTP GET with retry logic. Respects the `https_proxy` environment variable
+/// for corporate/proxy environments. Retries up to 3 times on transient failures
+/// before propagating the error, which helps with flaky network conditions during
+/// plugin downloads.
 pub fn get_url<T: reqwest::IntoUrl + Clone>(
     url: T,
     user_agent: Option<&str>,

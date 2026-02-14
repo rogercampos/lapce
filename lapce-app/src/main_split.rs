@@ -52,6 +52,9 @@ use crate::{
     workspace_data::{CommonData, Focus, WorkspaceData},
 };
 
+/// The direction a split divides its children. Vertical means side-by-side (left/right),
+/// Horizontal means stacked (top/bottom). This terminology matches the "split line" orientation:
+/// a Vertical split has a vertical divider between panes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SplitDirection {
     Vertical,
@@ -79,6 +82,9 @@ impl SplitMoveDirection {
     }
 }
 
+/// A node in the split tree is either a leaf (EditorTab containing file tabs) or
+/// an interior node (Split containing more children). This recursive structure
+/// allows arbitrarily nested split layouts like VSCode's split editor.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SplitContent {
     EditorTab(EditorTabId),
@@ -121,11 +127,17 @@ impl SplitContent {
     }
 }
 
+/// An interior node in the split tree. Each child has a proportional size weight
+/// (the f64 signal) that the layout system uses to calculate pane dimensions.
+/// All weights are set to 1.0 on split/close, giving equal distribution. The
+/// `window_origin` and `layout_rect` are updated by the view layer during layout
+/// and used for geometry-based focus navigation (split_move).
 #[derive(Clone)]
 pub struct SplitData {
     pub scope: Scope,
     pub parent_split: Option<SplitId>,
     pub split_id: SplitId,
+    /// Each child has a proportional size weight and a content reference.
     pub children: Vec<(RwSignal<f64>, SplitContent)>,
     pub direction: SplitDirection,
     pub window_origin: Point,
@@ -225,7 +237,10 @@ impl SplitData {
     }
 }
 
-/// All the editors in a main split
+/// Central registry of all editor instances, stored in a persistent (im::HashMap) map.
+/// Uses an immutable HashMap so signal updates are efficient via structural sharing.
+/// This is a Copy wrapper around a signal, so it can be freely passed around.
+/// Editors are referenced by ID from EditorTabChild entries in the split tree.
 #[derive(Clone, Copy)]
 pub struct Editors(pub RwSignal<im::HashMap<EditorId, EditorData>>);
 impl Editors {
@@ -233,8 +248,8 @@ impl Editors {
         Self(cx.create_rw_signal(im::HashMap::new()))
     }
 
-    /// Add an editor to the editors.
-    /// Returns the id of the editor.
+    /// Add an editor to the registry. Warns if duplicate ID inserted,
+    /// which would indicate a bug in editor lifecycle management.
     pub fn insert(&self, editor: EditorData) -> EditorId {
         let id = editor.id();
         self.0.update(|editors| {
@@ -252,6 +267,9 @@ impl Editors {
         });
     }
 
+    /// Creates a "local" editor with no file backing and no editor_tab_id.
+    /// Used for preview editors in panels, search modal, and internal editors
+    /// like the find/replace bar. These editors don't participate in tab management.
     pub fn new_local(&self, cx: Scope, common: Rc<CommonData>) -> EditorId {
         let editor = EditorData::new_local(cx, *self, common);
 
@@ -288,7 +306,9 @@ impl Editors {
         self.editor_untracked(id).unwrap()
     }
 
-    /// Copy an existing editor which is inserted into [`Editors`]
+    /// Clone an editor's state (same document, new cursor) for split operations.
+    /// The new editor shares the same Doc (and thus the same buffer) as the original,
+    /// but gets its own cursor and editor_tab_id.
     pub fn copy(
         &self,
         editor_id: EditorId,
@@ -336,12 +356,14 @@ impl Editors {
         self.0.with_untracked(|editors| editors.contains_key(&id))
     }
 
-    /// Get the editor (tracking the signal)
+    /// Get the editor (tracking the signal). Use in view code where UI
+    /// needs to reactively update when the editors map changes.
     pub fn editor(&self, id: EditorId) -> Option<EditorData> {
         self.0.with(|editors| editors.get(&id).cloned())
     }
 
-    /// Get the editor (not tracking the signal)
+    /// Get the editor without subscribing to signal changes. Use in command
+    /// handlers and initialization code to avoid unnecessary re-renders.
     pub fn editor_untracked(&self, id: EditorId) -> Option<EditorData> {
         self.0.with_untracked(|editors| editors.get(&id).cloned())
     }
@@ -361,20 +383,43 @@ impl Editors {
     }
 }
 
+/// The top-level data structure managing the editor split tree layout.
+///
+/// The split tree is organized as: root_split (SplitData) -> children which are
+/// either more SplitData (for nesting) or EditorTabData (leaf panes with file tabs).
+/// Three flat maps (`splits`, `editor_tabs`, `editors`) store all nodes by ID for
+/// O(1) lookup -- the tree structure is encoded through parent/child ID references.
+///
+/// Documents (`docs`) are shared across editors: multiple editors can view the same
+/// file (e.g., after splitting). When the last editor for a scratch doc is closed,
+/// the scratch doc is cleaned up from `scratch_docs`.
+///
+/// Navigation history (`locations` / `current_location`) enables back/forward
+/// jumping. Both global and per-editor-tab histories are maintained.
 #[derive(Clone)]
 pub struct MainSplitData {
     pub scope: Scope,
+    /// The root of the split tree. Never removed, but may have zero children.
     pub root_split: SplitId,
+    /// Which editor tab pane currently has focus. None if no editors are open.
     pub active_editor_tab: RwSignal<Option<EditorTabId>>,
+    /// Flat map of all split nodes (interior nodes in the tree).
     pub splits: RwSignal<im::HashMap<SplitId, RwSignal<SplitData>>>,
+    /// Flat map of all editor tab panes (leaf nodes in the tree).
     pub editor_tabs: RwSignal<im::HashMap<EditorTabId, RwSignal<EditorTabData>>>,
+    /// Registry of all editor instances (both in tabs and local/preview editors).
     pub editors: Editors,
+    /// Open file documents, keyed by path. Shared across editors viewing the same file.
     pub docs: RwSignal<im::HashMap<PathBuf, Rc<Doc>>>,
+    /// Untitled documents not yet saved to disk, keyed by generated name like "Untitled-1".
     pub scratch_docs: RwSignal<im::HashMap<String, Rc<Doc>>>,
     pub diagnostics: RwSignal<im::HashMap<PathBuf, DiagnosticData>>,
+    /// Derived signal: the editor in the active tab of the active editor tab pane.
     pub active_editor: Memo<Option<EditorData>>,
+    /// Dedicated editors for the find/replace bar (local editors, not in any tab).
     pub find_editor: EditorData,
     pub replace_editor: EditorData,
+    /// Global navigation history for back/forward jumping across all splits.
     pub locations: RwSignal<im::Vector<EditorLocation>>,
     pub current_location: RwSignal<usize>,
     pub width: RwSignal<f64>,
@@ -391,6 +436,8 @@ impl std::fmt::Debug for MainSplitData {
 }
 
 impl MainSplitData {
+    /// Creates an empty MainSplitData. The caller (WorkspaceData::new) is responsible
+    /// for populating the root split from either persisted workspace info or a fresh default.
     pub fn new(cx: Scope, common: Rc<CommonData>) -> Self {
         let splits = cx.create_rw_signal(im::HashMap::new());
         let active_editor_tab = cx.create_rw_signal(None);
@@ -407,6 +454,9 @@ impl MainSplitData {
         let find_editor = editors.make_local(cx, common.clone());
         let replace_editor = editors.make_local(cx, common.clone());
 
+        // Derived signal that reactively computes the currently active editor
+        // by walking: active_editor_tab -> its active child -> EditorData.
+        // Subscribes to all relevant signals so the UI auto-updates on tab changes.
         let active_editor = cx.create_memo(move |_| -> Option<EditorData> {
             let active_editor_tab = active_editor_tab.get()?;
             let editor_tab = editor_tabs
@@ -423,6 +473,9 @@ impl MainSplitData {
             Some(editor)
         });
 
+        // Sync the find editor's text content to the Find state whenever it changes.
+        // This reactive effect means typing in the find bar automatically updates
+        // the search pattern used for in-editor highlighting.
         {
             let buffer = find_editor.doc().buffer;
             let find = common.find.clone();
@@ -479,6 +532,9 @@ impl MainSplitData {
         }
     }
 
+    /// Snapshots the current editor position before navigating away, so the user
+    /// can jump back to it. Returns false if the location is identical to the last
+    /// saved one (deduplication) or if there's no active file editor.
     fn save_current_jump_location(&self) -> bool {
         if let Some(editor) = self.active_editor.get_untracked() {
             let (cursor, viewport) = (editor.cursor(), editor.viewport());
@@ -551,6 +607,11 @@ impl MainSplitData {
         self.go_to_location(location, edits);
     }
 
+    /// Gets or creates a Doc for the given file path. Returns (doc, is_new).
+    /// If the doc already exists in the cache, returns it directly.
+    /// Otherwise, creates a new Doc, starts an async proxy request to load its
+    /// content, and immediately returns the (initially empty) doc. The proxy
+    /// callback will populate the buffer once the file is read from disk.
     pub fn get_doc(
         &self,
         path: PathBuf,
@@ -660,6 +721,12 @@ impl MainSplitData {
         editor_tab
     }
 
+    /// Core method for opening content (file, settings, keymap, etc.) in an editor tab.
+    /// Implements the tab reuse policy:
+    /// 1. If tabs are hidden (show_tab=false), reuses any pristine/matching editor in the active tab.
+    /// 2. If the file is already open in the active tab, focuses it instead of opening a duplicate.
+    /// 3. If the file is open in another tab (and same_editor_tab=false), switches to that tab.
+    /// 4. Otherwise, creates a new child and inserts it after the currently active tab.
     fn get_editor_tab_child(
         &self,
         source: EditorTabChildSource,
@@ -998,6 +1065,9 @@ impl MainSplitData {
         child
     }
 
+    /// Removes an editor from the registry and cleans up its resources.
+    /// For scratch documents, checks if any other editor still references the same
+    /// scratch doc; if not, removes the scratch doc from the cache to prevent leaks.
     pub fn remove_editor(&self, editor_id: EditorId) {
         if let Some(editor) = self.editors.remove(editor_id) {
             editor.save_doc_position();
@@ -1113,6 +1183,13 @@ impl MainSplitData {
         self.go_to_location(location, None);
     }
 
+    /// Splits the given editor tab pane in the specified direction.
+    /// Three cases based on the parent split's state:
+    /// 1. Same direction as parent: inserts new tab pane as sibling in the parent.
+    /// 2. Different direction, but parent has only 1 child: changes parent direction.
+    /// 3. Different direction, parent has multiple children: creates a new intermediate
+    ///    split node, moves the original tab into it, and adds the new tab as its sibling.
+    /// The new tab gets a copy of the current editor (shared document, independent cursor).
     pub fn split(
         &self,
         direction: SplitDirection,
@@ -1274,6 +1351,10 @@ impl MainSplitData {
         Some(editor_tab)
     }
 
+    /// Moves focus to an adjacent editor tab pane using geometric proximity.
+    /// Iterates all editor tabs and finds one whose edge is adjacent (within 3px)
+    /// to the current tab's corresponding edge in the requested direction.
+    /// This geometry-based approach works regardless of tree structure depth.
     pub fn split_move(
         &self,
         direction: SplitMoveDirection,
@@ -1402,6 +1483,10 @@ impl MainSplitData {
         Some(())
     }
 
+    /// Removes a split node from the tree and collapses the hierarchy if needed.
+    /// When a split has 0 children, it's removed and its parent is cleaned up.
+    /// When a split has exactly 1 child, that child is promoted to replace the split
+    /// in its grandparent, eliminating unnecessary nesting. The root split is never removed.
     fn split_remove(&self, split_id: SplitId) -> Option<()> {
         if split_id == self.root_split {
             return Some(());
@@ -1447,6 +1532,10 @@ impl MainSplitData {
         Some(())
     }
 
+    /// Removes an empty editor tab pane from the split tree and handles focus transfer.
+    /// After removing the tab from its parent split, if the parent split is left empty
+    /// or has a single child, the split tree is collapsed via split_remove. Focus is
+    /// transferred to an adjacent sibling or parent's sibling.
     fn editor_tab_remove(&self, editor_tab_id: EditorTabId) -> Option<()> {
         let editor_tabs = self.editor_tabs.get_untracked();
         let editor_tab = editor_tabs.get(&editor_tab_id).copied()?;
@@ -1674,6 +1763,11 @@ impl MainSplitData {
         Some(())
     }
 
+    /// Closes a specific child within an editor tab. If the document has unsaved changes
+    /// and `force` is false, shows an alert dialog with Save/Don't Save options instead
+    /// of closing. The alert callbacks re-invoke this method with force=true after the
+    /// user makes a choice. If the editor tab becomes empty after closing, it's removed
+    /// from the split tree entirely.
     pub fn editor_tab_child_close(
         &self,
         editor_tab_id: EditorTabId,
@@ -1936,6 +2030,9 @@ impl MainSplitData {
         }
     }
 
+    /// Handles file system change notifications from the proxy's file watcher.
+    /// For content changes, reloads the document buffer. For deletions, closes
+    /// the editor tab and removes the doc from the cache.
     pub fn open_file_changed(&self, path: &Path, content: &FileChanged) {
         tracing::debug!("open_file_changed {:?}", path);
         match content {
@@ -2010,6 +2107,9 @@ impl MainSplitData {
         self.get_editor_tab_child(EditorTabChildSource::NewFileEditor, false)
     }
 
+    /// Saves a scratch (unsaved) document to a file path via the proxy. On success,
+    /// converts the document from Scratch to File content type, initializes syntax
+    /// highlighting for the new file extension, and runs the provided callback.
     pub fn save_as(&self, doc: Rc<Doc>, path: PathBuf, action: impl Fn() + 'static) {
         let (buffer_id, doc_content, rev, content) = (
             doc.buffer_id,
@@ -2313,6 +2413,10 @@ impl MainSplitData {
         Some(())
     }
 
+    /// Moves a tab child from one editor tab into a new split alongside another tab.
+    /// This handles drag-to-split scenarios where a user drags a tab to the edge
+    /// of another pane to create a new split. Handles both same-direction (insert
+    /// as sibling) and cross-direction (create intermediate split node) cases.
     pub fn move_editor_tab_child_to_new_split(
         &self,
         from_tab: EditorTabId,

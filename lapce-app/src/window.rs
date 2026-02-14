@@ -78,6 +78,10 @@ pub struct WindowData {
 }
 
 impl WindowData {
+    /// Create a new window from serialized WindowInfo. This creates a Scope that owns all
+    /// the reactive signals for this window's lifetime. Each workspace listed in the info
+    /// is instantiated as a full WorkspaceData. If no workspaces are provided, a default
+    /// empty workspace is created so the window always has at least one tab.
     pub fn new(
         window_id: WindowId,
         app_view_id: RwSignal<ViewId>,
@@ -158,6 +162,8 @@ impl WindowData {
             });
         }
 
+        // When the active workspace tab changes, reset the cursor blink timer
+        // so it starts fresh in the newly-focused workspace (avoids a stale half-blink state).
         {
             cx.create_effect(move |_| {
                 let active = active.get();
@@ -187,6 +193,9 @@ impl WindowData {
         }
     }
 
+    /// Handle window-level commands. SetWorkspace replaces the current active workspace,
+    /// persisting the old one's state before shutdown. Every window command triggers a
+    /// SaveApp afterward to keep the persisted state in sync.
     pub fn run_window_command(&self, cmd: WindowCommand) {
         match cmd {
             WindowCommand::SetWorkspace { workspace } => {

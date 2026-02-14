@@ -47,17 +47,33 @@ enum RenamedPath {
     },
 }
 
+/// Core data model for the file explorer tree. The `root` signal holds the entire
+/// file tree as a recursive FileNodeItem; mutations update the signal which triggers
+/// the virtual_stack to re-render. `naming` tracks the current rename/create/duplicate
+/// operation in progress, if any.
 #[derive(Clone, Debug)]
 pub struct FileExplorerData {
+    /// The root of the file tree. Contains the workspace directory and all loaded
+    /// children recursively. Updated via `root.update()` for in-place mutations.
     pub root: RwSignal<FileNodeItem>,
+    /// Tracks whether the user is currently renaming, creating, or duplicating a node.
+    /// When set, the file explorer shows an inline text input at the appropriate position.
     pub naming: RwSignal<Naming>,
+    /// A local editor used for the inline naming text input. Shared across all naming
+    /// operations (only one can be active at a time).
     pub naming_editor_data: EditorData,
     pub common: Rc<CommonData>,
+    /// Set to scroll to a specific line (e.g., after reveal_in_file_tree).
     pub scroll_to_line: RwSignal<Option<f64>>,
+    /// The currently selected/highlighted item in the tree.
     pub select: RwSignal<Option<FileNodeViewKind>>,
 }
 
 impl KeyPressFocus for FileExplorerData {
+    /// The file explorer only handles keyboard input when a naming operation is active
+    /// (renaming, creating, or duplicating). In that state, ModalFocus is reported so
+    /// ESC can cancel the operation. When not naming, returns false for all conditions,
+    /// effectively deferring to the default panel keyboard handling.
     fn check_condition(&self, condition: Condition) -> bool {
         self.naming.with_untracked(Naming::is_accepting_input)
             && condition == Condition::ModalFocus
@@ -146,8 +162,11 @@ impl FileExplorerData {
         self.read_dir(&path);
     }
 
-    /// Toggle whether the directory is expanded or not.  
+    /// Toggle whether the directory is expanded or not.
     /// Does nothing if the path does not exist or is not a directory.
+    /// This is the core of the lazy loading strategy: directories are only read from
+    /// disk the first time they are expanded. Subsequent toggles just show/hide
+    /// the already-loaded children and update the open count for virtual scrolling.
     pub fn toggle_expand(&self, path: &Path) {
         let Some(Some(read)) = self.root.try_update(|root| {
             let read = if let Some(node) = root.get_file_node_mut(path) {
@@ -160,6 +179,8 @@ impl FileExplorerData {
                 None
             };
 
+            // Only update counts if the directory was already read (children exist).
+            // If not yet read, counts will be updated when read_dir completes.
             if Some(true) == read {
                 root.update_node_count_recursive(path);
             }
@@ -178,9 +199,15 @@ impl FileExplorerData {
         self.read_dir_cb(path, |_| {});
     }
 
-    /// Read the directory's information and update the file explorer tree.  
+    /// Read the directory's information and update the file explorer tree.
     /// `done : FnOnce(was_read: bool)` is called when the operation is completed, whether success,
     /// failure, or ignored.
+    ///
+    /// The proxy performs the actual filesystem read asynchronously. When results arrive:
+    /// 1. Apply file exclusion globs (e.g., .git, node_modules)
+    /// 2. Reconcile with existing children: remove deleted paths, keep already-read
+    ///    subdirectories (and re-read them to pick up changes), add new paths
+    /// 3. Recompute children_open_count for the affected subtree
     pub fn read_dir_cb(&self, path: &Path, done: impl FnOnce(bool) + 'static) {
         let root = self.root;
         let data = self.clone();
@@ -194,8 +221,6 @@ impl FileExplorerData {
                 };
 
                 root.update(|root| {
-                    // Get the node for this path, which should already exist if we're calling
-                    // read_dir on it.
                     if let Some(node) = root.get_file_node_mut(&path) {
                         // TODO: do not recreate glob every time we read a directory
                         // Retain only items that are not excluded from view by the configuration
@@ -213,7 +238,7 @@ impl FileExplorerData {
 
                         node.read = true;
 
-                        // Remove paths that no longer exist
+                        // Remove paths that no longer exist on disk
                         let removed_paths: Vec<PathBuf> = node
                             .children
                             .keys()
@@ -224,7 +249,9 @@ impl FileExplorerData {
                             node.children.remove(&path);
                         }
 
-                        // Reread dirs that were already read and add new paths
+                        // For existing children that were already read (expanded dirs),
+                        // re-read them recursively to pick up any nested changes.
+                        // For new children, insert them into the tree.
                         for item in items {
                             if let Some(existing) = node.children.get(&item.path) {
                                 if existing.read {
@@ -397,11 +424,15 @@ impl FileExplorerData {
         }
     }
 
+    /// Reveals a file in the tree by expanding all ancestor directories and scrolling
+    /// to the file's position. This may require multiple async read_dir calls if
+    /// ancestor directories haven't been loaded yet, in which case it calls itself
+    /// recursively via the read_dir_cb callback until the full path is loaded.
     pub fn reveal_in_file_tree(&self, path: PathBuf) {
         let done = self
             .root
             .try_update(|root| {
-                // the directories in which the file are located are all readed and opened
+                // Fast path: the file is already loaded in the tree
                 if root.get_file_node(&path).is_some() {
                     for current_path in path.ancestors() {
                         if let Some(file) = root.get_file_node_mut(current_path) {
@@ -413,9 +444,10 @@ impl FileExplorerData {
                     root.update_node_count_recursive(&path);
                     true
                 } else {
-                    // read and open the directories in which the file are located
+                    // Slow path: walk up the ancestors to find the deepest loaded
+                    // directory, then trigger a read_dir on it. The callback will
+                    // recursively call reveal_in_file_tree again until the target is found.
                     let mut read_dir = None;
-                    // Whether the file is in the workspace
                     let mut exist = false;
                     for current_path in path.ancestors() {
                         if let Some(file) = root.get_file_node_mut(current_path) {

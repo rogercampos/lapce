@@ -81,6 +81,10 @@ impl RenameData {
         }
     }
 
+    /// Initialize the rename widget with the current symbol name pre-filled and fully selected.
+    /// `placeholder` is the current name of the symbol (from LSP prepareRename).
+    /// `start` is the byte offset of the symbol in the document (for positioning the rename box).
+    /// `position` is the LSP Position sent back to the server when confirming the rename.
     pub fn start(
         &self,
         path: PathBuf,
@@ -88,6 +92,8 @@ impl RenameData {
         start: usize,
         position: Position,
     ) {
+        // Pre-fill the editor with the current symbol name and select it all,
+        // so the user can immediately type the new name to replace it.
         self.editor.doc().reload(Rope::from(&placeholder), true);
         self.editor.cursor().update(|cursor| {
             cursor.set_insert(Selection::region(0, placeholder.len()))

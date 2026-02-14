@@ -84,6 +84,10 @@ use crate::buffer::language_id_from_path;
 
 pub type PluginName = String;
 
+/// Messages sent from any thread to the PluginCatalog's dedicated mainloop thread.
+/// This is the single-writer bottleneck that serializes all plugin state mutations.
+/// Large variants (like ServerRequest with boxed callbacks) are acceptable because
+/// these are sent through an unbounded channel, not stored in arrays.
 #[allow(clippy::large_enum_variant)]
 pub enum PluginCatalogRpc {
     ServerRequest {
@@ -301,6 +305,15 @@ impl PluginCatalogRpcHandler {
         Ok(())
     }
 
+    /// Broadcasts a request to ALL registered plugins and uses "first success wins"
+    /// semantics. This is crucial because multiple language servers may be running
+    /// (e.g., rust-analyzer and a general-purpose LSP), but only one will actually
+    /// handle a given file. We fire the request at all of them and take the first
+    /// successful response.
+    ///
+    /// The callback is only invoked once: either on first success, or on final error
+    /// (when all plugins have responded with errors). The `got_success` atomic
+    /// prevents duplicate callback invocations across threads.
     fn send_request_to_all_plugins<P, Resp>(
         &self,
         method: &'static str,
@@ -1309,6 +1322,11 @@ pub fn volt_icon(volt: &VoltMetadata) -> Option<Vec<u8>> {
     std::fs::read(icon).ok()
 }
 
+/// Downloads a plugin (volt) from the Lapce plugin registry. The registry API
+/// returns an S3 redirect URL rather than the actual tarball, so we do two HTTP
+/// fetches: one for the redirect URL, one for the actual archive.
+/// Supports both zstd (preferred, smaller) and gzip compressed tarballs,
+/// determined by the Content-Type header.
 pub fn download_volt(volt: &VoltInfo) -> Result<VoltMetadata> {
     let url = format!(
         "https://plugins.lapce.dev/api/v1/plugins/{}/{}/{}/download",
@@ -1320,7 +1338,6 @@ pub fn download_volt(volt: &VoltInfo) -> Result<VoltMetadata> {
         return Err(anyhow!("can't download plugin"));
     }
 
-    // this is the s3 url
     let url = resp.text()?;
 
     let mut resp = crate::get_url(url, None)?;
@@ -1420,6 +1437,10 @@ pub fn remove_volt(
     Ok(())
 }
 
+/// Constructs the LSP ClientCapabilities that Lapce advertises to language servers.
+/// This determines what features the server can use -- for example, snippet support
+/// in completions, markdown in hover docs, incremental text sync, etc.
+/// Must be kept in sync with what the editor actually handles.
 fn client_capabilities() -> ClientCapabilities {
     // https://github.com/rust-lang/rust-analyzer/blob/master/docs/dev/lsp-extensions.md#server-status
     let mut experimental = Map::new();

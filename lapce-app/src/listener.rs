@@ -12,6 +12,10 @@ pub struct Listener<T: 'static> {
 }
 
 impl<T: Clone + 'static> Listener<T> {
+    /// Creates a listener with an immediate callback. Under the hood, uses a
+    /// reactive effect that fires whenever the internal signal changes from None
+    /// to Some(T). This piggybacks on Floem's reactive system to get automatic
+    /// batching and scheduling of the callback on the UI thread.
     pub fn new(cx: Scope, on_val: impl Fn(T) + 'static) -> Listener<T> {
         let val = cx.create_rw_signal(None);
 
@@ -50,7 +54,11 @@ impl<T: Clone + 'static> Listener<T> {
         });
     }
 
-    /// Send a value to the listener.
+    /// Send a value to the listener. Sets the internal signal which triggers
+    /// the reactive effect to run the callback. Note: if called multiple times
+    /// before the effect runs, only the last value is processed (signal semantics,
+    /// not queue semantics). This is acceptable because commands are processed
+    /// synchronously within the same reactive cycle.
     pub fn send(&self, v: T) {
         self.val.set(Some(v));
     }

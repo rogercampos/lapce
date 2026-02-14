@@ -34,6 +34,17 @@ use crate::plugin::{
     install_volt, psp::PluginHandlerNotification, wasi::enable_volt,
 };
 
+/// Registry of all active and pending plugins. Runs on its own dedicated thread
+/// (the "catalog thread") to serialize all plugin lifecycle operations.
+///
+/// - `plugins`: currently running plugin instances, keyed by their PluginId
+/// - `unactivated_volts`: plugins that are installed but waiting for activation
+///   triggers (e.g., opening a file of the right language, or a workspace_contains
+///   glob matching)
+/// - `open_files`: tracks which files are open and their language IDs, used to
+///   determine whether unactivated plugins should be activated
+/// - `plugin_configurations`: per-plugin settings from the user's config, forwarded
+///   as initialization options when starting a plugin
 pub struct PluginCatalog {
     workspace: Option<PathBuf>,
     plugin_rpc: PluginCatalogRpcHandler,
@@ -214,6 +225,15 @@ impl PluginCatalog {
         }
     }
 
+    /// Scans all unactivated volts and activates any whose activation conditions
+    /// are now met. Activation can be triggered by:
+    /// 1. Language match: an open file's language_id matches the plugin's activation.language
+    /// 2. Workspace contains: a file matching the plugin's activation.workspace_contains
+    ///    glob exists in the workspace (uses walkdir for full traversal)
+    ///
+    /// Note: The workspace_contains check does a full directory walk, which can be
+    /// expensive for large workspaces. This runs on the catalog thread so it blocks
+    /// other plugin operations during the scan.
     fn check_unactivated_volts(&mut self) {
         let to_be_activated: Vec<VoltID> = self
             .unactivated_volts
@@ -331,6 +351,9 @@ impl PluginCatalog {
         }
     }
 
+    /// Broadcasts a text change to all active plugins. The `change` mutex is shared
+    /// across all plugins so the delta-to-change conversion is computed at most once
+    /// per sync kind (full and incremental), regardless of how many plugins are active.
     pub fn handle_did_change_text_document(
         &mut self,
         language_id: String,
@@ -389,7 +412,10 @@ impl PluginCatalog {
                 self.plugin_configurations = configs;
             }
             PluginServerLoaded(plugin) => {
-                // TODO: check if the server has did open registered
+                // When a new plugin/LSP finishes initialization, replay all currently
+                // open documents so the server knows about them. This is necessary
+                // because files may have been opened before the server started (due
+                // to lazy activation). The proxy is the source of truth for open files.
                 match self.plugin_rpc.proxy_rpc.get_open_files_content() {
                     Ok(ProxyResponse::GetOpenFilesContentResponse { items }) => {
                         for item in items {

@@ -2,6 +2,9 @@ use floem::keyboard::Modifiers;
 
 use super::{key::KeyInput, keymap::KeyMapPress};
 
+/// Represents a single physical key press event with its modifier state.
+/// This is the raw event; `keymap_press()` converts it to the canonical
+/// `KeyMapPress` form used for keymap lookup.
 #[derive(Clone, Debug)]
 pub struct KeyPress {
     pub(super) key: KeyInput,

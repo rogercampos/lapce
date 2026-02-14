@@ -70,6 +70,13 @@ impl FileWatcher {
         }
     }
 
+    /// Starts the event processing loop on a background thread. Each raw notify
+    /// event is matched against all registered watchees to determine which tokens
+    /// (subscribers) care about it. The event may be delivered to multiple tokens
+    /// if paths overlap (e.g., a file is watched individually AND as part of a
+    /// recursive workspace watch).
+    ///
+    /// Can only be called once -- the receiver is consumed via `take()`.
     pub fn notify<T: Notify + 'static>(&mut self, peer: T) {
         let rx_event = self.rx_event.take().unwrap();
         let state = self.state.clone();
@@ -127,6 +134,9 @@ impl FileWatcher {
         token: WatchToken,
         filter: Option<Box<PathFilter>>,
     ) {
+        // Canonicalize to avoid duplicate watches on the same physical path
+        // reached via different symlink routes. Silently skip if path doesn't exist
+        // (e.g., watching a file that hasn't been created yet).
         let path = match path.canonicalize() {
             Ok(ref p) => p.to_owned(),
             Err(_) => {
@@ -144,6 +154,8 @@ impl FileWatcher {
         };
         let mode = mode_from_bool(w.recursive);
 
+        // Only register with the OS watcher if no other watchee already covers
+        // this exact path. Multiple tokens can share one OS watch.
         if !state.watchees.iter().any(|w2| w.path == w2.path) {
             if let Err(err) = self.inner.watch(&w.path, mode) {
                 tracing::error!("{:?}", err);
@@ -216,11 +228,13 @@ impl Default for FileWatcher {
 }
 
 impl Watchee {
+    /// Determines whether this watchee is interested in the given event.
+    /// Rename(Both) events carry two paths (source and destination) and we
+    /// match against either, since the user cares about both sides of a rename.
     fn wants_event(&self, event: &Event) -> bool {
         match &event.kind {
             EventKind::Modify(ModifyKind::Name(RenameMode::Both)) => {
                 if event.paths.len() == 2 {
-                    //There will be two paths. First is "from" and other is "to".
                     self.applies_to_path(&event.paths[0])
                         || self.applies_to_path(&event.paths[1])
                 } else {
@@ -238,6 +252,10 @@ impl Watchee {
         }
     }
 
+    /// Checks whether a given event path falls within this watchee's scope.
+    /// For non-recursive watches, we match the exact path OR direct children
+    /// (one level deep), because the `notify` crate delivers events for a
+    /// watched directory's immediate contents even in NonRecursive mode.
     fn applies_to_path(&self, path: &Path) -> bool {
         let general_case = if path.starts_with(&self.path) {
             (self.recursive || self.path == path)

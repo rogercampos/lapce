@@ -1,5 +1,10 @@
-/// Convert a utf8 offset into a utf16 offset, if possible  
-/// `text` is what the offsets are into
+/// Convert a utf8 byte offset into a utf16 code-unit offset.
+/// This is needed because LSP uses utf16 offsets (matching JavaScript's
+/// string encoding) while Rust strings are utf8. For pure ASCII text
+/// the offsets are identical, but multi-byte characters cause divergence.
+///
+/// Handles edge cases: offset inside a multi-byte character returns the
+/// position of that character; offset past the end returns the utf16 length.
 pub fn offset_utf8_to_utf16(
     char_indices: impl Iterator<Item = (usize, char)>,
     offset: usize,

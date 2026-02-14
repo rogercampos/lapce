@@ -17,6 +17,8 @@ use crate::{
     syntax::highlight::{HighlightConfiguration, HighlightIssue},
 };
 
+/// Represents the indentation style for a language.
+/// Uses const fn to return static string slices, avoiding runtime allocation.
 #[remain::sorted]
 pub enum Indent {
     Space(u8),
@@ -32,6 +34,9 @@ impl Indent {
         Indent::Space(count).as_str()
     }
 
+    /// Returns the indent string as a static slice. Only supports 2, 4, and 8
+    /// space widths because const fn cannot do dynamic string generation.
+    /// Any unsupported space count falls through to 8 spaces.
     const fn as_str(&self) -> &'static str {
         match self {
             Indent::Tab => "\u{0009}",
@@ -47,7 +52,12 @@ impl Indent {
     }
 }
 
+/// Default node types to traverse when building the code glance (minimap-like overview).
+/// "source_file" is always the root node in tree-sitter ASTs, so traversing it
+/// means we walk the entire top-level structure.
 const DEFAULT_CODE_GLANCE_LIST: &[&str] = &["source_file"];
+/// "source_file" is ignored in the glance display itself since it spans the
+/// entire file -- we only want its children's start/end lines.
 const DEFAULT_CODE_GLANCE_IGNORE_LIST: &[&str] = &["source_file"];
 
 #[macro_export]
@@ -173,6 +183,9 @@ struct CommentProperties {
 /// Do not assign values to the variants because the number of variants and
 /// number of elements in the LANGUAGES array change as different features
 /// selected by the cargo build command.
+///
+/// The `#[remain::sorted]` attribute enforces alphabetical ordering of variants
+/// at compile time, which also determines the array index order in LANGUAGES.
 #[derive(
     Eq,
     PartialEq,
@@ -1873,6 +1886,13 @@ impl LapceLanguage {
     }
 }
 
+/// Dynamically loads a tree-sitter grammar from a shared library (.dylib/.so/.dll).
+/// Tries the "lib"-prefixed path first, then falls back to the non-prefixed path
+/// for backward compatibility with older grammar installations.
+///
+/// SAFETY: Uses `libloading` to call into C ABI functions. The library is
+/// intentionally leaked via `mem::forget` to keep the grammar function pointers
+/// valid for the lifetime of the process.
 fn load_grammar(
     grammar_name: &str,
     grammar_fn_name: &str,
@@ -1926,6 +1946,9 @@ fn load_grammar(
         };
         language_fn()
     };
+    // Intentionally leak the library handle so the grammar's function pointers
+    // remain valid for the entire process lifetime. Dropping the library would
+    // unload the .so/.dylib and invalidate the Language object.
     std::mem::forget(library);
 
     Ok(language)
@@ -1979,6 +2002,9 @@ fn add_bracket_pos(
     }
 }
 
+/// Walks the tree-sitter AST to find bracket characters and assign them
+/// rainbow-colored styles based on nesting depth. Uses `overflowing_sub`
+/// to gracefully handle unmatched closing brackets (marking them as "unpaired").
 pub(crate) fn walk_tree_bracket_ast(
     cursor: &mut TreeCursor,
     level: &mut usize,
@@ -2030,6 +2056,10 @@ pub(crate) fn walk_tree_bracket_ast(
     }
 }
 
+/// Reads a tree-sitter query file from disk, recursively resolving
+/// `;; inherits: <language>` directives by inlining the referenced
+/// query files. This mirrors the convention used by Helix/Neovim where
+/// query files can inherit from other languages' queries.
 fn read_grammar_query(queries_dir: &Path, name: &str, kind: &str) -> String {
     static INHERITS_REGEX: Lazy<Regex> =
         Lazy::new(|| Regex::new(r";+\s*inherits\s*:?\s*([a-z_,()-]+)\s*").unwrap());

@@ -39,12 +39,16 @@ pub mod svg;
 pub mod ui;
 pub mod watcher;
 
+// Embed default configuration files at compile time so the app can run without
+// any on-disk defaults.
 pub const LOGO: &str = include_str!("../../extra/images/logo.svg");
 const DEFAULT_SETTINGS: &str = include_str!("../../defaults/settings.toml");
 const DEFAULT_LIGHT_THEME: &str = include_str!("../../defaults/light-theme.toml");
 const DEFAULT_DARK_THEME: &str = include_str!("../../defaults/dark-theme.toml");
 const DEFAULT_ICON_THEME: &str = include_str!("../../defaults/icon-theme.toml");
 
+// Lazily-initialized singletons: parsed once and cloned on each config reload.
+// This avoids re-parsing embedded TOML on every config change.
 static DEFAULT_CONFIG: Lazy<config::Config> = Lazy::new(LapceConfig::default_config);
 static DEFAULT_LAPCE_CONFIG: Lazy<LapceConfig> =
     Lazy::new(LapceConfig::default_lapce_config);
@@ -92,6 +96,8 @@ pub struct DropdownInfo {
 #[derive(Debug, Clone, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub struct LapceConfig {
+    // Monotonic ID derived from system time; changes on every config reload so
+    // consumers can detect when the config object has been replaced.
     #[serde(skip)]
     pub id: u64,
     pub core: CoreConfig,
@@ -101,6 +107,8 @@ pub struct LapceConfig {
     pub color_theme: ColorThemeConfig,
     #[serde(default)]
     pub icon_theme: IconThemeConfig,
+    // Plugin config sections use `flatten` so that any top-level TOML key not
+    // matching core/ui/editor/color_theme/icon_theme is captured as plugin config.
     #[serde(flatten)]
     pub plugins: HashMap<String, HashMap<String, serde_json::Value>>,
     #[serde(skip)]
@@ -172,6 +180,17 @@ impl LapceConfig {
         lapce_config
     }
 
+    /// Builds a merged config using the layered override strategy:
+    ///   1. Embedded defaults (settings.toml)
+    ///   2. Dark theme base colors (provides the default palette for themes)
+    ///   3. Active color theme (overrides colors from step 2)
+    ///   4. Active icon theme
+    ///   5. User's global settings.toml (~/.config/.../settings.toml)
+    ///   6. Workspace-local settings (.lapce/settings.toml in the project root)
+    ///
+    /// Each layer is added via `config::Config::builder().add_source()`, which
+    /// means later sources override earlier ones for the same key. This gives
+    /// workspace settings the highest priority.
     fn merge_config(
         workspace: &LapceWorkspace,
         color_theme_config: Option<config::Config>,
@@ -180,8 +199,9 @@ impl LapceConfig {
         let mut config = DEFAULT_CONFIG.clone();
 
         if let Some(theme) = color_theme_config {
-            // TODO: use different color theme basis if the theme declares its color preference
-            // differently
+            // Layer the dark theme first as a base, then the selected theme on top.
+            // This ensures any color the theme doesn't define falls back to the
+            // dark theme's value rather than being missing.
             config = config::Config::builder()
                 .add_source(config.clone())
                 .add_source(DEFAULT_DARK_THEME_CONFIG.clone())
@@ -198,6 +218,7 @@ impl LapceConfig {
                 .unwrap_or_else(|_| config.clone());
         }
 
+        // User-level global settings override theme values.
         if let Some(path) = Self::settings_file() {
             config = config::Config::builder()
                 .add_source(config.clone())
@@ -206,6 +227,7 @@ impl LapceConfig {
                 .unwrap_or_else(|_| config.clone());
         }
 
+        // Workspace-local settings get the highest priority.
         if let Some(path) = workspace.path.as_ref() {
             let path = path.join("./.lapce/settings.toml");
             config = config::Config::builder()
@@ -244,6 +266,9 @@ impl LapceConfig {
         default_lapce_config
     }
 
+    /// Re-merges the full config with the currently selected color and icon themes,
+    /// then resolves all color variables to concrete Color values. Called whenever
+    /// the theme selection changes or when config is first loaded.
     fn resolve_theme(&mut self, workspace: &LapceWorkspace) {
         let default_lapce_config = DEFAULT_LAPCE_CONFIG.clone();
 
@@ -285,6 +310,13 @@ impl LapceConfig {
         self.update_id();
     }
 
+    /// Discovers all available color themes from three sources:
+    ///   1. User-local theme files in the themes directory
+    ///   2. Plugin-provided themes (from installed Volts)
+    ///   3. Built-in light and dark themes (embedded at compile time)
+    ///
+    /// Built-in themes are inserted last, so they always override any local/plugin
+    /// theme with the same name, guaranteeing the defaults are always available.
     fn load_color_themes(
         disabled_volts: &[VoltID],
         extra_plugin_paths: &[PathBuf],
@@ -371,7 +403,12 @@ impl LapceConfig {
         self.style_color(theme_str)
     }
 
+    /// Resolves the three color layers (base variables, UI colors, syntax colors)
+    /// and determines the theme's light/dark/high-contrast preference based on
+    /// the foreground vs background luminance comparison.
     fn resolve_colors(&mut self, default_config: Option<&LapceConfig>) {
+        // First resolve base variables (e.g. "$red" -> "#E06C75") since UI and
+        // syntax colors may reference them via "$variable" notation.
         self.color.base = self
             .color_theme
             .base
@@ -384,6 +421,8 @@ impl LapceConfig {
             default_config.map(|c| &c.color.syntax),
         );
 
+        // Heuristic: if the sum of foreground RGB channels exceeds background's,
+        // the theme is light-on-dark, i.e. the background is dark.
         let fg = self.color(LapceColor::EDITOR_FOREGROUND).to_rgba8();
         let bg = self.color(LapceColor::EDITOR_BACKGROUND).to_rgba8();
         let is_light = fg.r as u32 + fg.g as u32 + fg.b as u32
@@ -541,6 +580,8 @@ impl LapceConfig {
         toml::to_string_pretty(&value).unwrap()
     }
 
+    /// Returns the path to the user's global settings file, creating an empty
+    /// file if it doesn't exist. Uses create_new to avoid race conditions.
     pub fn settings_file() -> Option<PathBuf> {
         let path = Directory::config_directory()?.join("settings.toml");
 
@@ -573,6 +614,8 @@ impl LapceConfig {
         Some(path)
     }
 
+    /// Resolves a UI icon name to its SVG string. Tries the active icon theme
+    /// first (loading from disk), falling back to the embedded default codicon.
     pub fn ui_svg(&self, icon: &'static str) -> String {
         let svg = self.icon_theme.ui.get(icon).and_then(|path| {
             let path = self.icon_theme.path.join(path);
@@ -585,6 +628,11 @@ impl LapceConfig {
         })
     }
 
+    /// Resolves file paths to a file-type icon SVG and an optional tint color.
+    /// Fallback chain:
+    ///   1. Active plugin icon theme (on-disk SVGs) - color depends on use_editor_color
+    ///   2. Default embedded filetype icons (no tint, retains original SVG colors)
+    ///   3. Generic "file" icon with editor tint color
     pub fn files_svg(&self, paths: &[&Path]) -> (String, Option<Color>) {
         let svg = self
             .icon_theme
@@ -747,6 +795,8 @@ impl LapceConfig {
         }
     }
 
+    /// Reads the user settings file as a TOML document, preserving formatting
+    /// and comments. Returns None if the file can't be read or parsed.
     fn get_file_table() -> Option<toml_edit::Document> {
         let path = Self::settings_file()?;
         let content = std::fs::read_to_string(path).ok()?;

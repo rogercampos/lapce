@@ -29,12 +29,19 @@ use crate::{
     workspace_data::{CommonData, Focus, WorkspaceData},
 };
 
+/// Data model for the recent files popup. Uses nucleo for fuzzy filtering
+/// of the file list as the user types. The popup shares the exclusive_popup
+/// pattern with the search modal and about dialog.
 #[derive(Clone)]
 pub struct RecentFilesData {
     pub visible: RwSignal<bool>,
+    /// Currently highlighted item in the filtered list, controlled by up/down keys.
     pub index: RwSignal<usize>,
     pub input_editor: EditorData,
+    /// The full unfiltered list of recently opened file paths.
     pub recent_files: RwSignal<Vec<PathBuf>>,
+    /// Derived filtered list: when input is empty, shows all files; otherwise
+    /// uses nucleo fuzzy matching on filenames and sorts by score descending.
     pub filtered_items: Memo<Vec<PathBuf>>,
     pub main_split: MainSplitData,
     pub common: Rc<CommonData>,
@@ -67,6 +74,9 @@ impl RecentFilesData {
             });
         }
 
+        // Fuzzy filtering using nucleo: this runs synchronously in the memo because
+        // the recent files list is typically small (< 100 items). For larger lists
+        // (like the file palette), a background thread would be needed.
         let filtered_items = cx.create_memo(move |_| {
             let files = recent_files.get();
             let input = filter_text.get();
@@ -253,6 +263,10 @@ impl VirtualVector<(usize, PathBuf)> for RecentFileItems {
     }
 }
 
+/// Extracts the filename and an optional disambiguating directory hint for display.
+/// The directory hint is only shown when multiple files share the same filename,
+/// so the user can tell them apart. The path is stripped relative to the workspace
+/// root when possible for brevity.
 fn file_display_parts(
     path: &PathBuf,
     all_items: &[PathBuf],

@@ -4,12 +4,15 @@ use floem::peniko::kurbo::Vec2;
 use lapce_core::{buffer::rope_text::RopeText, rope_text_pos::RopeTextPosition};
 use lsp_types::Position;
 
+/// A target location for editor navigation (go-to-definition, open file, etc.).
+/// Used by `JumpToLocation` internal command to open files and position the cursor.
 #[derive(Clone, Debug, PartialEq)]
 pub struct EditorLocation {
     pub path: PathBuf,
     pub position: Option<EditorPosition>,
     pub scroll_offset: Option<Vec2>,
-    // This will stop finding matching path on different editor tabs
+    /// When true, the navigation should reuse the current editor tab rather than
+    /// searching across all editor tabs for one already showing this file.
     pub same_editor_tab: bool,
 }
 

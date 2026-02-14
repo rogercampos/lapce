@@ -63,6 +63,10 @@ use super::{
     lsp::{DocumentFilter, LspClient},
 };
 
+/// Dual-mode response handler: either synchronous (blocking channel) or async
+/// (callback). The synchronous path is used by `server_request()` which blocks
+/// the caller until the response arrives. The async path is used by
+/// `server_request_async()` for non-blocking fire-and-callback patterns.
 pub enum ResponseHandler<Resp, Error> {
     Chan(Sender<Result<Resp, Error>>),
     Callback(Box<dyn RpcCallback<Resp, Error>>),
@@ -81,6 +85,10 @@ impl<Resp, Error> ResponseHandler<Resp, Error> {
     }
 }
 
+/// Callback trait that is both FnOnce and Clone-able. The DynClone requirement
+/// exists because when broadcasting a request to all plugins, the callback must
+/// be cloned once per plugin. The "first success wins" logic ensures only one
+/// clone actually invokes the user's original callback.
 pub trait ClonableCallback<Resp, Error>:
     FnOnce(PluginId, Result<Resp, Error>) + Send + DynClone
 {
@@ -167,6 +175,18 @@ pub enum PluginServerRpc {
     },
 }
 
+/// Per-plugin RPC handler. Each plugin instance (LSP or WASI) gets one of these.
+/// It manages the bidirectional communication between the catalog layer and the
+/// actual plugin process/runtime:
+///
+/// - `rpc_tx/rpc_rx`: internal channel for the plugin's mainloop (capability
+///    checking, document filtering, etc.)
+/// - `io_tx`: outbound channel to the plugin's stdin/IO (serialized JSON-RPC)
+/// - `server_pending`: tracks in-flight requests awaiting responses, keyed by
+///    JSON-RPC ID
+///
+/// Clone is cheap (all fields are Arc-wrapped or channel clones) and required
+/// because multiple threads need to send messages to the same plugin.
 #[derive(Clone)]
 pub struct PluginServerRpcHandler {
     pub spawned_by: Option<PluginId>,
@@ -356,12 +376,15 @@ impl PluginServerRpcHandler {
         }
     }
 
-    /// Make a request to plugin/language server and get the response.
+    /// Make a synchronous request to plugin/language server and block until
+    /// the response arrives.
     ///
-    /// When check is true, the request will be in the handler mainloop to
-    /// do checks like if the server has the capability of the request.
+    /// When `check` is true, the request goes through the handler mainloop
+    /// which verifies the server has the required capability and the document
+    /// matches the server's document selector before sending.
     ///
-    /// When check is false, the request will be sent out straight away.
+    /// When `check` is false, the request bypasses capability checks and is
+    /// sent immediately. Used during initialization (before capabilities are known).
     pub fn server_request<P: Serialize>(
         &self,
         method: impl Into<Cow<'static, str>>,
@@ -546,6 +569,13 @@ impl PluginServerRpcHandler {
     }
 }
 
+/// Parses a raw JSON-RPC message from a plugin/LSP and routes it:
+/// - Request: dispatched to the host handler, blocks for a response, returns it
+/// - Notification: dispatched to the host handler asynchronously (returns None)
+/// - Success/Error: matched against pending requests and delivered to their handlers
+///
+/// Returns Some(JsonRpc) only for host requests that need a response sent back
+/// to the plugin.
 pub fn handle_plugin_server_message(
     server_rpc: &PluginServerRpcHandler,
     message: &str,
@@ -618,6 +648,15 @@ struct ServerRegistrations {
     save: Option<SaveRegistration>,
 }
 
+/// Shared handler logic for both LSP and WASI plugins. Handles:
+/// - Document selector matching (which files this plugin cares about)
+/// - Capability checking (does the server support this LSP method?)
+/// - Host-side request/notification processing (diagnostics, progress, etc.)
+/// - Dynamic capability registration (e.g., textDocument/didSave)
+/// - Management of spawned child language servers (WASI plugins can spawn LSPs)
+///
+/// Both `LspClient` and WASI `Plugin` delegate to this struct for the shared
+/// protocol logic, avoiding duplication of the complex capability-checking code.
 pub struct PluginHostHandler {
     volt_id: VoltID,
     volt_display_name: String,
@@ -630,8 +669,8 @@ pub struct PluginHostHandler {
     pub server_capabilities: ServerCapabilities,
     server_registrations: ServerRegistrations,
 
-    /// Language servers that this plugin has spawned.  
-    /// Note that these plugin ids could be 'dead' if the LSP died/exited.  
+    /// Language servers that this plugin has spawned.
+    /// Note that these plugin ids could be 'dead' if the LSP died/exited.
     spawned_lsp: HashMap<PluginId, SpawnedLspInfo>,
 }
 
@@ -1210,6 +1249,14 @@ impl PluginHostHandler {
         );
     }
 
+    /// Converts a rope delta into the appropriate LSP content change event based
+    /// on the server's declared sync kind (Full vs Incremental).
+    ///
+    /// The `change` mutex is shared across all plugins receiving the same edit,
+    /// allowing the first plugin to compute the change event and cache it for
+    /// subsequent plugins. This avoids redundant delta-to-change conversions
+    /// when multiple language servers are active for the same document. The tuple
+    /// holds (full_change, incremental_change).
     pub fn handle_did_change_text_document(
         &mut self,
         lanaguage_id: String,
@@ -1370,6 +1417,11 @@ fn get_document_content_change(
     None
 }
 
+/// Converts raw LSP semantic tokens into absolute-offset line styles that the
+/// editor can use for syntax highlighting. Semantic tokens use a delta encoding
+/// (delta_line, delta_start) relative to the previous token, so we accumulate
+/// the position as we iterate. UTF-16 offsets from the LSP are converted to UTF-8
+/// byte offsets since the rope stores text as UTF-8.
 fn format_semantic_styles(
     text: &Rope,
     semantic_tokens_provider: Option<&SemanticTokensServerCapabilities>,

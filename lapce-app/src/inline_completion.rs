@@ -15,7 +15,9 @@ use crate::{config::LapceConfig, doc::Doc, editor::EditorData, snippet::Snippet}
 
 // TODO: we could integrate completion lens with this, so it is considered at the same time
 
-/// Redefinition of lsp types inline completion item with offset range
+/// LSP inline completion item translated to use byte offsets instead of LSP positions.
+/// This conversion happens once at receipt time (in `from_lsp`) to avoid repeated
+/// position-to-offset lookups during rendering.
 #[derive(Debug, Clone)]
 pub struct InlineCompletionItem {
     /// The text to replace the range with.
@@ -226,6 +228,11 @@ impl InlineCompletionData {
     }
 }
 
+/// Result of computing inline completion display text.
+/// Similar to the three-level return in completion_lens_text:
+/// - `Hide` = no valid completion to show
+/// - `Unchanged` = same text as currently displayed, skip DOM update
+/// - `Set(text, shift)` = new ghost text to display, shifted by `shift` bytes from start_offset
 enum ICompletionRes {
     Hide,
     Unchanged,

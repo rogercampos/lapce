@@ -15,10 +15,17 @@ use lapce_rpc::{
 
 use crate::workspace::LapceWorkspace;
 
+/// The app-side handler for core notifications from the proxy.
+/// Simply forwards notifications through the mpsc channel to be picked up
+/// by `create_signal_from_channel` and processed in the reactive system.
 pub struct Proxy {
     pub tx: Sender<CoreNotification>,
 }
 
+/// Holds both ends of the proxy communication bridge:
+/// - `proxy_rpc`: sends requests TO the proxy (open file, search, LSP operations)
+/// - `core_rpc`: receives notifications FROM the proxy (diagnostics, completions, etc.)
+/// - `notification`: a reactive signal that emits each incoming CoreNotification
 #[derive(Clone)]
 pub struct ProxyData {
     pub proxy_rpc: ProxyRpcHandler,
@@ -33,6 +40,16 @@ impl ProxyData {
     }
 }
 
+/// Spawns the proxy backend and sets up the two-way communication bridge.
+///
+/// Two dedicated threads are created:
+/// 1. **ProxyRpcHandler**: runs the Dispatcher mainloop, processing requests from the
+///    app (file open, search, LSP) and sending responses/notifications back via core_rpc.
+/// 2. **CoreRpcHandler**: reads notifications from core_rpc and forwards them through
+///    an mpsc channel that gets bridged to a Floem reactive signal.
+///
+/// For local workspaces, the proxy runs in-process (as threads, not a separate process).
+/// The `proxy_rpc.initialize()` call triggers plugin discovery and LSP server startup.
 pub fn new_proxy(
     workspace: Arc<LapceWorkspace>,
     disabled_volts: Vec<VoltID>,
@@ -42,6 +59,7 @@ pub fn new_proxy(
     let proxy_rpc = ProxyRpcHandler::new();
     let core_rpc = CoreRpcHandler::new();
 
+    // Thread 1: Proxy dispatcher - processes app requests and runs plugin/LSP logic
     {
         let core_rpc = core_rpc.clone();
         let proxy_rpc = proxy_rpc.clone();
@@ -66,6 +84,8 @@ pub fn new_proxy(
             .unwrap();
     }
 
+    // Thread 2: Core notification reader - bridges proxy notifications to the UI thread
+    // via an mpsc channel that Floem's create_signal_from_channel converts to a signal.
     let (tx, rx) = std::sync::mpsc::channel();
     {
         let core_rpc = core_rpc.clone();
@@ -78,6 +98,9 @@ pub fn new_proxy(
             .unwrap()
     };
 
+    // Convert the mpsc receiver into a Floem reactive signal. Each time a notification
+    // is sent, the signal updates, triggering the effect in WorkspaceData::new that
+    // calls handle_core_notification().
     let notification = create_signal_from_channel(rx);
 
     ProxyData {
@@ -102,6 +125,8 @@ impl CoreHandler for Proxy {
     }
 }
 
+/// Creates a Command with platform-specific flags. On Windows, sets
+/// CREATE_NO_WINDOW (0x08000000) to prevent console windows from flashing.
 pub fn new_command(program: &str) -> Command {
     #[allow(unused_mut)]
     let mut cmd = Command::new(program);

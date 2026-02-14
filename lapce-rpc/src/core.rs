@@ -21,9 +21,12 @@ use crate::{
     plugin::{PluginId, VoltInfo, VoltMetadata},
 };
 
+/// Internal channel message type for proxy-to-UI communication.
+/// CoreNotification is boxed because some variants (like CompletionResponse)
+/// are large, and clippy warns about enum variant size disparity.
 pub enum CoreRpc {
     Request(RequestId, CoreRequest),
-    Notification(Box<CoreNotification>), // Box it since clippy complains
+    Notification(Box<CoreNotification>),
     Shutdown,
 }
 
@@ -34,6 +37,10 @@ pub enum FileChanged {
     Delete,
 }
 
+/// Messages sent from the proxy back to the UI. These are all notifications
+/// (fire-and-forget) because the proxy never needs the UI to respond.
+/// Includes LSP results (completions, diagnostics), plugin lifecycle events,
+/// and file change notifications from the file watcher.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "method", content = "params")]
@@ -100,6 +107,8 @@ pub enum CoreNotification {
     },
 }
 
+/// Currently empty -- the proxy never makes requests to the UI that require
+/// a response. Kept as a placeholder for future bidirectional request patterns.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum CoreRequest {}
 

@@ -13,8 +13,12 @@ use super::{
 };
 use crate::workspace_data::{CommonData, Focus};
 
+/// Maps each panel position slot to the ordered list of panel kinds it contains.
+/// im::HashMap is used for cheap cloning since this is stored in a reactive signal.
 pub type PanelOrder = im::HashMap<PanelPosition, im::Vector<PanelKind>>;
 
+/// Defines the fixed panel layout. This is the source of truth for which panels
+/// exist in which positions. There is no runtime reordering.
 pub fn default_panel_order() -> PanelOrder {
     let mut order = PanelOrder::new();
     order.insert(PanelPosition::LeftTop, im::vector![PanelKind::FileExplorer]);
@@ -23,6 +27,9 @@ pub fn default_panel_order() -> PanelOrder {
     order
 }
 
+/// Foldable sections within panels (e.g. "Open Editors" and "File Explorer" within
+/// the file explorer panel). Each section's fold state (open/closed) is persisted
+/// per workspace so that the user's preferred layout is remembered.
 #[derive(Clone, Copy, Serialize, Deserialize, Hash, PartialEq, Eq)]
 pub enum PanelSection {
     OpenEditor,
@@ -49,12 +56,17 @@ pub struct PanelInfo {
     pub sections: im::HashMap<PanelSection, bool>,
 }
 
+/// Central state for the entire panel system. `panels` holds the fixed layout
+/// order, `styles` holds per-position visibility/active tab/maximized state,
+/// `size` holds the drag-resizable dimensions, and `sections` holds fold states.
 #[derive(Clone)]
 pub struct PanelData {
     pub panels: RwSignal<PanelOrder>,
     pub styles: RwSignal<im::HashMap<PanelPosition, PanelStyle>>,
     pub size: RwSignal<PanelSize>,
     pub available_size: Memo<Size>,
+    /// Each section's open/closed signal is stored individually so that toggling
+    /// one section does not trigger re-renders for others.
     pub sections: RwSignal<im::HashMap<PanelSection, RwSignal<bool>>>,
     pub common: Rc<CommonData>,
 }
@@ -225,6 +237,9 @@ impl PanelData {
         }
     }
 
+    /// Hides the panel, but only if it is currently the active panel at its position.
+    /// Also hides the peer position if it has no panels, preventing an empty container
+    /// from being displayed (e.g. hiding LeftTop also hides LeftBottom if it is empty).
     pub fn hide_panel(&self, kind: &PanelKind) {
         if let Some((_, position)) = self.panel_position(kind) {
             if let Some((active_panel, _)) =
@@ -299,6 +314,8 @@ impl PanelData {
         }
     }
 
+    /// Toggles maximize for both bottom positions at once, because the bottom
+    /// container is a single horizontal band that spans both BottomLeft and BottomRight.
     pub fn toggle_bottom_maximize(&self) {
         let maximized = !self.panel_bottom_maximized(false);
         self.styles.update(|styles| {
@@ -356,6 +373,9 @@ impl PanelData {
         }
     }
 
+    /// Returns the signal controlling whether a panel section is folded open or closed.
+    /// Creates the signal lazily (defaulting to open) if it has not been persisted,
+    /// which handles newly added sections that have no saved state.
     pub fn section_open(&self, section: PanelSection) -> RwSignal<bool> {
         let open = self
             .sections

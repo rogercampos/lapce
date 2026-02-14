@@ -41,23 +41,34 @@ use crate::{
     workspace_data::{CommonData, Focus, WorkspaceData},
 };
 
+/// A flattened search result used by the modal's linear (non-hierarchical) list.
+/// Unlike the panel which groups by file, the modal shows all matches in one list.
 #[derive(Clone, Debug, PartialEq)]
 pub struct FlatSearchMatch {
     pub path: PathBuf,
     pub search_match: SearchMatch,
 }
 
+/// The search modal is a floating popup that shares the same search backend
+/// (GlobalSearchData) as the search panel. It has its own input_editor that syncs
+/// its text to the global search pattern, and its own preview_editor for the
+/// preview pane. The `flat_matches` Memo flattens the hierarchical results from
+/// GlobalSearchData into a simple linear list for the modal's UI.
 #[derive(Clone)]
 pub struct SearchModalData {
     pub visible: RwSignal<bool>,
+    /// Index into flat_matches for keyboard navigation (up/down arrows).
     pub index: RwSignal<usize>,
     pub input_editor: EditorData,
     pub preview_editor: EditorData,
     pub has_preview: RwSignal<bool>,
+    /// Derived from GlobalSearchData.search_result, flattened into a linear list.
+    /// Recomputed whenever search results change.
     pub flat_matches: Memo<Vec<FlatSearchMatch>>,
     pub global_search: GlobalSearchData,
     pub main_split: MainSplitData,
     pub common: Rc<CommonData>,
+    /// Controls whether keyboard input goes to the preview editor or the input/list.
     pub preview_focused: RwSignal<bool>,
 }
 
@@ -81,7 +92,10 @@ impl SearchModalData {
         preview_editor.kind.set(EditorViewKind::Preview);
         let has_preview = cx.create_rw_signal(false);
 
-        // Sync input_editor text -> global_search pattern
+        // Sync the modal's input editor text to the global search pattern.
+        // This is what connects the modal to the shared search backend:
+        // typing in the modal's input triggers global search, whose results
+        // are then consumed by the flat_matches Memo below.
         {
             let global_search = global_search.clone();
             let buffer = input_editor.doc().buffer;
@@ -166,6 +180,9 @@ impl SearchModalData {
         }
     }
 
+    /// Opens the search modal, pre-populating the input with the word under the
+    /// cursor if the user was focused on a workbench editor. This mimics the common
+    /// IDE pattern of "search for the word I'm looking at".
     pub fn open(&self) {
         self.input_editor.doc().reload(Rope::from(""), true);
         self.input_editor
@@ -276,6 +293,10 @@ impl KeyPressFocus for SearchModalData {
         Mode::Insert
     }
 
+    /// The modal uses the same preview_focused pattern as GlobalSearchData:
+    /// when the preview editor is focused, report EditorFocus so editor keybindings
+    /// work. Otherwise report ListFocus for up/down/enter navigation and ModalFocus
+    /// so ESC closes the modal.
     fn check_condition(
         &self,
         condition: crate::keypress::condition::Condition,
@@ -288,6 +309,12 @@ impl KeyPressFocus for SearchModalData {
         }
     }
 
+    /// Command routing follows a priority chain:
+    /// 1. ESC: if preview is focused, unfocus it; otherwise close the modal.
+    /// 2. List navigation (next/previous/select): always handled by the modal.
+    /// 3. Workbench commands like OpenFullResults.
+    /// 4. Everything else: forwarded to preview_editor if preview_focused,
+    ///    otherwise to input_editor (for typing/editing the search query).
     fn run_command(
         &self,
         command: &LapceCommand,
