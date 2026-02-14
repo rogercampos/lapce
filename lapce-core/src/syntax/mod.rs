@@ -61,8 +61,8 @@ pub struct TsParser {
     pub cursors: Vec<QueryCursor>,
 }
 
-/// Each thread gets its own parser instance because tree-sitter parsers
-/// are not thread-safe. The cursor pool is also per-thread.
+// Each thread gets its own parser instance because tree-sitter parsers
+// are not thread-safe. The cursor pool is also per-thread.
 thread_local! {
     pub static PARSER: RefCell<TsParser> = RefCell::new(TsParser {
         parser: Parser::new(),

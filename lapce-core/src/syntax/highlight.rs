@@ -28,10 +28,10 @@ use tree_sitter::{
 use super::{PARSER, util::RopeProvider};
 use crate::{language::LapceLanguage, style::SCOPES};
 
-/// Per-thread cache of HighlightConfigurations keyed by language. Creating a
-/// HighlightConfiguration involves parsing query files and compiling them,
-/// which is expensive. Caching here avoids redoing this work when switching
-/// between files of the same language.
+// Per-thread cache of HighlightConfigurations keyed by language. Creating a
+// HighlightConfiguration involves parsing query files and compiling them,
+// which is expensive. Caching here avoids redoing this work when switching
+// between files of the same language.
 thread_local! {
     static HIGHLIGHT_CONFIGS: RefCell<HashMap<LapceLanguage, Result<Arc<HighlightConfiguration>, HighlightIssue>>> = Default::default();
 }

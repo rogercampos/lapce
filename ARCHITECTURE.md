@@ -53,7 +53,7 @@ lapce/
 ├── lapce-rpc/     # RPC message types (~2,400 lines)
 │                  # Shared between app and proxy, defines the protocol
 │
-└── lapce-core/    # Core editor logic (~5,200 lines)
+└── lapce-core/    # Core editor logic (~4,800 lines)
                    # Language definitions, syntax highlighting, encoding
 ```
 
@@ -73,7 +73,7 @@ lapce-app → lapce-core ─────┘
 
 Contains non-UI editor logic shared by both the app and proxy:
 
-- **Language detection** (`language.rs`): Maps file extensions/names to `LapceLanguage` enum variants (~100 languages). Each variant indexes into a `LANGUAGES` array of `SyntaxProperties` containing indent rules, comment tokens, and tree-sitter configuration.
+- **Language detection** (`language.rs`): Maps file extensions/names to `LapceLanguage` enum variants (~65 languages). Each variant indexes into a `LANGUAGES` array of `SyntaxProperties` containing indent rules, comment tokens, and tree-sitter configuration.
 - **Syntax highlighting** (`syntax/`): Full tree-sitter integration with multi-layer injection support (e.g., JS inside HTML), incremental parsing, bracket colorization, and highlight iteration.
 - **Code lens** (`lens.rs`): A balanced tree data structure (built on xi-rope's tree infrastructure) mapping line numbers to variable pixel heights for O(log n) height-to-line lookups.
 - **Encoding** (`encoding.rs`): UTF-8 ↔ UTF-16 offset conversion for LSP interop.
@@ -340,7 +340,7 @@ Commands are defined in `command.rs`:
 
 - **`LapceCommand`**: Wraps a `CommandKind` + optional JSON data. The unified command type.
 - **`CommandKind`**: 7-variant enum unifying all command families:
-  - `Workbench(LapceWorkbenchCommand)` — Lapce-specific (~50 variants)
+  - `Workbench(LapceWorkbenchCommand)` — Lapce-specific (~60 variants)
   - `Edit`/`Move`/`Scroll`/`Focus`/`MotionMode`/`MultiSelection` — from `floem_editor_core`
 - **`InternalCommand`**: ~40 variants with rich data payloads. Not exposed in palette/keybindings.
 - **`WindowCommand`**: SetWorkspace, NewWindow, CloseWindow.
@@ -546,7 +546,7 @@ Plugins in `defaults/plugins/` are embedded at compile time via `include_dir!`. 
 
 ### Language Detection
 
-`LapceLanguage` enum (~100 variants) maps to `SyntaxProperties` via array indexing:
+`LapceLanguage` enum (~65 variants) maps to `SyntaxProperties` via array indexing:
 - `TreeSitterProperties`: Grammar name, query files, code glance configuration
 - `CommentProperties`: Single-line and multi-line comment tokens
 - File extensions and names for detection
