@@ -14,7 +14,7 @@ use crossbeam_channel::{Receiver, Sender};
 use dyn_clone::DynClone;
 use floem_editor_core::buffer::rope_text::{RopeText, RopeTextRef};
 use jsonrpc_lite::{Id, JsonRpc, Params};
-use lapce_core::{encoding::offset_utf16_to_utf8, rope_text_pos::RopeTextPosition};
+use lapce_core::encoding::offset_utf16_to_utf8;
 use lapce_rpc::{
     RpcError,
     core::{CoreRpcHandler, ServerStatusParams},
@@ -27,7 +27,7 @@ use lsp_types::{
     DidSaveTextDocumentParams, DocumentSelector, FoldingRangeProviderCapability,
     HoverProviderCapability, ImplementationProviderCapability, InitializeResult,
     LogMessageParams, MessageType, OneOf, ProgressParams, PublishDiagnosticsParams,
-    Range, Registration, RegistrationParams, SemanticTokens, SemanticTokensLegend,
+    Registration, RegistrationParams, SemanticTokens, SemanticTokensLegend,
     SemanticTokensServerCapabilities, ServerCapabilities, ShowMessageParams,
     TextDocumentContentChangeEvent, TextDocumentIdentifier,
     TextDocumentSaveRegistrationOptions, TextDocumentSyncCapability,
@@ -1298,12 +1298,13 @@ impl PluginHostHandler {
                 if let Some(c) = existing.1.as_ref() {
                     c.clone()
                 } else {
-                    let change = get_document_content_change(&text, &delta)
-                        .unwrap_or_else(|| TextDocumentContentChangeEvent {
-                            range: None,
-                            range_length: None,
-                            text: new_text.to_string(),
-                        });
+                    let change =
+                        crate::buffer::get_document_content_change(&text, &delta)
+                            .unwrap_or_else(|| TextDocumentContentChangeEvent {
+                                range: None,
+                                range_length: None,
+                                text: new_text.to_string(),
+                            });
                     existing.1 = Some(change.clone());
                     change
                 }
@@ -1369,52 +1370,6 @@ impl PluginHostHandler {
 struct SpawnedLspInfo {
     /// The response sender to use when the lsp is initialized.
     resp: Option<ResponseSender>,
-}
-
-fn get_document_content_change(
-    text: &Rope,
-    delta: &RopeDelta,
-) -> Option<TextDocumentContentChangeEvent> {
-    let (interval, _) = delta.summary();
-    let (start, end) = interval.start_end();
-
-    let text = RopeTextRef::new(text);
-
-    // TODO: Handle more trivial cases like typing when there's a selection or transpose
-    if let Some(node) = delta.as_simple_insert() {
-        let (start, end) = interval.start_end();
-        let start = text.offset_to_position(start);
-
-        let end = text.offset_to_position(end);
-
-        let text = String::from(node);
-        let text_document_content_change_event = TextDocumentContentChangeEvent {
-            range: Some(Range { start, end }),
-            range_length: None,
-            text,
-        };
-
-        return Some(text_document_content_change_event);
-    }
-    // Or a simple delete
-    else if delta.is_simple_delete() {
-        let end_position = text.offset_to_position(end);
-
-        let start = text.offset_to_position(start);
-
-        let text_document_content_change_event = TextDocumentContentChangeEvent {
-            range: Some(Range {
-                start,
-                end: end_position,
-            }),
-            range_length: None,
-            text: String::new(),
-        };
-
-        return Some(text_document_content_change_event);
-    }
-
-    None
 }
 
 /// Converts raw LSP semantic tokens into absolute-offset line styles that the

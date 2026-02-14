@@ -2165,61 +2165,6 @@ impl MainSplitData {
         }
     }
 
-    pub fn save_as2(
-        &self,
-        doc: Rc<Doc>,
-        path: PathBuf,
-        action: impl Fn() + 'static,
-    ) {
-        let (buffer_id, doc_content, rev, content) = (
-            doc.buffer_id,
-            doc.content.get_untracked(),
-            doc.rev(),
-            doc.buffer.with_untracked(|b| b.to_string()),
-        );
-        match doc_content {
-            DocContent::Scratch { .. } => {
-                let send = {
-                    let path = path.clone();
-                    create_ext_action(self.scope, move |result| {
-                        if let Err(err) = result {
-                            event!(
-                                Level::WARN,
-                                "Failed to save as a file: {:?}",
-                                err
-                            );
-                        } else {
-                            let syntax = Syntax::init(&path);
-                            doc.content.set(DocContent::File {
-                                path: path.clone(),
-                                read_only: false,
-                            });
-                            doc.buffer.update(|buffer| {
-                                buffer.set_pristine();
-                            });
-                            doc.set_syntax(syntax);
-                            doc.trigger_syntax_change(None);
-                            action();
-                        }
-                    })
-                };
-                self.common.proxy.save_buffer_as(
-                    buffer_id,
-                    path,
-                    rev,
-                    content,
-                    true,
-                    Box::new(move |result| {
-                        send(result);
-                    }),
-                );
-            }
-            DocContent::Local => {}
-            DocContent::File { .. } => {}
-            DocContent::History(_) => {}
-        }
-    }
-
     fn get_name_for_new_file(&self) -> String {
         const PREFIX: &str = "Untitled-";
 
@@ -2276,27 +2221,6 @@ impl MainSplitData {
             move |file: Option<FileInfo>| {
                 if let Some(mut file) = file {
                     main_split.save_as(
-                        doc.clone(),
-                        if let Some(path) = file.path.pop() {
-                            path
-                        } else {
-                            tracing::error!("No path");
-                            return;
-                        },
-                        move || {},
-                    );
-                }
-            },
-        );
-    }
-
-    pub fn save_scratch_doc2(&self, doc: Rc<Doc>) {
-        let main_split = self.clone();
-        save_as(
-            FileDialogOptions::new().title("Save File"),
-            move |file: Option<FileInfo>| {
-                if let Some(mut file) = file {
-                    main_split.save_as2(
                         doc.clone(),
                         if let Some(path) = file.path.pop() {
                             path

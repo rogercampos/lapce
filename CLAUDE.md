@@ -276,7 +276,9 @@ Navigation through hierarchical results requires building a flat list of visible
 
 - **Proxy runs in-process for local:** Despite the two-process architecture, local workspaces run the proxy as a thread within the same process (see `proxy.rs`). The separate-process mode was for remote development (now removed).
 
-- **Signal tracking:** Using `signal.get()` inside a view subscribes to updates. Using it in command handlers or initialization should use `get_untracked()` to avoid unnecessary re-renders. Misusing tracked gets in non-view code can cause performance issues.
+- **Signal tracking:** Using `signal.get()` inside a view subscribes to updates. Using it in command handlers or initialization should use `get_untracked()` to avoid unnecessary re-renders. Misusing tracked gets in non-view code can cause performance issues. **Especially in `create_effect`:** using `signal.get()` inside an effect makes the effect re-run whenever that signal changes. If the effect triggers a side-effect (network request, thread spawn, etc.), use `get_untracked()` for signals that should only be read once rather than tracked.
+
+- **`virtual_stack` performance:** The item view builder closure (third argument to `virtual_stack`) runs once per visible item. Expensive computations that depend on the full list should be precomputed as a `Memo` or `create_memo` outside the `virtual_stack`, not re-computed per-item inside the builder closure.
 
 - **Panel toggle commands:** `toggle_*_focus` shows the panel AND focuses it. `toggle_*_visual` only toggles visibility. The keyboard shortcuts use the `_focus` variants.
 

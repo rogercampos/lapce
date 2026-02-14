@@ -465,6 +465,29 @@ impl PluginCatalogRpcHandler {
         }
     }
 
+    /// Helper for LSP request methods: extracts language_id from path and
+    /// dispatches to all matching plugins.
+    fn send_lsp_request<P, Resp>(
+        &self,
+        path: &Path,
+        method: &'static str,
+        params: P,
+        cb: impl FnOnce(PluginId, Result<Resp, RpcError>) + Clone + Send + 'static,
+    ) where
+        P: Serialize,
+        Resp: DeserializeOwned,
+    {
+        let language_id =
+            Some(language_id_from_path(path).unwrap_or("").to_string());
+        self.send_request_to_all_plugins(
+            method,
+            params,
+            language_id,
+            Some(path.to_path_buf()),
+            cb,
+        );
+    }
+
     pub fn get_definition(
         &self,
         path: &Path,
@@ -485,15 +508,7 @@ impl PluginCatalogRpcHandler {
             partial_result_params: PartialResultParams::default(),
         };
 
-        let language_id =
-            Some(language_id_from_path(path).unwrap_or("").to_string());
-        self.send_request_to_all_plugins(
-            method,
-            params,
-            language_id,
-            Some(path.to_path_buf()),
-            cb,
-        );
+        self.send_lsp_request(path, method, params, cb);
     }
 
     pub fn get_type_definition(
@@ -516,15 +531,7 @@ impl PluginCatalogRpcHandler {
             partial_result_params: PartialResultParams::default(),
         };
 
-        let language_id =
-            Some(language_id_from_path(path).unwrap_or("").to_string());
-        self.send_request_to_all_plugins(
-            method,
-            params,
-            language_id,
-            Some(path.to_path_buf()),
-            cb,
-        );
+        self.send_lsp_request(path, method, params, cb);
     }
 
     pub fn call_hierarchy_incoming(
@@ -545,15 +552,7 @@ impl PluginCatalogRpcHandler {
             partial_result_params: Default::default(),
         };
 
-        let language_id =
-            Some(language_id_from_path(path).unwrap_or("").to_string());
-        self.send_request_to_all_plugins(
-            method,
-            params,
-            language_id,
-            Some(path.to_path_buf()),
-            cb,
-        );
+        self.send_lsp_request(path, method, params, cb);
     }
 
     pub fn show_call_hierarchy(
@@ -575,15 +574,7 @@ impl PluginCatalogRpcHandler {
             work_done_progress_params: WorkDoneProgressParams::default(),
         };
 
-        let language_id =
-            Some(language_id_from_path(path).unwrap_or("").to_string());
-        self.send_request_to_all_plugins(
-            method,
-            params,
-            language_id,
-            Some(path.to_path_buf()),
-            cb,
-        );
+        self.send_lsp_request(path, method, params, cb);
     }
 
     pub fn get_references(
@@ -609,15 +600,7 @@ impl PluginCatalogRpcHandler {
             },
         };
 
-        let language_id =
-            Some(language_id_from_path(path).unwrap_or("").to_string());
-        self.send_request_to_all_plugins(
-            method,
-            params,
-            language_id,
-            Some(path.to_path_buf()),
-            cb,
-        );
+        self.send_lsp_request(path, method, params, cb);
     }
 
     pub fn get_lsp_folding_range(
@@ -638,15 +621,7 @@ impl PluginCatalogRpcHandler {
             partial_result_params: PartialResultParams::default(),
         };
 
-        let language_id =
-            Some(language_id_from_path(path).unwrap_or("").to_string());
-        self.send_request_to_all_plugins(
-            method,
-            params,
-            language_id,
-            Some(path.to_path_buf()),
-            cb,
-        );
+        self.send_lsp_request(path, method, params, cb);
     }
 
     pub fn go_to_implementation(
@@ -669,15 +644,7 @@ impl PluginCatalogRpcHandler {
             partial_result_params: PartialResultParams::default(),
         };
 
-        let language_id =
-            Some(language_id_from_path(path).unwrap_or("").to_string());
-        self.send_request_to_all_plugins(
-            method,
-            params,
-            language_id,
-            Some(path.to_path_buf()),
-            cb,
-        );
+        self.send_lsp_request(path, method, params, cb);
     }
 
     pub fn get_code_actions(
@@ -706,15 +673,7 @@ impl PluginCatalogRpcHandler {
             work_done_progress_params: WorkDoneProgressParams::default(),
             partial_result_params: PartialResultParams::default(),
         };
-        let language_id =
-            Some(language_id_from_path(path).unwrap_or("").to_string());
-        self.send_request_to_all_plugins(
-            method,
-            params,
-            language_id,
-            Some(path.to_path_buf()),
-            cb,
-        );
+        self.send_lsp_request(path, method, params, cb);
     }
 
     pub fn get_code_lens(
@@ -733,16 +692,7 @@ impl PluginCatalogRpcHandler {
             partial_result_params: Default::default(),
         };
 
-        let language_id =
-            Some(language_id_from_path(path).unwrap_or("").to_string());
-
-        self.send_request_to_all_plugins(
-            method,
-            params,
-            language_id,
-            Some(path.to_path_buf()),
-            cb,
-        );
+        self.send_lsp_request(path, method, params, cb);
     }
 
     pub fn get_code_lens_resolve(
@@ -752,16 +702,7 @@ impl PluginCatalogRpcHandler {
         cb: impl FnOnce(PluginId, Result<CodeLens, RpcError>) + Clone + Send + 'static,
     ) {
         let method = CodeLensResolve::METHOD;
-        let language_id =
-            Some(language_id_from_path(path).unwrap_or("").to_string());
-
-        self.send_request_to_all_plugins(
-            method,
-            code_lens,
-            language_id,
-            Some(path.to_path_buf()),
-            cb,
-        );
+        self.send_lsp_request(path, method, code_lens, cb);
     }
 
     pub fn get_inlay_hints(
@@ -780,15 +721,7 @@ impl PluginCatalogRpcHandler {
             work_done_progress_params: WorkDoneProgressParams::default(),
             range,
         };
-        let language_id =
-            Some(language_id_from_path(path).unwrap_or("").to_string());
-        self.send_request_to_all_plugins(
-            method,
-            params,
-            language_id,
-            Some(path.to_path_buf()),
-            cb,
-        );
+        self.send_lsp_request(path, method, params, cb);
     }
 
     pub fn get_document_diagnostics(
@@ -808,15 +741,7 @@ impl PluginCatalogRpcHandler {
             work_done_progress_params: WorkDoneProgressParams::default(),
             partial_result_params: PartialResultParams::default(),
         };
-        let language_id =
-            Some(language_id_from_path(path).unwrap_or("").to_string());
-        self.send_request_to_all_plugins(
-            method,
-            params,
-            language_id,
-            Some(path.to_path_buf()),
-            cb,
-        );
+        self.send_lsp_request(path, method, params, cb);
     }
 
     pub fn get_inline_completions(
@@ -842,15 +767,7 @@ impl PluginCatalogRpcHandler {
             },
             work_done_progress_params: WorkDoneProgressParams::default(),
         };
-        let language_id =
-            Some(language_id_from_path(path).unwrap_or("").to_string());
-        self.send_request_to_all_plugins(
-            method,
-            params,
-            language_id,
-            Some(path.to_path_buf()),
-            cb,
-        );
+        self.send_lsp_request(path, method, params, cb);
     }
 
     pub fn get_document_formatting(
@@ -872,15 +789,7 @@ impl PluginCatalogRpcHandler {
             },
             work_done_progress_params: WorkDoneProgressParams::default(),
         };
-        let language_id =
-            Some(language_id_from_path(path).unwrap_or("").to_string());
-        self.send_request_to_all_plugins(
-            method,
-            params,
-            language_id,
-            Some(path.to_path_buf()),
-            cb,
-        );
+        self.send_lsp_request(path, method, params, cb);
     }
 
     pub fn prepare_rename(
@@ -898,15 +807,7 @@ impl PluginCatalogRpcHandler {
             text_document: TextDocumentIdentifier { uri },
             position,
         };
-        let language_id =
-            Some(language_id_from_path(path).unwrap_or("").to_string());
-        self.send_request_to_all_plugins(
-            method,
-            params,
-            language_id,
-            Some(path.to_path_buf()),
-            cb,
-        );
+        self.send_lsp_request(path, method, params, cb);
     }
 
     pub fn rename(
@@ -929,15 +830,7 @@ impl PluginCatalogRpcHandler {
             new_name,
             work_done_progress_params: WorkDoneProgressParams::default(),
         };
-        let language_id =
-            Some(language_id_from_path(path).unwrap_or("").to_string());
-        self.send_request_to_all_plugins(
-            method,
-            params,
-            language_id,
-            Some(path.to_path_buf()),
-            cb,
-        );
+        self.send_lsp_request(path, method, params, cb);
     }
 
     pub fn get_semantic_tokens(
@@ -955,15 +848,7 @@ impl PluginCatalogRpcHandler {
             work_done_progress_params: WorkDoneProgressParams::default(),
             partial_result_params: PartialResultParams::default(),
         };
-        let language_id =
-            Some(language_id_from_path(path).unwrap_or("").to_string());
-        self.send_request_to_all_plugins(
-            method,
-            params,
-            language_id,
-            Some(path.to_path_buf()),
-            cb,
-        );
+        self.send_lsp_request(path, method, params, cb);
     }
 
     pub fn get_selection_range(
@@ -983,15 +868,7 @@ impl PluginCatalogRpcHandler {
             work_done_progress_params: WorkDoneProgressParams::default(),
             partial_result_params: Default::default(),
         };
-        let language_id =
-            Some(language_id_from_path(path).unwrap_or("").to_string());
-        self.send_request_to_all_plugins(
-            method,
-            params,
-            language_id,
-            Some(path.to_path_buf()),
-            cb,
-        );
+        self.send_lsp_request(path, method, params, cb);
     }
 
     pub fn hover(
@@ -1009,16 +886,7 @@ impl PluginCatalogRpcHandler {
             },
             work_done_progress_params: WorkDoneProgressParams::default(),
         };
-        let language_id =
-            Some(language_id_from_path(path).unwrap_or("").to_string());
-
-        self.send_request_to_all_plugins(
-            method,
-            params,
-            language_id,
-            Some(path.to_path_buf()),
-            cb,
-        );
+        self.send_lsp_request(path, method, params, cb);
     }
 
     pub fn completion(

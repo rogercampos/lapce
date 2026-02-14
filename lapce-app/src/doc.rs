@@ -226,16 +226,17 @@ pub struct Doc {
     pub common: Rc<CommonData>,
 }
 impl Doc {
-    pub fn new(
+    fn new_inner(
         cx: Scope,
-        path: PathBuf,
+        content: DocContent,
+        syntax: Syntax,
         diagnostics: DiagnosticData,
+        loaded: bool,
         editors: Editors,
         common: Rc<CommonData>,
     ) -> Self {
-        let syntax = Syntax::init(&path);
         let config = common.config.get_untracked();
-        Doc {
+        Self {
             scope: cx,
             buffer_id: BufferId::next(),
             buffer: cx.create_rw_signal(Buffer::new("")),
@@ -254,11 +255,8 @@ impl Doc {
             inline_completion: cx.create_rw_signal(None),
             inline_completion_pos: cx.create_rw_signal((0, 0)),
             cache_rev: cx.create_rw_signal(0),
-            content: cx.create_rw_signal(DocContent::File {
-                path,
-                read_only: false,
-            }),
-            loaded: cx.create_rw_signal(false),
+            content: cx.create_rw_signal(content),
+            loaded: cx.create_rw_signal(loaded),
             sticky_headers: Rc::new(RefCell::new(HashMap::new())),
             code_actions: cx.create_rw_signal(im::HashMap::new()),
             find_result: FindResult::new(cx),
@@ -266,9 +264,31 @@ impl Doc {
             editors,
             common,
             code_lens: cx.create_rw_signal(im::HashMap::new()),
-
             folding_ranges: cx.create_rw_signal(FoldingRanges::default()),
         }
+    }
+
+    fn fresh_diagnostics(cx: Scope) -> DiagnosticData {
+        DiagnosticData {
+            expanded: cx.create_rw_signal(true),
+            diagnostics: cx.create_rw_signal(im::Vector::new()),
+            diagnostics_span: cx.create_rw_signal(SpansBuilder::new(0).build()),
+        }
+    }
+
+    pub fn new(
+        cx: Scope,
+        path: PathBuf,
+        diagnostics: DiagnosticData,
+        editors: Editors,
+        common: Rc<CommonData>,
+    ) -> Self {
+        let syntax = Syntax::init(&path);
+        let content = DocContent::File {
+            path,
+            read_only: false,
+        };
+        Self::new_inner(cx, content, syntax, diagnostics, false, editors, common)
     }
 
     pub fn new_local(cx: Scope, editors: Editors, common: Rc<CommonData>) -> Doc {
@@ -282,42 +302,16 @@ impl Doc {
         common: Rc<CommonData>,
     ) -> Doc {
         let cx = cx.create_child();
-        let config = common.config.get_untracked();
-        Self {
-            scope: cx,
-            buffer_id: BufferId::next(),
-            buffer: cx.create_rw_signal(Buffer::new("")),
-            syntax: cx.create_rw_signal(Syntax::plaintext()),
-            line_styles: Rc::new(RefCell::new(HashMap::new())),
-            parser: Rc::new(RefCell::new(BracketParser::new(
-                String::new(),
-                config.editor.bracket_pair_colorization,
-                config.editor.bracket_colorization_limit,
-            ))),
-            semantic_styles: cx.create_rw_signal(None),
-            inlay_hints: cx.create_rw_signal(None),
-            diagnostics: DiagnosticData {
-                expanded: cx.create_rw_signal(true),
-                diagnostics: cx.create_rw_signal(im::Vector::new()),
-                diagnostics_span: cx.create_rw_signal(SpansBuilder::new(0).build()),
-            },
-            completion_lens: cx.create_rw_signal(None),
-            completion_pos: cx.create_rw_signal((0, 0)),
-            inline_completion: cx.create_rw_signal(None),
-            inline_completion_pos: cx.create_rw_signal((0, 0)),
-            cache_rev: cx.create_rw_signal(0),
-            content: cx.create_rw_signal(content),
-            sticky_headers: Rc::new(RefCell::new(HashMap::new())),
-            loaded: cx.create_rw_signal(true),
-            find_result: FindResult::new(cx),
-            code_actions: cx.create_rw_signal(im::HashMap::new()),
-            preedit: PreeditData::new(cx),
+        let diagnostics = Self::fresh_diagnostics(cx);
+        Self::new_inner(
+            cx,
+            content,
+            Syntax::plaintext(),
+            diagnostics,
+            true,
             editors,
             common,
-            code_lens: cx.create_rw_signal(im::HashMap::new()),
-
-            folding_ranges: cx.create_rw_signal(FoldingRanges::default()),
-        }
+        )
     }
 
     pub fn new_history(
@@ -326,47 +320,13 @@ impl Doc {
         editors: Editors,
         common: Rc<CommonData>,
     ) -> Doc {
-        let config = common.config.get_untracked();
         let syntax = if let DocContent::History(history) = &content {
             Syntax::init(&history.path)
         } else {
             Syntax::plaintext()
         };
-        Self {
-            scope: cx,
-            buffer_id: BufferId::next(),
-            buffer: cx.create_rw_signal(Buffer::new("")),
-            syntax: cx.create_rw_signal(syntax),
-            line_styles: Rc::new(RefCell::new(HashMap::new())),
-            parser: Rc::new(RefCell::new(BracketParser::new(
-                String::new(),
-                config.editor.bracket_pair_colorization,
-                config.editor.bracket_colorization_limit,
-            ))),
-            semantic_styles: cx.create_rw_signal(None),
-            inlay_hints: cx.create_rw_signal(None),
-            diagnostics: DiagnosticData {
-                expanded: cx.create_rw_signal(true),
-                diagnostics: cx.create_rw_signal(im::Vector::new()),
-                diagnostics_span: cx.create_rw_signal(SpansBuilder::new(0).build()),
-            },
-            completion_lens: cx.create_rw_signal(None),
-            completion_pos: cx.create_rw_signal((0, 0)),
-            inline_completion: cx.create_rw_signal(None),
-            inline_completion_pos: cx.create_rw_signal((0, 0)),
-            cache_rev: cx.create_rw_signal(0),
-            content: cx.create_rw_signal(content),
-            sticky_headers: Rc::new(RefCell::new(HashMap::new())),
-            loaded: cx.create_rw_signal(true),
-            code_actions: cx.create_rw_signal(im::HashMap::new()),
-            find_result: FindResult::new(cx),
-            preedit: PreeditData::new(cx),
-            editors,
-            common,
-            code_lens: cx.create_rw_signal(im::HashMap::new()),
-
-            folding_ranges: cx.create_rw_signal(FoldingRanges::default()),
-        }
+        let diagnostics = Self::fresh_diagnostics(cx);
+        Self::new_inner(cx, content, syntax, diagnostics, true, editors, common)
     }
 
     /// Create a styling instance for this doc
@@ -435,6 +395,15 @@ impl Doc {
     /// Whether or not the underlying buffer is loaded
     pub fn loaded(&self) -> bool {
         self.loaded.get_untracked()
+    }
+
+    /// Returns the file path if the document is loaded and backed by a file.
+    pub fn loaded_file_path(&self) -> Option<PathBuf> {
+        if self.loaded() {
+            self.content.with_untracked(|c| c.path().cloned())
+        } else {
+            None
+        }
     }
 
     //// Initialize the content with some text, this marks the document as loaded.

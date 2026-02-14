@@ -1132,11 +1132,7 @@ impl WorkspaceData {
                     self.main_split.active_editor.get_untracked()
                 {
                     let doc = editor_data.doc();
-                    let path = match if doc.loaded() {
-                        doc.content.with_untracked(|c| c.path().cloned())
-                    } else {
-                        None
-                    } {
+                    let path = match doc.loaded_file_path() {
                         Some(path) => path,
                         None => return,
                     };
@@ -1506,9 +1502,6 @@ impl WorkspaceData {
             }
             InternalCommand::SaveScratchDoc { doc } => {
                 self.main_split.save_scratch_doc(doc);
-            }
-            InternalCommand::SaveScratchDoc2 { doc } => {
-                self.main_split.save_scratch_doc2(doc);
             }
             InternalCommand::OpenVoltView { volt_id } => {
                 self.main_split.open_volt_view(volt_id);

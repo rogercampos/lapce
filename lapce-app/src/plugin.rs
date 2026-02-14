@@ -46,17 +46,19 @@ use crate::{
     workspace_data::{CommonData, Focus},
 };
 
-/// Combined plugin info tuple used by the detail view. The fields are:
-/// (installed_metadata, display_info, icon, latest_available_version, installing_signal).
-/// installed_metadata is None for uninstalled plugins; latest is None for available-only plugins.
-/// The installing signal tracks whether an install is in progress (for the "Installing" button state).
-type PluginInfo = Option<(
-    Option<VoltMetadata>,
-    VoltInfo,
-    Option<VoltIcon>,
-    Option<VoltInfo>,
-    Option<RwSignal<bool>>,
-)>;
+/// Combined plugin info used by the detail view.
+/// `metadata` is None for uninstalled plugins; `latest` is None for available-only plugins.
+/// The `installing` signal tracks whether an install is in progress.
+#[derive(Clone, PartialEq)]
+struct PluginViewInfo {
+    metadata: Option<VoltMetadata>,
+    info: VoltInfo,
+    icon: Option<VoltIcon>,
+    latest: Option<VoltInfo>,
+    installing: Option<RwSignal<bool>>,
+}
+
+type PluginInfo = Option<PluginViewInfo>;
 
 #[derive(Clone, PartialEq, Eq)]
 pub enum VoltIcon {
@@ -805,35 +807,35 @@ pub fn plugin_info_view(plugin: PluginData, volt: VoltID) -> impl View {
         plugin
             .installed
             .with(|volts| {
-                volts.get(&volt).map(|v| {
-                    (
-                        Some(v.meta.get()),
-                        v.meta.get().info(),
-                        v.icon.get(),
-                        Some(v.latest.get()),
-                        None,
-                    )
+                volts.get(&volt).map(|v| PluginViewInfo {
+                    metadata: Some(v.meta.get()),
+                    info: v.meta.get().info(),
+                    icon: v.icon.get(),
+                    latest: Some(v.latest.get()),
+                    installing: None,
                 })
             })
             .or_else(|| {
                 plugin.all.with(|volts| {
-                    volts.get(&volt).map(|v| {
-                        (None, v.info.get(), v.icon.get(), None, Some(v.installing))
+                    volts.get(&volt).map(|v| PluginViewInfo {
+                        metadata: None,
+                        info: v.info.get(),
+                        icon: v.icon.get(),
+                        latest: None,
+                        installing: Some(v.installing),
                     })
                 })
             })
     });
 
     let version_view = move |plugin: PluginData, plugin_info: PluginInfo| {
-        let version_info = plugin_info.as_ref().map(|(_, volt, _, latest, _)| {
+        let version_info = plugin_info.as_ref().map(|p| {
             (
-                volt.version.clone(),
-                latest.as_ref().map(|i| i.version.clone()),
+                p.info.version.clone(),
+                p.latest.as_ref().map(|i| i.version.clone()),
             )
         });
-        let installing = plugin_info
-            .as_ref()
-            .and_then(|(_, _, _, _, installing)| *installing);
+        let installing = plugin_info.as_ref().and_then(|p| p.installing);
         let local_version_info = version_info.clone();
         let control = {
             move |version_info: Option<(String, Option<String>)>| match version_info
@@ -901,17 +903,17 @@ pub fn plugin_info_view(plugin: PluginData, volt: VoltID) -> impl View {
                 })
                 .disabled(move || installing.map(|i| i.get()).unwrap_or(false))
                 .on_click_stop(move |_| {
-                    if let Some((meta, info, _, latest, _)) =
-                        local_plugin_info.as_ref()
-                    {
-                        if let Some(meta) = meta {
+                    if let Some(p) = local_plugin_info.as_ref() {
+                        if let Some(meta) = &p.metadata {
                             let menu = local_plugin.plugin_controls(
                                 meta.to_owned(),
-                                latest.clone().unwrap_or_else(|| info.to_owned()),
+                                p.latest
+                                    .clone()
+                                    .unwrap_or_else(|| p.info.to_owned()),
                             );
                             show_context_menu(menu, None);
                         } else {
-                            local_plugin.install_volt(info.to_owned());
+                            local_plugin.install_volt(p.info.to_owned());
                         }
                     }
                 }),
@@ -924,10 +926,7 @@ pub fn plugin_info_view(plugin: PluginData, volt: VoltID) -> impl View {
             move |plugin_info| {
                 stack((
                     stack((
-                        match plugin_info
-                            .as_ref()
-                            .and_then(|(_, _, icon, _, _)| icon.clone())
-                        {
+                        match plugin_info.as_ref().and_then(|p| p.icon.clone()) {
                             None => container(
                                 img(move || VOLT_DEFAULT_PNG.to_vec())
                                     .style(|s| s.size_full()),
@@ -947,9 +946,7 @@ pub fn plugin_info_view(plugin: PluginData, volt: VoltID) -> impl View {
                             text(
                                 plugin_info
                                     .as_ref()
-                                    .map(|(_, volt, _, _, _)| {
-                                        volt.display_name.as_str()
-                                    })
+                                    .map(|p| p.info.display_name.as_str())
                                     .unwrap_or(""),
                             )
                             .style(move |s| {
@@ -961,9 +958,7 @@ pub fn plugin_info_view(plugin: PluginData, volt: VoltID) -> impl View {
                             text(
                                 plugin_info
                                     .as_ref()
-                                    .map(|(_, volt, _, _, _)| {
-                                        volt.description.as_str()
-                                    })
+                                    .map(|p| p.info.description.as_str())
                                     .unwrap_or(""),
                             )
                             .style(move |s| {
@@ -978,9 +973,7 @@ pub fn plugin_info_view(plugin: PluginData, volt: VoltID) -> impl View {
                             {
                                 let repo = plugin_info
                                     .as_ref()
-                                    .and_then(|(_, volt, _, _, _)| {
-                                        volt.repository.as_deref()
-                                    })
+                                    .and_then(|p| p.info.repository.as_deref())
                                     .unwrap_or("")
                                     .to_string();
                                 let local_repo = repo.clone();
@@ -1001,7 +994,7 @@ pub fn plugin_info_view(plugin: PluginData, volt: VoltID) -> impl View {
                             text(
                                 plugin_info
                                     .as_ref()
-                                    .map(|(_, volt, _, _, _)| volt.author.as_str())
+                                    .map(|p| p.info.author.as_str())
                                     .unwrap_or(""),
                             )
                             .style(move |s| {
@@ -1029,9 +1022,7 @@ pub fn plugin_info_view(plugin: PluginData, volt: VoltID) -> impl View {
                     }),
                     {
                         let readme = create_rw_signal(None);
-                        let info = plugin_info
-                            .as_ref()
-                            .map(|(_, info, _, _, _)| info.to_owned());
+                        let info = plugin_info.as_ref().map(|p| p.info.to_owned());
                         create_effect(move |_| {
                             let config = config.get_untracked();
                             let info = info.clone();

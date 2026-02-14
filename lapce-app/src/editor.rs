@@ -559,84 +559,47 @@ impl EditorData {
             FocusCommand::ModalClose => {
                 self.cancel_completion();
             }
-            FocusCommand::SplitVertical => {
-                if let Some(editor_tab_id) =
-                    self.editor_tab_id.read_only().get_untracked()
-                {
-                    self.common.internal_command.send(InternalCommand::Split {
+            FocusCommand::SplitVertical
+            | FocusCommand::SplitHorizontal
+            | FocusCommand::SplitRight
+            | FocusCommand::SplitLeft
+            | FocusCommand::SplitUp
+            | FocusCommand::SplitDown
+            | FocusCommand::SplitExchange => {
+                let Some(editor_tab_id) = self.editor_tab_id.get_untracked() else {
+                    return CommandExecuted::No;
+                };
+                let cmd = match cmd {
+                    FocusCommand::SplitVertical => InternalCommand::Split {
                         direction: SplitDirection::Vertical,
                         editor_tab_id,
-                    });
-                } else {
-                    return CommandExecuted::No;
-                }
-            }
-            FocusCommand::SplitHorizontal => {
-                if let Some(editor_tab_id) = self.editor_tab_id.get_untracked() {
-                    self.common.internal_command.send(InternalCommand::Split {
+                    },
+                    FocusCommand::SplitHorizontal => InternalCommand::Split {
                         direction: SplitDirection::Horizontal,
                         editor_tab_id,
-                    });
-                } else {
-                    return CommandExecuted::No;
-                }
-            }
-            FocusCommand::SplitRight => {
-                if let Some(editor_tab_id) = self.editor_tab_id.get_untracked() {
-                    self.common
-                        .internal_command
-                        .send(InternalCommand::SplitMove {
-                            direction: SplitMoveDirection::Right,
-                            editor_tab_id,
-                        });
-                } else {
-                    return CommandExecuted::No;
-                }
-            }
-            FocusCommand::SplitLeft => {
-                if let Some(editor_tab_id) = self.editor_tab_id.get_untracked() {
-                    self.common
-                        .internal_command
-                        .send(InternalCommand::SplitMove {
-                            direction: SplitMoveDirection::Left,
-                            editor_tab_id,
-                        });
-                } else {
-                    return CommandExecuted::No;
-                }
-            }
-            FocusCommand::SplitUp => {
-                if let Some(editor_tab_id) = self.editor_tab_id.get_untracked() {
-                    self.common
-                        .internal_command
-                        .send(InternalCommand::SplitMove {
-                            direction: SplitMoveDirection::Up,
-                            editor_tab_id,
-                        });
-                } else {
-                    return CommandExecuted::No;
-                }
-            }
-            FocusCommand::SplitDown => {
-                if let Some(editor_tab_id) = self.editor_tab_id.get_untracked() {
-                    self.common
-                        .internal_command
-                        .send(InternalCommand::SplitMove {
-                            direction: SplitMoveDirection::Down,
-                            editor_tab_id,
-                        });
-                } else {
-                    return CommandExecuted::No;
-                }
-            }
-            FocusCommand::SplitExchange => {
-                if let Some(editor_tab_id) = self.editor_tab_id.get_untracked() {
-                    self.common
-                        .internal_command
-                        .send(InternalCommand::SplitExchange { editor_tab_id });
-                } else {
-                    return CommandExecuted::No;
-                }
+                    },
+                    FocusCommand::SplitRight => InternalCommand::SplitMove {
+                        direction: SplitMoveDirection::Right,
+                        editor_tab_id,
+                    },
+                    FocusCommand::SplitLeft => InternalCommand::SplitMove {
+                        direction: SplitMoveDirection::Left,
+                        editor_tab_id,
+                    },
+                    FocusCommand::SplitUp => InternalCommand::SplitMove {
+                        direction: SplitMoveDirection::Up,
+                        editor_tab_id,
+                    },
+                    FocusCommand::SplitDown => InternalCommand::SplitMove {
+                        direction: SplitMoveDirection::Down,
+                        editor_tab_id,
+                    },
+                    FocusCommand::SplitExchange => {
+                        InternalCommand::SplitExchange { editor_tab_id }
+                    }
+                    _ => unreachable!(),
+                };
+                self.common.internal_command.send(cmd);
             }
             FocusCommand::SplitClose => {
                 if let Some(editor_tab_id) = self.editor_tab_id.get_untracked() {
@@ -900,11 +863,7 @@ impl EditorData {
     /// "go to references" behavior when already at the definition site.
     fn go_to_definition(&self) {
         let doc = self.doc();
-        let path = match if doc.loaded() {
-            doc.content.with_untracked(|c| c.path().cloned())
-        } else {
-            None
-        } {
+        let path = match doc.loaded_file_path() {
             Some(path) => path,
             None => return,
         };
@@ -1115,11 +1074,7 @@ impl EditorData {
     /// Update the current inline completion
     fn update_inline_completion(&self, trigger_kind: InlineCompletionTriggerKind) {
         let doc = self.doc();
-        let path = match if doc.loaded() {
-            doc.content.with_untracked(|c| c.path().cloned())
-        } else {
-            None
-        } {
+        let path = match doc.loaded_file_path() {
             Some(path) => path,
             None => return,
         };
@@ -1269,11 +1224,7 @@ impl EditorData {
     /// Sends a request to the LSP for completion information
     fn update_completion(&self, display_if_empty_input: bool) {
         let doc = self.doc();
-        let path = match if doc.loaded() {
-            doc.content.with_untracked(|c| c.path().cloned())
-        } else {
-            None
-        } {
+        let path = match doc.loaded_file_path() {
             Some(path) => path,
             None => return,
         };
@@ -1705,11 +1656,7 @@ impl EditorData {
 
     pub fn get_code_actions(&self) {
         let doc = self.doc();
-        let path = match if doc.loaded() {
-            doc.content.with_untracked(|c| c.path().cloned())
-        } else {
-            None
-        } {
+        let path = match doc.loaded_file_path() {
             Some(path) => path,
             None => return,
         };
@@ -1810,7 +1757,7 @@ impl EditorData {
         if let DocContent::Scratch { .. } = &content {
             self.common
                 .internal_command
-                .send(InternalCommand::SaveScratchDoc2 { doc });
+                .send(InternalCommand::SaveScratchDoc { doc });
             return;
         }
 
@@ -1980,11 +1927,7 @@ impl EditorData {
 
     pub fn save_doc_position(&self) {
         let doc = self.doc();
-        let path = match if doc.loaded() {
-            doc.content.with_untracked(|c| c.path().cloned())
-        } else {
-            None
-        } {
+        let path = match doc.loaded_file_path() {
             Some(path) => path,
             None => return,
         };
@@ -2003,11 +1946,7 @@ impl EditorData {
 
     fn rename(&self) {
         let doc = self.doc();
-        let path = match if doc.loaded() {
-            doc.content.with_untracked(|c| c.path().cloned())
-        } else {
-            None
-        } {
+        let path = match doc.loaded_file_path() {
             Some(path) => path,
             None => return,
         };

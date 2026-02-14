@@ -9,8 +9,8 @@ use std::{
 };
 
 use anyhow::{Result, anyhow};
-use floem_editor_core::buffer::rope_text::CharIndicesJoin;
-use lapce_core::encoding::offset_utf8_to_utf16;
+use floem_editor_core::buffer::rope_text::{CharIndicesJoin, RopeTextRef};
+use lapce_core::{encoding::offset_utf8_to_utf16, rope_text_pos::RopeTextPosition};
 use lapce_rpc::buffer::BufferId;
 use lapce_xi_rope::{RopeDelta, interval::IntervalBounds, rope::Rope};
 use lsp_types::*;
@@ -145,7 +145,7 @@ impl Buffer {
             return None;
         }
         self.rev += 1;
-        let content_change = get_document_content_changes(delta, self);
+        let content_change = get_document_content_change(&self.rope, delta);
         self.rope = delta.apply(&self.rope);
         Some(
             content_change.unwrap_or_else(|| TextDocumentContentChangeEvent {
@@ -328,31 +328,27 @@ pub fn language_id_from_path(path: &Path) -> Option<&'static str> {
 /// rope delta. Only handles the two most common cases: simple insert and simple
 /// delete. More complex edits (e.g., replace, transpose) fall through to None,
 /// causing the caller to send the full document text instead.
-fn get_document_content_changes(
+pub(crate) fn get_document_content_change(
+    rope: &Rope,
     delta: &RopeDelta,
-    buffer: &Buffer,
 ) -> Option<TextDocumentContentChangeEvent> {
     let (interval, _) = delta.summary();
     let (start, end) = interval.start_end();
+    let text = RopeTextRef::new(rope);
 
-    // TODO: Handle more trivial cases like typing when there's a selection or transpose
     if let Some(node) = delta.as_simple_insert() {
         let (start, end) = interval.start_end();
-        let start = buffer.offset_to_position(start);
-
-        let end = buffer.offset_to_position(end);
+        let start = text.offset_to_position(start);
+        let end = text.offset_to_position(end);
 
         Some(TextDocumentContentChangeEvent {
             range: Some(Range { start, end }),
             range_length: None,
             text: String::from(node),
         })
-    }
-    // Or a simple delete
-    else if delta.is_simple_delete() {
-        let end_position = buffer.offset_to_position(end);
-
-        let start = buffer.offset_to_position(start);
+    } else if delta.is_simple_delete() {
+        let end_position = text.offset_to_position(end);
+        let start = text.offset_to_position(start);
 
         Some(TextDocumentContentChangeEvent {
             range: Some(Range {

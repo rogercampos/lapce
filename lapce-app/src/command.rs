@@ -523,9 +523,6 @@ pub enum InternalCommand {
     SaveScratchDoc {
         doc: Rc<Doc>,
     },
-    SaveScratchDoc2 {
-        doc: Rc<Doc>,
-    },
     OpenVoltView {
         volt_id: VoltID,
     },

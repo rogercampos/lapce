@@ -159,9 +159,7 @@ pub enum ProxyRequest {
         path: PathBuf,
     },
     GetOpenFilesContent {},
-    GetFiles {
-        path: String,
-    },
+    GetFiles {},
     ReadDir {
         path: PathBuf,
     },
@@ -693,12 +691,7 @@ impl ProxyRpcHandler {
     }
 
     pub fn get_files(&self, f: impl ProxyCallback + 'static) {
-        self.request_async(
-            ProxyRequest::GetFiles {
-                path: "path".into(),
-            },
-            f,
-        );
+        self.request_async(ProxyRequest::GetFiles {}, f);
     }
 
     pub fn get_open_files_content(&self) -> Result<ProxyResponse, RpcError> {
