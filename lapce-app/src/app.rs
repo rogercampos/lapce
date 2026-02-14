@@ -3483,12 +3483,6 @@ pub fn window_menu(
                 data: None,
             });
         }))
-        .entry(MenuItem::new("Go to Implementation").action(move || {
-            workbench_command.send(LapceWorkbenchCommand::GoToImplementation);
-        }))
-        .entry(MenuItem::new("Find References").action(move || {
-            workbench_command.send(LapceWorkbenchCommand::FindReferences);
-        }))
         .separator()
         .entry(MenuItem::new("Show Hover").action(move || {
             lapce_command.send(LapceCommand {
@@ -3501,9 +3495,6 @@ pub fn window_menu(
                 kind: CommandKind::Focus(FocusCommand::ShowCodeActions),
                 data: None,
             });
-        }))
-        .entry(MenuItem::new("Show Call Hierarchy").action(move || {
-            workbench_command.send(LapceWorkbenchCommand::ShowCallHierarchy);
         }))
         .separator()
         .entry(MenuItem::new("Rename Symbol").action(move || {

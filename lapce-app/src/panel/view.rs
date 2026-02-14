@@ -20,17 +20,11 @@ use super::{
     global_search_view::global_search_panel,
     kind::PanelKind,
     position::{PanelContainerPosition, PanelPosition},
-    problem_view::problem_panel,
 };
 use crate::{
     app::{clickable_icon, clickable_icon_base},
     config::{LapceConfig, color::LapceColor, icon::LapceIcons},
     file_explorer::view::file_explorer_panel,
-    panel::{
-        call_hierarchy_view::show_hierarchy_panel,
-        implementation_view::implementation_panel,
-        references_view::references_panel,
-    },
     workspace_data::WorkspaceData,
 };
 
@@ -444,18 +438,6 @@ fn panel_view(
                 PanelKind::Search => {
                     global_search_panel(workspace_data.clone(), position).into_any()
                 }
-                PanelKind::Problem => {
-                    problem_panel(workspace_data.clone(), position).into_any()
-                }
-                PanelKind::CallHierarchy => {
-                    show_hierarchy_panel(workspace_data.clone(), position).into_any()
-                }
-                PanelKind::References => {
-                    references_panel(workspace_data.clone(), position).into_any()
-                }
-                PanelKind::Implementation => {
-                    implementation_panel(workspace_data.clone(), position).into_any()
-                }
             };
             view.style(|s| s.size_pct(100.0, 100.0))
         },
@@ -502,10 +484,6 @@ fn panel_picker(
             let tooltip = match p {
                 PanelKind::FileExplorer => "File Explorer",
                 PanelKind::Search => "Search",
-                PanelKind::Problem => "Problems",
-                PanelKind::CallHierarchy => "Call Hierarchy",
-                PanelKind::References => "References",
-                PanelKind::Implementation => "Implementation",
             };
             let icon = p.svg_name();
             let is_active = {

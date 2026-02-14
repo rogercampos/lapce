@@ -19,7 +19,7 @@ use crate::{
     config::{LapceConfig, color::LapceColor, icon::LapceIcons},
     editor::EditorData,
     palette::kind::PaletteKind,
-    panel::{kind::PanelKind, position::PanelContainerPosition},
+    panel::position::PanelContainerPosition,
     workspace_data::{WorkProgress, WorkspaceData},
 };
 
@@ -53,65 +53,40 @@ pub fn status(
 
     stack((
         stack((
-            {
-                let panel = panel.clone();
-                stack((
-                    svg(move || config.get().ui_svg(LapceIcons::ERROR)).style(
-                        move |s| {
-                            let config = config.get();
-                            let size = config.ui.icon_size() as f32;
-                            s.size(size, size)
-                                .color(config.color(LapceColor::LAPCE_ICON_ACTIVE))
-                        },
-                    ),
-                    label(move || diagnostic_count.get().0.to_string()).style(
-                        move |s| {
-                            s.margin_left(5.0)
-                                .color(
-                                    config
-                                        .get()
-                                        .color(LapceColor::STATUS_FOREGROUND),
-                                )
-                                .selectable(false)
-                        },
-                    ),
-                    svg(move || config.get().ui_svg(LapceIcons::WARNING)).style(
-                        move |s| {
-                            let config = config.get();
-                            let size = config.ui.icon_size() as f32;
-                            s.size(size, size)
-                                .margin_left(5.0)
-                                .color(config.color(LapceColor::LAPCE_ICON_ACTIVE))
-                        },
-                    ),
-                    label(move || diagnostic_count.get().1.to_string()).style(
-                        move |s| {
-                            s.margin_left(5.0)
-                                .color(
-                                    config
-                                        .get()
-                                        .color(LapceColor::STATUS_FOREGROUND),
-                                )
-                                .selectable(false)
-                        },
-                    ),
-                ))
-                .on_click_stop(move |_| {
-                    panel.show_panel(&PanelKind::Problem);
-                })
-                .style(move |s| {
-                    s.height_pct(100.0)
-                        .padding_horiz(10.0)
-                        .items_center()
-                        .hover(|s| {
-                            s.cursor(CursorStyle::Pointer).background(
-                                config
-                                    .get()
-                                    .color(LapceColor::PANEL_HOVERED_BACKGROUND),
-                            )
-                        })
-                })
-            },
+            stack((
+                svg(move || config.get().ui_svg(LapceIcons::ERROR)).style(
+                    move |s| {
+                        let config = config.get();
+                        let size = config.ui.icon_size() as f32;
+                        s.size(size, size)
+                            .color(config.color(LapceColor::LAPCE_ICON_ACTIVE))
+                    },
+                ),
+                label(move || diagnostic_count.get().0.to_string()).style(
+                    move |s| {
+                        s.margin_left(5.0)
+                            .color(config.get().color(LapceColor::STATUS_FOREGROUND))
+                            .selectable(false)
+                    },
+                ),
+                svg(move || config.get().ui_svg(LapceIcons::WARNING)).style(
+                    move |s| {
+                        let config = config.get();
+                        let size = config.ui.icon_size() as f32;
+                        s.size(size, size)
+                            .margin_left(5.0)
+                            .color(config.color(LapceColor::LAPCE_ICON_ACTIVE))
+                    },
+                ),
+                label(move || diagnostic_count.get().1.to_string()).style(
+                    move |s| {
+                        s.margin_left(5.0)
+                            .color(config.get().color(LapceColor::STATUS_FOREGROUND))
+                            .selectable(false)
+                    },
+                ),
+            ))
+            .style(move |s| s.height_pct(100.0).padding_horiz(10.0).items_center()),
             progress_view(config, progresses),
         ))
         .style(|s| {

@@ -2,8 +2,7 @@ use std::{path::PathBuf, rc::Rc};
 
 pub use floem::views::editor::command::CommandExecuted;
 use floem::{
-    ViewId, keyboard::Modifiers, peniko::kurbo::Vec2,
-    views::editor::command::Command,
+    keyboard::Modifiers, peniko::kurbo::Vec2, views::editor::command::Command,
 };
 use indexmap::IndexMap;
 use lapce_core::command::{
@@ -144,18 +143,6 @@ pub enum LapceWorkbenchCommand {
     #[strum(serialize = "open_folder")]
     #[strum(message = "Open Folder")]
     OpenFolder,
-
-    #[strum(serialize = "show_call_hierarchy")]
-    #[strum(message = "Show Call Hierarchy")]
-    ShowCallHierarchy,
-
-    #[strum(serialize = "find_references")]
-    #[strum(message = "Find References")]
-    FindReferences,
-
-    #[strum(serialize = "go_to_implementation")]
-    #[strum(message = "Go to Implementation")]
-    GoToImplementation,
 
     #[strum(serialize = "reveal_in_panel")]
     #[strum(message = "Reveal in Panel")]
@@ -425,9 +412,6 @@ pub enum InternalCommand {
     JumpToLocation {
         location: EditorLocation,
     },
-    PaletteReferences {
-        references: Vec<EditorLocation>,
-    },
     SaveJumpLocation {
         path: PathBuf,
         offset: usize,
@@ -533,9 +517,6 @@ pub enum InternalCommand {
     ExecuteProcess {
         program: String,
         arguments: Vec<String>,
-    },
-    CallHierarchyIncoming {
-        item_id: ViewId,
     },
     TrackRecentFile {
         path: PathBuf,

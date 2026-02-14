@@ -71,7 +71,6 @@ use crate::{
     main_split::{MainSplitData, SplitData, SplitDirection, SplitMoveDirection},
     palette::{PaletteData, PaletteStatus, kind::PaletteKind},
     panel::{
-        call_hierarchy_view::{CallHierarchyData, CallHierarchyItemData},
         data::{PanelData, PanelSection, default_panel_order},
         kind::PanelKind,
         position::PanelContainerPosition,
@@ -156,7 +155,6 @@ pub struct WorkspaceData {
     pub rename: RenameData,
     pub global_search: GlobalSearchData,
     pub search_modal_data: SearchModalData,
-    pub call_hierarchy_data: CallHierarchyData,
     pub about_data: AboutData,
     pub plugin_popup_data: PluginPopupData,
     pub recent_files: RwSignal<Vec<PathBuf>>,
@@ -458,11 +456,6 @@ impl WorkspaceData {
             rename,
             global_search,
             search_modal_data,
-            call_hierarchy_data: CallHierarchyData {
-                root: cx.create_rw_signal(None),
-                common: common.clone(),
-                scroll_to_line: cx.create_rw_signal(None),
-            },
             about_data,
             plugin_popup_data,
             recent_files,
@@ -1096,27 +1089,6 @@ impl WorkspaceData {
                     }
                 }
             }
-            ShowCallHierarchy => {
-                if let Some(editor_data) =
-                    self.main_split.active_editor.get_untracked()
-                {
-                    editor_data.call_hierarchy(self.clone());
-                }
-            }
-            FindReferences => {
-                if let Some(editor_data) =
-                    self.main_split.active_editor.get_untracked()
-                {
-                    editor_data.find_refenrence(self.clone());
-                }
-            }
-            GoToImplementation => {
-                if let Some(editor_data) =
-                    self.main_split.active_editor.get_untracked()
-                {
-                    editor_data.go_to_implementation(self.clone());
-                }
-            }
             GoToLocation => {
                 if let Some(editor_data) =
                     self.main_split.active_editor.get_untracked()
@@ -1341,10 +1313,6 @@ impl WorkspaceData {
                 self.panel.show_panel(&PanelKind::Search);
                 self.common.focus.set(Focus::Panel(PanelKind::Search));
             }
-            InternalCommand::PaletteReferences { references } => {
-                self.palette.references.set(references);
-                self.palette.run(PaletteKind::Reference);
-            }
             InternalCommand::Split {
                 direction,
                 editor_tab_id,
@@ -1531,9 +1499,6 @@ impl WorkspaceData {
                         event!(Level::ERROR, "Proces exited with an error: {e}")
                     }
                 };
-            }
-            InternalCommand::CallHierarchyIncoming { item_id } => {
-                self.call_hierarchy_incoming(item_id);
             }
             InternalCommand::TrackRecentFile { path } => {
                 self.track_recent_file(path);
@@ -1949,11 +1914,7 @@ impl WorkspaceData {
     /// Toggle a specific kind of panel.
     fn toggle_panel_focus(&self, kind: PanelKind) {
         let should_hide = match kind {
-            PanelKind::FileExplorer
-            | PanelKind::Problem
-            | PanelKind::CallHierarchy
-            | PanelKind::References
-            | PanelKind::Implementation => {
+            PanelKind::FileExplorer => {
                 // Some panels don't accept focus (yet). Fall back to visibility check
                 // in those cases.
                 self.panel.is_panel_visible(&kind)
@@ -2146,59 +2107,6 @@ impl WorkspaceData {
                     })
                     .collect(),
             });
-    }
-
-    pub fn call_hierarchy_incoming(&self, item_id: ViewId) {
-        let Some(root) = self.call_hierarchy_data.root.get_untracked() else {
-            return;
-        };
-        let Some(item) = CallHierarchyItemData::find_by_id(root, item_id) else {
-            return;
-        };
-        let root_item = item;
-        let path: PathBuf = item.get_untracked().item.uri.to_file_path().unwrap();
-        let scope = self.scope;
-        let send =
-            create_ext_action(scope, move |_rs: Result<ProxyResponse, RpcError>| {
-                match _rs {
-                    Ok(ProxyResponse::CallHierarchyIncomingResponse { items }) => {
-                        if let Some(items) = items {
-                            let mut item_children = Vec::new();
-                            for x in items {
-                                let item = Rc::new(x.from);
-                                for range in x.from_ranges {
-                                    item_children.push(scope.create_rw_signal(
-                                        CallHierarchyItemData {
-                                            view_id: floem::ViewId::new(),
-                                            item: item.clone(),
-                                            from_range: range,
-                                            init: false,
-                                            open: scope.create_rw_signal(false),
-                                            children:
-                                                scope.create_rw_signal(Vec::new()),
-                                        },
-                                    ))
-                                }
-                            }
-                            root_item.update(|x| {
-                                x.init = true;
-                                x.children.update(|children| {
-                                    *children = item_children;
-                                })
-                            });
-                        }
-                    }
-                    Err(err) => {
-                        tracing::error!("{:?}", err);
-                    }
-                    Ok(_) => {}
-                }
-            });
-        self.common.proxy.call_hierarchy_incoming(
-            path,
-            item.get_untracked().item.as_ref().clone(),
-            send,
-        );
     }
 }
 

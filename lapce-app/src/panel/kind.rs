@@ -10,10 +10,6 @@ use crate::config::icon::LapceIcons;
 pub enum PanelKind {
     FileExplorer,
     Search,
-    Problem,
-    CallHierarchy,
-    References,
-    Implementation,
 }
 
 impl PanelKind {
@@ -21,10 +17,6 @@ impl PanelKind {
         match &self {
             PanelKind::FileExplorer => LapceIcons::FILE_EXPLORER,
             PanelKind::Search => LapceIcons::SEARCH,
-            PanelKind::Problem => LapceIcons::PROBLEM,
-            PanelKind::CallHierarchy => LapceIcons::TYPE_HIERARCHY,
-            PanelKind::References => LapceIcons::REFERENCES,
-            PanelKind::Implementation => LapceIcons::IMPLEMENTATION,
         }
     }
 
@@ -32,10 +24,6 @@ impl PanelKind {
         match self {
             PanelKind::FileExplorer => PanelPosition::LeftTop,
             PanelKind::Search => PanelPosition::BottomLeft,
-            PanelKind::Problem => PanelPosition::BottomLeft,
-            PanelKind::CallHierarchy => PanelPosition::BottomLeft,
-            PanelKind::References => PanelPosition::BottomLeft,
-            PanelKind::Implementation => PanelPosition::BottomLeft,
         }
     }
 }

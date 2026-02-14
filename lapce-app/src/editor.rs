@@ -1,7 +1,6 @@
 use std::{collections::HashMap, rc::Rc, str::FromStr, sync::Arc, time::Duration};
 
 use floem::{
-    ViewId,
     action::{TimerToken, exec_after, show_context_menu},
     ext_event::create_ext_action,
     keyboard::Modifiers,
@@ -40,7 +39,7 @@ use lapce_xi_rope::{Rope, RopeDelta, Transformer};
 use lsp_types::{
     CodeActionResponse, CompletionItem, CompletionTextEdit, GotoDefinitionResponse,
     HoverContents, InlayHint, InlayHintLabel, InlineCompletionTriggerKind, Location,
-    MarkedString, MarkupKind, Range, TextEdit,
+    MarkedString, MarkupKind, TextEdit,
 };
 use serde::{Deserialize, Serialize};
 use view::StickyHeaderInfo;
@@ -60,11 +59,6 @@ use crate::{
     main_split::{Editors, MainSplitData, SplitDirection, SplitMoveDirection},
     markdown::{
         MarkdownContent, from_marked_string, from_plaintext, parse_markdown,
-    },
-    panel::{
-        call_hierarchy_view::CallHierarchyItemData,
-        implementation_view::{init_implementation_root, map_to_location},
-        kind::PanelKind,
     },
     snippet::Snippet,
     tracing::*,
@@ -901,7 +895,7 @@ impl EditorData {
 
         enum DefinitionOrReferece {
             Location(EditorLocation),
-            References(Vec<Location>),
+            Locations(Vec<Location>),
         }
 
         let internal_command = self.common.internal_command;
@@ -917,21 +911,19 @@ impl EditorData {
                     internal_command
                         .send(InternalCommand::JumpToLocation { location });
                 }
-                DefinitionOrReferece::References(locations) => {
-                    internal_command.send(InternalCommand::PaletteReferences {
-                        references: locations
-                            .into_iter()
-                            .map(|l| EditorLocation {
+                DefinitionOrReferece::Locations(locations) => {
+                    if let Some(l) = locations.into_iter().next() {
+                        internal_command.send(InternalCommand::JumpToLocation {
+                            location: EditorLocation {
                                 path: path_from_url(&l.uri),
                                 position: Some(EditorPosition::Position(
                                     l.range.start,
                                 )),
                                 scroll_offset: None,
-
                                 same_editor_tab: false,
-                            })
-                            .collect(),
-                    });
+                            },
+                        });
+                    }
                 }
             }
         });
@@ -994,7 +986,7 @@ impl EditorData {
                                                 },
                                             ));
                                         } else {
-                                            send(DefinitionOrReferece::References(
+                                            send(DefinitionOrReferece::Locations(
                                                 references,
                                             ));
                                         }
@@ -1016,177 +1008,6 @@ impl EditorData {
                     }
                 }
             },
-        );
-    }
-
-    pub fn call_hierarchy(&self, workspace_data: WorkspaceData) {
-        let doc = self.doc();
-        let path = match if doc.loaded() {
-            doc.content.with_untracked(|c| c.path().cloned())
-        } else {
-            None
-        } {
-            Some(path) => path,
-            None => return,
-        };
-
-        let offset = self.cursor().with_untracked(|c| c.offset());
-        let (_start_position, position) = doc.buffer.with_untracked(|buffer| {
-            let start_offset = buffer.prev_code_boundary(offset);
-            let start_position = buffer.offset_to_position(start_offset);
-            let position = buffer.offset_to_position(offset);
-            (start_position, position)
-        });
-        let scope = workspace_data.scope;
-        let range = Range {
-            start: _start_position,
-            end: position,
-        };
-        self.common.proxy.show_call_hierarchy(
-            path,
-            position,
-            create_ext_action(self.scope, move |result| {
-                if let Ok(ProxyResponse::ShowCallHierarchyResponse {
-                    items, ..
-                }) = result
-                {
-                    if let Some(item) = items.and_then(|x| x.into_iter().next()) {
-                        let root = scope.create_rw_signal(CallHierarchyItemData {
-                            view_id: ViewId::new(),
-                            item: Rc::new(item),
-                            from_range: range,
-                            init: false,
-                            open: scope.create_rw_signal(true),
-                            children: scope.create_rw_signal(Vec::with_capacity(0)),
-                        });
-                        let item = root;
-                        workspace_data.call_hierarchy_data.root.update(|x| {
-                            *x = Some(root);
-                        });
-                        workspace_data.show_panel(PanelKind::CallHierarchy);
-                        workspace_data.common.internal_command.send(
-                            InternalCommand::CallHierarchyIncoming {
-                                item_id: item.get_untracked().view_id,
-                            },
-                        );
-                    }
-                }
-            }),
-        );
-    }
-
-    pub fn find_refenrence(&self, workspace_data: WorkspaceData) {
-        let doc = self.doc();
-        let path = match if doc.loaded() {
-            doc.content.with_untracked(|c| c.path().cloned())
-        } else {
-            None
-        } {
-            Some(path) => path,
-            None => return,
-        };
-
-        let offset = self.cursor().with_untracked(|c| c.offset());
-        let (_start_position, position) = doc.buffer.with_untracked(|buffer| {
-            let start_offset = buffer.prev_code_boundary(offset);
-            let start_position = buffer.offset_to_position(start_offset);
-            let position = buffer.offset_to_position(offset);
-            (start_position, position)
-        });
-        let scope = workspace_data.scope;
-        let update_implementation = create_ext_action(self.scope, {
-            let workspace_data = workspace_data.clone();
-            move |result| {
-                if let Ok(ProxyResponse::ReferencesResolveResponse { items }) =
-                    result
-                {
-                    workspace_data
-                        .main_split
-                        .references
-                        .update(|x| *x = init_implementation_root(items, scope));
-                    workspace_data.show_panel(PanelKind::References);
-                }
-            }
-        });
-        let proxy = self.common.proxy.clone();
-        self.common.proxy.get_references(
-            path,
-            position,
-            create_ext_action(self.scope, move |result| {
-                if let Ok(ProxyResponse::GetReferencesResponse { references }) =
-                    result
-                {
-                    {
-                        if !references.is_empty() {
-                            proxy.references_resolve(
-                                references,
-                                update_implementation,
-                            );
-                        } else {
-                            workspace_data.show_panel(PanelKind::References);
-                        }
-                    }
-                }
-            }),
-        );
-    }
-
-    pub fn go_to_implementation(&self, workspace_data: WorkspaceData) {
-        let doc = self.doc();
-        let path = match if doc.loaded() {
-            doc.content.with_untracked(|c| c.path().cloned())
-        } else {
-            None
-        } {
-            Some(path) => path,
-            None => return,
-        };
-
-        let offset = self.cursor().with_untracked(|c| c.offset());
-        let (_start_position, position) = doc.buffer.with_untracked(|buffer| {
-            let start_offset = buffer.prev_code_boundary(offset);
-            let start_position = buffer.offset_to_position(start_offset);
-            let position = buffer.offset_to_position(offset);
-            (start_position, position)
-        });
-        let scope = workspace_data.scope;
-        let update_implementation = create_ext_action(self.scope, {
-            let workspace_data = workspace_data.clone();
-            move |result| {
-                if let Ok(ProxyResponse::ReferencesResolveResponse { items }) =
-                    result
-                {
-                    workspace_data
-                        .main_split
-                        .implementations
-                        .update(|x| *x = init_implementation_root(items, scope));
-                    workspace_data.show_panel(PanelKind::Implementation);
-                }
-            }
-        });
-        let proxy = self.common.proxy.clone();
-        self.common.proxy.go_to_implementation(
-            path,
-            position,
-            create_ext_action(self.scope, {
-                move |result| {
-                    if let Ok(ProxyResponse::GotoImplementationResponse {
-                        resp,
-                        ..
-                    }) = result
-                    {
-                        let locations = map_to_location(resp);
-                        if !locations.is_empty() {
-                            proxy.references_resolve(
-                                locations,
-                                update_implementation,
-                            );
-                        } else {
-                            workspace_data.show_panel(PanelKind::Implementation);
-                        }
-                    }
-                }
-            }),
         );
     }
 
@@ -2556,15 +2377,6 @@ impl EditorData {
                 vec![
                     Some(CommandKind::Focus(FocusCommand::GotoDefinition)),
                     Some(CommandKind::Focus(FocusCommand::GotoTypeDefinition)),
-                    Some(CommandKind::Workbench(
-                        LapceWorkbenchCommand::ShowCallHierarchy,
-                    )),
-                    Some(CommandKind::Workbench(
-                        LapceWorkbenchCommand::FindReferences,
-                    )),
-                    Some(CommandKind::Workbench(
-                        LapceWorkbenchCommand::GoToImplementation,
-                    )),
                     Some(CommandKind::Focus(FocusCommand::Rename)),
                     None,
                     Some(CommandKind::Workbench(
