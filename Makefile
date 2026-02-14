@@ -43,6 +43,13 @@ build: ## Build the project
 test: ## Run doc tests
 	cargo test --doc --workspace
 
+coverage: ## Run tests with code coverage (HTML report)
+	cargo llvm-cov --workspace --html
+	@echo "Coverage report: target/llvm-cov/html/index.html"
+
+coverage-summary: ## Run tests with code coverage (terminal summary)
+	cargo llvm-cov --workspace
+
 help: ## Print this help message
 	@grep -E '^[a-zA-Z._-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
 

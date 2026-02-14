@@ -20,6 +20,24 @@ make ci
 
 Rust toolchain must be installed via rustup. On macOS, the stable toolchain is at `~/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo`.
 
+## Testing & Coverage
+
+```bash
+# Run ALL tests (unit + integration)
+cargo test --workspace
+
+# Run only doc tests (this is what `make test` and `make ci` run)
+cargo test --doc --workspace
+
+# Code coverage — terminal summary
+make coverage-summary
+
+# Code coverage — HTML report at target/llvm-cov/html/index.html
+make coverage
+```
+
+Coverage uses `cargo-llvm-cov` (install: `cargo install cargo-llvm-cov`). Note: `make test` only runs doc tests, not the full unit test suite.
+
 ## Crate Structure
 
 ```
@@ -48,7 +66,9 @@ The app runs two processes communicating via channels:
 
 Messages defined in `lapce-rpc/src/proxy.rs` (ProxyRequest, ProxyNotification, ProxyResponse) and `lapce-rpc/src/core.rs` (CoreNotification). Communication uses `crossbeam_channel::unbounded()`.
 
-Proxy is spawned in `lapce-app/src/proxy.rs` → `new_proxy()`. The dispatcher lives in `lapce-proxy/src/dispatch.rs`.
+Proxy is spawned in `lapce-app/src/proxy.rs` → `new_proxy()`. The dispatcher lives in `lapce-proxy/src/dispatch.rs`. The dispatcher processes messages sequentially to prevent data races on buffer state.
+
+**Reactive bridge:** `CoreNotification` messages from the proxy are bridged to Floem's reactive system via `create_signal_from_channel()`, which returns a `ReadSignal` that an effect subscribes to for processing.
 
 ## App State Hierarchy
 
@@ -66,6 +86,8 @@ AppData
 ```
 
 All state uses **Floem reactive signals** (`RwSignal<T>`, `ReadSignal<T>`, `Memo<T>`). UI re-renders automatically when signals change. Key pattern: `signal.get()` (tracked, triggers re-render) vs `signal.get_untracked()` (no subscription).
+
+**Immutable data structures:** Split tree and editor state use the `im` crate's persistent data structures (`im::HashMap`, `im::Vector`) for efficient structural sharing — updating one entry creates a new map that shares most of its structure with the old one. This works well with the reactive signal system.
 
 ## Key Source Files (lapce-app/src/)
 
@@ -91,6 +113,56 @@ All state uses **Floem reactive signals** (`RwSignal<T>`, `ReadSignal<T>`, `Memo
 | `file_icon.rs` | Reusable file icon + filename view helpers (`file_icon_svg`, `file_icon_with_name`) |
 | `keypress/` | Keybinding resolution and condition evaluation |
 
+## Initialization Flow
+
+Startup sequence from `main()`:
+
+1. **CLI parsing** (Clap): `--new`, `--wait`, `--plugin-path`, positional path args
+2. **Panic hook + logging**: Custom panic handler. Dual-output tracing: daily-rotated file logger + console
+3. **Shell environment capture**: When launched from GUI (not terminal), spawns a login shell to capture `printenv` for PATH
+4. **Process re-spawn**: Without `--wait`, re-spawns with `--wait` and exits immediately to unblock terminal
+5. **Single-instance check**: Tries to connect to existing Lapce instance via local socket. If found, sends paths to open and exits
+6. **Core init**: DB, file watchers, bundled plugin install, config load
+7. **Window creation**: Restores from DB or creates new windows from CLI args
+8. **Background threads**: Config watcher, grammar updater (checks GitHub for tree-sitter releases), update checker, local socket listener
+9. **Event loop**: `app.run()` enters Floem event loop
+
+## Editor System
+
+### EditorData
+
+`EditorData` (`editor.rs`) wraps floem's `Editor` with Lapce-specific state: snippet tracking (tab-stops updated via `Transformer` on buffer edits), find state, editor kind (`Normal` vs `Preview`), and shared `CommonData`.
+
+**Clone semantics**: `EditorData` is cheaply cloneable (all fields are signals or `Rc`). The `copy()` method creates a new editor sharing the same `Doc` but with independent cursor/viewport.
+
+### Editor Rendering Pipeline
+
+`EditorView::paint()` renders layers in order: current line highlight → selection rectangles → find result outlines → bracket highlights + scope lines → text + phantom text → sticky headers → scroll bar.
+
+**Sticky headers**: Computed in an effect watching viewport, buffer rev, and screen lines. Finds enclosing syntax scopes and animates push-up at scope boundaries.
+
+## Document Model
+
+`Doc` (`doc.rs`) — one per file, shared via `Rc` across all editors viewing the same file:
+
+- **Buffer** (`RwSignal<Buffer>`): Rope-based text buffer from xi-rope
+- **Dual styling**: Semantic styles (LSP semantic tokens) take priority over tree-sitter syntax styles. Both stored as `Spans<Style>` and shifted on edits
+- **Phantom text**: Virtual text assembled per-line — inlay hints, error lens, completion lens, inline completion, preedit (IME)
+- **`cache_rev` signal**: Incremented when visual representation changes even without text changes (e.g., new inlay hints). Use this to invalidate visual caches
+- **Background processing**: Syntax parsing runs on rayon threads with cancellation via `AtomicUsize`. Find operations also use rayon
+- **Three constructors**: `new()` (from file), `new_content()` (scratch/local), `new_history()` (for diff view)
+
+## Split Tree Architecture
+
+The editor area (`MainSplitData` in `main_split.rs`) uses a recursive tree with key design decisions:
+
+- **Flat storage**: All nodes in flat `im::HashMap` maps (`splits`, `editor_tabs`, `editors`) keyed by ID. Tree structure encoded via parent/child ID fields — enables O(1) lookup
+- **Geometry-based focus navigation**: `split_move()` uses physical screen coordinates (layout_rect + window_origin) to find adjacent panes, rather than tree traversal. Works regardless of nesting depth
+- **Tree collapse**: When a split has only one child left, the child is promoted to replace the split, preventing unnecessary nesting
+- **Document sharing**: The `docs` map caches `Rc<Doc>` by path. Multiple editors share the same `Doc`
+- **Dual navigation history**: Global (`MainSplitData.locations`) for cross-split jumps; per-tab (`EditorTabData.locations`) for local back/forward
+- **Tab reuse policy**: `get_editor_tab_child()` implements tab reuse — with `show_tab` disabled, reuses any pristine editor or one showing the same path; with `show_tab` enabled, searches all editor tabs for existing tabs
+
 ## Command System
 
 Commands are defined as strum enums in `command.rs`:
@@ -103,6 +175,13 @@ Edit/Move/Scroll/Focus/MotionMode/MultiSelection commands come from `floem_edito
 
 `lapce_internal_commands()` builds the registry of commands available in the palette. Commands not registered there won't appear.
 
+### Command Dispatch
+
+`WorkspaceData` uses three listener channels:
+- `lapce_command`: Delegates to workbench_command or active editor
+- `workbench_command`: UI-level actions (palette, panels, file operations)
+- `internal_command`: Implementation-detail actions (~40 variants with rich data payloads)
+
 ## Plugin System (lapce-proxy/src/plugin/)
 
 Plugins are called **Volts** (`VoltID` = author/name, `PluginId` = runtime instance).
@@ -113,6 +192,10 @@ Plugins are called **Volts** (`VoltID` = author/name, `PluginId` = runtime insta
 - `wasi.rs` — WASM plugin runtime via wasmtime with WASI interface
 
 Plugins can provide: LSP servers, syntax grammars, themes, custom commands.
+
+**Broadcasting**: When a request is made (e.g., hover, completion), the catalog sends to ALL active plugins. "First success wins" — the first successful result triggers the callback; subsequent ones are ignored.
+
+**Lazy activation**: Plugins declare activation conditions (language, workspace_contains). The catalog activates them on demand.
 
 ### Bundled Plugins
 
@@ -174,6 +257,14 @@ Vertical stack (flex_col) {
 
 Panel containers hide automatically when empty. Layout defined in `workbench()` in `app.rs`.
 
+**Floating overlay z-order** (workspace view layers on top of workbench):
+```
+completion → hover → code_action → rename → palette
+→ search_modal → recent_files → about → plugin → alert
+```
+
+If no folder is open, shows `empty_workspace_view()` — a centered "Open Folder" button.
+
 ## Panel System
 
 Panels defined in `panel/kind.rs` as `PanelKind` enum. Each has a default position (`PanelPosition`: LeftTop, LeftBottom, BottomLeft, BottomRight, RightTop, RightBottom).
@@ -188,15 +279,31 @@ Config structs in `config/`: `core.rs`, `editor.rs`, `ui.rs`. Defaults in `defau
 
 Keybindings in `defaults/keymaps-{common,macos,nonmacos}.toml`. Each binding has: `key`, `command`, optional `mode` (i=insert, n=normal, v=visual), optional `when` (condition).
 
-User config stored at `Directory::config_directory()` (macOS: `~/Library/Application Support/dev.lapce.{NAME}/`). The app name includes the build type — debug builds use `Lapce-Debug`, release uses `Lapce`.
+### Layered Override Strategy (lowest to highest priority)
+
+1. **Embedded defaults** (`defaults/settings.toml`) — compiled into binary
+2. **Default dark theme base** — color palette foundation
+3. **Active color theme** — from plugins, local files, or embedded themes
+4. **Active icon theme** — from plugins or embedded "Lapce Codicons"
+5. **User global settings** (`~/Library/Application Support/dev.lapce.*/settings.toml`)
+6. **Workspace-local settings** (`.lapce/settings.toml` in workspace root)
+
+The app name includes the build type — debug builds use `Lapce-Debug`, release uses `Lapce`. User config dir: `Directory::config_directory()`.
+
+**Config reload**: `LapceConfig::load()` for full reload, `resolve_theme()` for theme-only re-merge, `update_file()`/`reset_setting()` for surgical TOML edits preserving formatting. Config ID (timestamp) used as change marker.
+
+**File watching**: `ConfigWatcher` uses `notify` with `AtomicBool` debouncing — first event triggers a 500ms delay, subsequent events in the burst are dropped.
 
 ## Persistence & Data Directory
 
 `LapceDb` in `db.rs` saves state asynchronously via a dedicated thread. Storage at `config_dir/db/`:
 
-- `app` — window positions
-- `window` — window layout
-- `workspaces/<id>/workspace_info` — per-workspace: panel styles, open files, split layout
+- `app` — window positions/sizes
+- `window` — window layout (for single-window restore)
+- `workspaces/<name>/workspace_info` — per-workspace: full split tree + panel config
+- `workspaces/<name>/workspace_files/<sha256>` — per-file cursor/scroll position
+- `disabled_volts` — disabled plugins
+- `recent_workspaces` — recent workspace list
 
 **Important:** When changing panel style defaults, you must delete `db/workspaces/` to see changes, because the app loads persisted state over defaults.
 
@@ -216,6 +323,22 @@ Every component that handles keyboard input implements `KeyPressFocus`:
 - `run_command(command, count, mods)` — Handles matched commands. Return `CommandExecuted::Yes` to consume.
 - `receive_char(c)` — Handles typed characters that don't match any keybinding.
 - `focus_only()` — Return `true` for modals to prevent background key handling.
+
+### Keypress Matching Pipeline
+
+1. Key event → `KeyPress` via normalization (lowercase ASCII, handle numpad, filter modifier-only repeats)
+2. Pending buffer updated (1-second timeout for chord expiry)
+3. `match_keymap()` lookup yields:
+   - `Full(cmd)` — exact match, execute
+   - `Multiple(cmds)` — multiple matches, try in reverse order (later bindings win)
+   - `Prefix` — partial chord, wait for more keys
+   - `None` — try without Shift for selection extension, then fall through to `receive_char()`
+
+**Multi-key chords**: The keymaps `IndexMap` stores every prefix of every registered sequence. For "Ctrl+K Ctrl+S", entries exist for both `[Ctrl+K]` and `[Ctrl+K, Ctrl+S]`.
+
+**Keybinding loading order**: (1) `defaults/keymaps-common.toml`, (2) `defaults/keymaps-macos.toml` or `defaults/keymaps-nonmacos.toml`, (3) user keymaps file. Later bindings can override or unbind (prefix command with `-`) earlier ones.
+
+**Condition expressions**: `when` clauses support AND (`&&`) / OR (`||`) with left-to-right evaluation. Unknown conditions evaluate to false (positive) or true (negated).
 
 ### Keybinding conditions
 
@@ -299,6 +422,49 @@ Navigation through hierarchical results requires building a flat list of visible
 - **Native menu items have no keyboard accelerators:** Floem's `MenuItem` (`floem-local/src/menu.rs`) doesn't support accelerators — the `accelerator` parameter is hardcoded to `None` when calling `muda::MenuItem::with_id()`. This means **all keyboard shortcuts must be defined in the keymaps TOML files**, even standard OS shortcuts like Cmd+Q. Adding a menu item in `app.rs` does NOT give it a keyboard shortcut; you must also add a keybinding in `defaults/keymaps-{macos,nonmacos,common}.toml` that triggers the same command.
 
 - **`make_local` editors have no `editor_tab_id`:** Editors created via `main_split.editors.make_local()` get `editor_tab_id = None`. This means `pointer_down()` won't send `FocusEditorTab`, and many focus commands that require `editor_tab_id` (split, close tab, etc.) will return `CommandExecuted::No`. This is by design for preview/local editors.
+
+## Language Support & Syntax Highlighting
+
+`LapceLanguage` enum (~65 variants in `lapce-core/src/language.rs`) maps to `SyntaxProperties` via array indexing. Each entry contains `TreeSitterProperties` (grammar name, query files, code glance config), `CommentProperties` (single/multi-line tokens), and file extensions/names for detection.
+
+**Syntax pipeline**: `Syntax` holds `SyntaxLayers` (a `HopSlotMap` of `LanguageLayer`s) supporting multi-layer injection (e.g., JS inside HTML). Each layer has its own tree-sitter parse tree and highlight configuration.
+
+Key implementation details:
+- **Thread-local parser caching**: Tree-sitter parsers/cursors stored in thread-local storage for reuse without cross-thread sharing
+- **Library leaking**: `std::mem::forget(library)` after loading grammar `.so` files — function pointers must remain valid for the process lifetime
+- **Injection reuse via hashing**: Existing injection layers identified by hashing language + ranges + depth to avoid re-parsing
+- **Dual bracket parsers**: Tree-sitter-aware `walk_tree_bracket_ast` for supported languages, fallback naive text-based `BracketParser` for others
+
+## Concurrency Model
+
+### Thread Taxonomy
+
+1. **UI thread** (single): Floem event loop, rendering, reactive signal processing
+2. **Dispatcher thread** (single): Owns all mutable proxy state. Sequential processing prevents data races
+3. **Catalog thread** (single): Owns plugin registry. All plugin lifecycle serialized
+4. **Per-plugin threads**: LSP gets 3 (stdin writer, stdout reader, stderr logger). WASI gets 2 (I/O, mainloop). Plus `PluginServerRpcHandler.mainloop` per plugin
+5. **Work threads** (transient): Global search, file listing, plugin install, grammar download (rayon)
+6. **File watcher thread**: `notify` event processing loop
+7. **DB save thread**: Processes async write operations
+
+### Concurrency Primitives
+
+- `crossbeam_channel::unbounded()` — Primary inter-thread communication
+- `parking_lot::Mutex` — Shared mutable state (pending responses, watcher state)
+- `Arc<AtomicU64>` / `Arc<AtomicUsize>` — Lock-free coordination (search cancellation, request counting)
+- Floem reactive signals — UI state management (single-threaded access only)
+
+## Theme System
+
+### Color Themes
+
+Three-tier resolution (`config/color_theme.rs`):
+
+1. **Base colors**: Named variables like `"red" = "#E06C75"`. Support `$variable` references with recursive resolution (max depth 6)
+2. **UI colors**: Semantic names like `"editor.background"` → hex values or `$variable` references
+3. **Syntax colors**: Same mechanism for syntax tokens
+
+`ThemeColorPreference` (Light/Dark/HighContrastLight/HighContrastDark) determined heuristically by comparing foreground/background luminance.
 
 ## Reusable View Helpers
 
