@@ -41,9 +41,9 @@ use lsp_types::{
     request::{
         CallHierarchyIncomingCalls, CallHierarchyPrepare, CodeActionRequest,
         CodeActionResolveRequest, CodeLensRequest, CodeLensResolve, Completion,
-        FoldingRangeRequest, Formatting, GotoDefinition, GotoImplementation,
-        GotoTypeDefinition, HoverRequest, Initialize, InlayHintRequest,
-        InlineCompletionRequest, PrepareRenameRequest, References,
+        DocumentDiagnosticRequest, FoldingRangeRequest, Formatting, GotoDefinition,
+        GotoImplementation, GotoTypeDefinition, HoverRequest, Initialize,
+        InlayHintRequest, InlineCompletionRequest, PrepareRenameRequest, References,
         RegisterCapability, Rename, ResolveCompletionItem, SelectionRangeRequest,
         SemanticTokensFullRequest, SignatureHelpRequest, WorkDoneProgressCreate,
     },
@@ -820,6 +820,9 @@ impl PluginHostHandler {
             }
             InlayHintRequest::METHOD => {
                 self.server_capabilities.inlay_hint_provider.is_some()
+            }
+            DocumentDiagnosticRequest::METHOD => {
+                self.server_capabilities.diagnostic_provider.is_some()
             }
             InlineCompletionRequest::METHOD => self
                 .server_capabilities

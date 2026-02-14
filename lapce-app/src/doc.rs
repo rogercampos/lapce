@@ -624,6 +624,7 @@ impl Doc {
             self.trigger_syntax_change(edits);
             self.check_auto_save();
             self.get_inlay_hints();
+            self.get_pull_diagnostics();
             self.find_result.reset();
             self.get_semantic_styles();
             self.do_bracket_colorization();
@@ -981,6 +982,43 @@ impl Doc {
                 send(hints);
             }
         });
+    }
+
+    pub fn get_pull_diagnostics(&self) {
+        if !self.loaded() {
+            return;
+        }
+
+        let path =
+            if let DocContent::File { path, .. } = self.content.get_untracked() {
+                path
+            } else {
+                return;
+            };
+
+        let doc = self.clone();
+        let send = create_ext_action(
+            self.scope,
+            move |diagnostics: im::Vector<Diagnostic>| {
+                doc.diagnostics.diagnostics.set(diagnostics);
+                doc.init_diagnostics();
+            },
+        );
+
+        self.common
+            .proxy
+            .get_document_diagnostics(path, move |result| {
+                if let Ok(ProxyResponse::GetDocumentDiagnosticsResponse {
+                    diagnostics,
+                }) = result
+                {
+                    let sorted: im::Vector<Diagnostic> = diagnostics
+                        .into_iter()
+                        .sorted_by_key(|d| d.range.start)
+                        .collect();
+                    send(sorted);
+                }
+            });
     }
 
     pub fn diagnostics(&self) -> &DiagnosticData {

@@ -113,6 +113,9 @@ pub enum ProxyRequest {
     GetInlayHints {
         path: PathBuf,
     },
+    GetDocumentDiagnostics {
+        path: PathBuf,
+    },
     GetInlineCompletions {
         path: PathBuf,
         position: Position,
@@ -326,6 +329,9 @@ pub enum ProxyResponse {
     },
     GetInlayHints {
         hints: Vec<InlayHint>,
+    },
+    GetDocumentDiagnosticsResponse {
+        diagnostics: Vec<Diagnostic>,
     },
     GetInlineCompletions {
         completions: InlineCompletionResponse,
@@ -900,6 +906,14 @@ impl ProxyRpcHandler {
 
     pub fn get_inlay_hints(&self, path: PathBuf, f: impl ProxyCallback + 'static) {
         self.request_async(ProxyRequest::GetInlayHints { path }, f);
+    }
+
+    pub fn get_document_diagnostics(
+        &self,
+        path: PathBuf,
+        f: impl ProxyCallback + 'static,
+    ) {
+        self.request_async(ProxyRequest::GetDocumentDiagnostics { path }, f);
     }
 
     pub fn get_inline_completions(

@@ -1596,6 +1596,7 @@ impl WorkspaceData {
                             doc.get_semantic_styles();
                             doc.get_folding_range();
                             doc.get_inlay_hints();
+                            doc.get_pull_diagnostics();
                         }
                     });
                 }

@@ -37,10 +37,11 @@ use lsp_types::{
     CodeActionResponse, CodeLens, CodeLensParams, CompletionClientCapabilities,
     CompletionItem, CompletionItemCapability,
     CompletionItemCapabilityResolveSupport, CompletionParams, CompletionResponse,
-    Diagnostic, DocumentFormattingParams, DocumentSymbolClientCapabilities,
-    FoldingRange, FoldingRangeClientCapabilities, FoldingRangeParams,
-    FormattingOptions, GotoCapability, GotoDefinitionParams, GotoDefinitionResponse,
-    Hover, HoverClientCapabilities, HoverParams, InlayHint,
+    Diagnostic, DiagnosticClientCapabilities, DocumentDiagnosticParams,
+    DocumentDiagnosticReportResult, DocumentFormattingParams,
+    DocumentSymbolClientCapabilities, FoldingRange, FoldingRangeClientCapabilities,
+    FoldingRangeParams, FormattingOptions, GotoCapability, GotoDefinitionParams,
+    GotoDefinitionResponse, Hover, HoverClientCapabilities, HoverParams, InlayHint,
     InlayHintClientCapabilities, InlayHintParams,
     InlineCompletionClientCapabilities, InlineCompletionParams,
     InlineCompletionResponse, InlineCompletionTriggerKind, Location, MarkupKind,
@@ -60,12 +61,12 @@ use lsp_types::{
     request::{
         CallHierarchyIncomingCalls, CallHierarchyPrepare, CodeActionRequest,
         CodeActionResolveRequest, CodeLensRequest, CodeLensResolve, Completion,
-        FoldingRangeRequest, Formatting, GotoDefinition, GotoImplementation,
-        GotoImplementationResponse, GotoTypeDefinition, GotoTypeDefinitionParams,
-        GotoTypeDefinitionResponse, HoverRequest, InlayHintRequest,
-        InlineCompletionRequest, PrepareRenameRequest, References, Rename, Request,
-        ResolveCompletionItem, SelectionRangeRequest, SemanticTokensFullRequest,
-        SignatureHelpRequest,
+        DocumentDiagnosticRequest, FoldingRangeRequest, Formatting, GotoDefinition,
+        GotoImplementation, GotoImplementationResponse, GotoTypeDefinition,
+        GotoTypeDefinitionParams, GotoTypeDefinitionResponse, HoverRequest,
+        InlayHintRequest, InlineCompletionRequest, PrepareRenameRequest, References,
+        Rename, Request, ResolveCompletionItem, SelectionRangeRequest,
+        SemanticTokensFullRequest, SignatureHelpRequest,
     },
 };
 use parking_lot::Mutex;
@@ -792,6 +793,34 @@ impl PluginCatalogRpcHandler {
         );
     }
 
+    pub fn get_document_diagnostics(
+        &self,
+        path: &Path,
+        cb: impl FnOnce(PluginId, Result<DocumentDiagnosticReportResult, RpcError>)
+        + Clone
+        + Send
+        + 'static,
+    ) {
+        let uri = Url::from_file_path(path).unwrap();
+        let method = DocumentDiagnosticRequest::METHOD;
+        let params = DocumentDiagnosticParams {
+            text_document: TextDocumentIdentifier { uri },
+            identifier: None,
+            previous_result_id: None,
+            work_done_progress_params: WorkDoneProgressParams::default(),
+            partial_result_params: PartialResultParams::default(),
+        };
+        let language_id =
+            Some(language_id_from_path(path).unwrap_or("").to_string());
+        self.send_request_to_all_plugins(
+            method,
+            params,
+            language_id,
+            Some(path.to_path_buf()),
+            cb,
+        );
+    }
+
     pub fn get_inline_completions(
         &self,
         path: &Path,
@@ -1484,6 +1513,9 @@ fn client_capabilities() -> ClientCapabilities {
                 ..Default::default()
             }),
             inline_completion: Some(InlineCompletionClientCapabilities {
+                ..Default::default()
+            }),
+            diagnostic: Some(DiagnosticClientCapabilities {
                 ..Default::default()
             }),
             call_hierarchy: Some(CallHierarchyClientCapabilities {

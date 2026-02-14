@@ -30,7 +30,8 @@ use lapce_rpc::{
 };
 use lapce_xi_rope::Rope;
 use lsp_types::{
-    CancelParams, NumberOrString, Position, Range, TextDocumentItem, Url,
+    CancelParams, DocumentDiagnosticReport, DocumentDiagnosticReportResult,
+    NumberOrString, Position, Range, TextDocumentItem, Url,
     notification::{Cancel, Notification},
 };
 use parking_lot::Mutex;
@@ -399,6 +400,36 @@ impl ProxyHandler for Dispatcher {
                             .map(|hints| ProxyResponse::GetInlayHints { hints });
                         proxy_rpc.handle_response(id, result);
                     });
+            }
+            GetDocumentDiagnostics { path } => {
+                let proxy_rpc = self.proxy_rpc.clone();
+                self.catalog_rpc.get_document_diagnostics(
+                    &path,
+                    move |_, result| {
+                        let result = result.and_then(|report| match report {
+                            DocumentDiagnosticReportResult::Report(
+                                DocumentDiagnosticReport::Full(report),
+                            ) => Ok(ProxyResponse::GetDocumentDiagnosticsResponse {
+                                diagnostics: report
+                                    .full_document_diagnostic_report
+                                    .items,
+                            }),
+                            DocumentDiagnosticReportResult::Report(
+                                DocumentDiagnosticReport::Unchanged(_),
+                            ) => Err(RpcError {
+                                code: 0,
+                                message: "unchanged".to_string(),
+                            }),
+                            DocumentDiagnosticReportResult::Partial(_) => {
+                                Err(RpcError {
+                                    code: 0,
+                                    message: "partial not supported".to_string(),
+                                })
+                            }
+                        });
+                        proxy_rpc.handle_response(id, result);
+                    },
+                );
             }
             GetInlineCompletions {
                 path,
