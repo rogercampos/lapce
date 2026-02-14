@@ -2,6 +2,8 @@
 
 **Important:** Always run `cargo fmt --all` after finishing any code changes to ensure consistent formatting.
 
+**Important:** Do not care about backwards compatibility of persisted data in a particular installation of this software. We're actively developing this, nobody is using it yet.
+
 ## Build & Run
 
 ```bash
