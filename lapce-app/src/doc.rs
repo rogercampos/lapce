@@ -456,20 +456,12 @@ impl Doc {
     }
 
     fn init_parser(&self) {
-        let code = self.buffer.get_untracked().to_string();
         self.syntax.with_untracked(|syntax| {
+            let buffer = self.buffer.get_untracked();
             if syntax.styles.is_some() {
-                self.parser.borrow_mut().update_code(
-                    code,
-                    &self.buffer.get_untracked(),
-                    Some(syntax),
-                );
+                self.parser.borrow_mut().update_code(&buffer, Some(syntax));
             } else {
-                self.parser.borrow_mut().update_code(
-                    code,
-                    &self.buffer.get_untracked(),
-                    None,
-                );
+                self.parser.borrow_mut().update_code(&buffer, None);
             }
         });
     }
@@ -674,18 +666,11 @@ impl Doc {
     fn do_bracket_colorization(&self) {
         if self.parser.borrow().active {
             self.syntax.with_untracked(|syntax| {
+                let buffer = self.buffer.get_untracked();
                 if syntax.rev == self.rev() && syntax.styles.is_some() {
-                    self.parser.borrow_mut().update_code(
-                        self.buffer.get_untracked().to_string(),
-                        &self.buffer.get_untracked(),
-                        Some(syntax),
-                    );
+                    self.parser.borrow_mut().update_code(&buffer, Some(syntax));
                 } else {
-                    self.parser.borrow_mut().update_code(
-                        self.buffer.get_untracked().to_string(),
-                        &self.buffer.get_untracked(),
-                        None,
-                    );
+                    self.parser.borrow_mut().update_code(&buffer, None);
                 }
             })
         }

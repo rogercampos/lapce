@@ -266,7 +266,7 @@ impl Find {
                 } else {
                     let mut raw_lines = text.lines_raw(0..offset);
                     let mut find_cursor = Cursor::new(text, 0);
-                    let mut regions = Vec::new();
+                    let mut last_match = None;
                     while let Some(start) = find(
                         &mut find_cursor,
                         &mut raw_lines,
@@ -282,16 +282,16 @@ impl Find {
                             continue;
                         }
                         if start < offset {
-                            regions.push((start, end));
+                            last_match = Some((start, end));
                         }
                     }
-                    if !regions.is_empty() {
-                        return Some(regions[regions.len() - 1]);
+                    if last_match.is_some() {
+                        return last_match;
                     }
                     if wrap {
                         let mut raw_lines = text.lines_raw(offset..text.len());
                         let mut find_cursor = Cursor::new(text, offset);
-                        let mut regions = Vec::new();
+                        let mut last_match = None;
                         while let Some(start) = find(
                             &mut find_cursor,
                             &mut raw_lines,
@@ -312,11 +312,11 @@ impl Find {
                                 text.lines_raw(find_cursor.pos()..text.len());
 
                             if start > offset {
-                                regions.push((start, end));
+                                last_match = Some((start, end));
                             }
                         }
-                        if !regions.is_empty() {
-                            return Some(regions[regions.len() - 1]);
+                        if last_match.is_some() {
+                            return last_match;
                         }
                     }
                 }

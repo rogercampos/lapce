@@ -1987,13 +1987,13 @@ fn walk_tree(
 fn add_bracket_pos(
     bracket_pos: &mut HashMap<usize, Vec<LineStyle>>,
     start_pos: Point,
-    color: String,
+    color: &str,
 ) {
     let line_style = LineStyle {
         start: start_pos.column,
         end: start_pos.column + 1,
         style: Style {
-            fg_color: Some(color),
+            fg_color: Some(color.to_string()),
         },
     };
     match bracket_pos.entry(start_pos.row) {
@@ -2010,7 +2010,7 @@ pub(crate) fn walk_tree_bracket_ast(
     level: &mut usize,
     counter: &mut usize,
     bracket_pos: &mut HashMap<usize, Vec<LineStyle>>,
-    palette: &Vec<String>,
+    palette: &[&str],
 ) {
     if cursor.node().kind().ends_with('(')
         || cursor.node().kind().ends_with('{')
@@ -2019,11 +2019,7 @@ pub(crate) fn walk_tree_bracket_ast(
         let row = cursor.node().end_position().row;
         let col = cursor.node().end_position().column - 1;
         let start_pos = Point::new(row, col);
-        add_bracket_pos(
-            bracket_pos,
-            start_pos,
-            palette.get(*level % palette.len()).unwrap().clone(),
-        );
+        add_bracket_pos(bracket_pos, start_pos, palette[*level % palette.len()]);
         *level += 1;
     } else if cursor.node().kind().ends_with(')')
         || cursor.node().kind().ends_with('}')
@@ -2034,14 +2030,10 @@ pub(crate) fn walk_tree_bracket_ast(
         let col = cursor.node().end_position().column - 1;
         let start_pos = Point::new(row, col);
         if overflow {
-            add_bracket_pos(bracket_pos, start_pos, "bracket.unpaired".to_string());
+            add_bracket_pos(bracket_pos, start_pos, "bracket.unpaired");
         } else {
             *level = new_level;
-            add_bracket_pos(
-                bracket_pos,
-                start_pos,
-                palette.get(*level % palette.len()).unwrap().clone(),
-            );
+            add_bracket_pos(bracket_pos, start_pos, palette[*level % palette.len()]);
         }
     }
     *counter += 1;

@@ -175,23 +175,10 @@ impl BracketParser {
     /// syntax tree is available, uses AST-aware bracket matching (more accurate).
     /// Otherwise falls back to a naive text-based parser that tracks quote
     /// characters to skip string contents.
-    pub fn update_code(
-        &mut self,
-        code: String,
-        buffer: &Buffer,
-        syntax: Option<&Syntax>,
-    ) {
-        let palette = vec![
-            "bracket.color.1".to_string(),
-            "bracket.color.2".to_string(),
-            "bracket.color.3".to_string(),
-        ];
-        if self.active
-            && code
-                .chars()
-                .fold(0, |i, c| if c == '\n' { i + 1 } else { i })
-                < self.limit as usize
-        {
+    pub fn update_code(&mut self, buffer: &Buffer, syntax: Option<&Syntax>) {
+        const PALETTE: &[&str] =
+            &["bracket.color.1", "bracket.color.2", "bracket.color.3"];
+        if self.active && buffer.num_lines() < self.limit as usize {
             self.bracket_pos = HashMap::new();
             if let Some(syntax) = syntax {
                 if let Some(layers) = &syntax.layers {
@@ -204,13 +191,13 @@ impl BracketParser {
                             &mut 0,
                             &mut 0,
                             &mut bracket_pos,
-                            &palette,
+                            PALETTE,
                         );
                         self.bracket_pos = bracket_pos;
                     }
                 }
             } else {
-                self.code = code.chars().collect();
+                self.code = buffer.to_string().chars().collect();
                 self.cur = 0;
                 self.parse();
                 let mut pos_vec = vec![];
@@ -219,7 +206,7 @@ impl BracketParser {
                     &mut pos_vec,
                     &mut 0usize,
                     &mut 0usize,
-                    &palette,
+                    PALETTE,
                 );
                 if buffer.is_empty() {
                     return;
@@ -343,7 +330,7 @@ impl BracketParser {
         pos_vec: &mut Vec<(usize, String)>,
         index: &mut usize,
         level: &mut usize,
-        palette: &Vec<String>,
+        palette: &[&str],
     ) {
         if !ast.children.is_empty() {
             for n in ast.children.iter() {
@@ -351,8 +338,10 @@ impl BracketParser {
                     NodeType::LeftCurly
                     | NodeType::LeftParen
                     | NodeType::LeftBracket => {
-                        pos_vec
-                            .push((*index, palette[*level % palette.len()].clone()));
+                        pos_vec.push((
+                            *index,
+                            palette[*level % palette.len()].to_string(),
+                        ));
                         *level += 1;
                         *index += 1;
                     }
@@ -366,7 +355,7 @@ impl BracketParser {
                             *level = new_level;
                             pos_vec.push((
                                 *index,
-                                palette[*level % palette.len()].clone(),
+                                palette[*level % palette.len()].to_string(),
                             ));
                         }
                         *index += 1;

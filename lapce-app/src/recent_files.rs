@@ -1,4 +1,11 @@
-use std::{ops::Range, path::PathBuf, rc::Rc, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    ffi::OsString,
+    ops::Range,
+    path::PathBuf,
+    rc::Rc,
+    sync::Arc,
+};
 
 use floem::{
     View,
@@ -6,6 +13,7 @@ use floem::{
     peniko::kurbo::{Point, Size},
     reactive::{
         Memo, ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith,
+        create_memo,
     },
     style::{CursorStyle, Display},
     views::{
@@ -263,13 +271,28 @@ impl VirtualVector<(usize, PathBuf)> for RecentFileItems {
     }
 }
 
+/// Pre-computes the set of filenames that appear more than once in the list.
+fn duplicate_filenames(items: &[PathBuf]) -> HashSet<OsString> {
+    let mut counts: HashMap<OsString, u32> = HashMap::new();
+    for path in items {
+        if let Some(name) = path.file_name() {
+            *counts.entry(name.to_os_string()).or_default() += 1;
+        }
+    }
+    counts
+        .into_iter()
+        .filter(|(_, count)| *count > 1)
+        .map(|(name, _)| name)
+        .collect()
+}
+
 /// Extracts the filename and an optional disambiguating directory hint for display.
 /// The directory hint is only shown when multiple files share the same filename,
 /// so the user can tell them apart. The path is stripped relative to the workspace
 /// root when possible for brevity.
 fn file_display_parts(
     path: &PathBuf,
-    all_items: &[PathBuf],
+    duplicates: &HashSet<OsString>,
     workspace_path: &Option<PathBuf>,
 ) -> (String, String) {
     let filename = path
@@ -277,11 +300,10 @@ fn file_display_parts(
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| path.to_string_lossy().to_string());
 
-    let is_duplicate = all_items
-        .iter()
-        .filter(|p| p.file_name() == path.file_name())
-        .count()
-        > 1;
+    let is_duplicate = path
+        .file_name()
+        .map(|n| duplicates.contains(n))
+        .unwrap_or(false);
 
     let dir_hint = if is_duplicate {
         path.parent()
@@ -323,6 +345,8 @@ fn recent_files_content(workspace_data: Rc<WorkspaceData>) -> impl View {
     let filtered_items = data.filtered_items;
     let workspace_path = workspace_data.workspace.path.clone();
     let item_height = 30.0;
+    let duplicates =
+        create_memo(move |_| duplicate_filenames(&filtered_items.get()));
 
     stack((
         recent_files_input(data.clone(), config, focus),
@@ -333,9 +357,9 @@ fn recent_files_content(workspace_data: Rc<WorkspaceData>) -> impl View {
                 move || RecentFileItems(filtered_items.get()),
                 move |(i, path)| (*i, path.clone()),
                 move |(i, path)| {
-                    let all_items = filtered_items.get_untracked();
+                    let duplicates = duplicates.get_untracked();
                     let (filename, dir_hint) =
-                        file_display_parts(&path, &all_items, &workspace_path);
+                        file_display_parts(&path, &duplicates, &workspace_path);
                     let data = data.clone();
                     let icon_path = path.clone();
 

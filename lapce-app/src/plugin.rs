@@ -1033,7 +1033,7 @@ pub fn plugin_info_view(plugin: PluginData, volt: VoltID) -> impl View {
                             .as_ref()
                             .map(|(_, info, _, _, _)| info.to_owned());
                         create_effect(move |_| {
-                            let config = config.get();
+                            let config = config.get_untracked();
                             let info = info.clone();
                             if let Some(info) = info {
                                 let cx = Scope::current();

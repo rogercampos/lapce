@@ -801,14 +801,9 @@ impl VirtualVector<(String, String)> for BTreeMapVirtualList {
         Box::new(
             self.0
                 .iter()
-                .enumerate()
-                .filter_map(|(index, (k, v))| {
-                    if range.contains(&index) {
-                        Some((k.to_string(), v.to_string()))
-                    } else {
-                        None
-                    }
-                })
+                .skip(range.start)
+                .take(range.len())
+                .map(|(k, v)| (k.to_string(), v.to_string()))
                 .collect::<Vec<_>>()
                 .into_iter(),
         )

@@ -160,7 +160,6 @@ impl LapceConfig {
             .map(|(name, _)| name.clone())
             .sorted()
             .collect();
-        lapce_config.color_theme_list.sort();
 
         lapce_config.icon_theme_list = lapce_config
             .available_icon_themes
@@ -168,7 +167,6 @@ impl LapceConfig {
             .map(|(name, _, _)| name.clone())
             .sorted()
             .collect();
-        lapce_config.icon_theme_list.sort();
 
         lapce_config.wrap_style_list = im::vector![
             WrapStyle::None.to_string(),
