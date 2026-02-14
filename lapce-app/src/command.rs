@@ -299,6 +299,10 @@ pub enum LapceWorkbenchCommand {
     #[strum(serialize = "toggle_panel_bottom_visual")]
     TogglePanelBottomVisual,
 
+    #[strum(message = "Toggle Search Focus")]
+    #[strum(serialize = "toggle_search_focus")]
+    ToggleSearchFocus,
+
     #[strum(serialize = "search_modal_open_full_results")]
     SearchModalOpenFullResults,
 

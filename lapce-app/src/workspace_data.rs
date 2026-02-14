@@ -955,6 +955,9 @@ impl WorkspaceData {
             TogglePanelBottomVisual => {
                 self.toggle_container_visual(&PanelContainerPosition::Bottom);
             }
+            ToggleSearchFocus => {
+                self.search_modal_data.open();
+            }
             SearchModalOpenFullResults => {
                 self.search_modal_data.open_full_results();
             }

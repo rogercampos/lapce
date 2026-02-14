@@ -64,6 +64,10 @@ key = "meta+f"
 command = "search"
 
 [[keymaps]]
+key = "meta+shift+f"
+command = "toggle_search_focus"
+
+[[keymaps]]
 key = "alt+right"
 command = "word_end_forward"
 
