@@ -1,3 +1,5 @@
+use super::EditorData;
+use crate::config::{LapceConfig, color::LapceColor};
 use floem::{
     Renderer, View, ViewId,
     context::PaintCx,
@@ -7,10 +9,6 @@ use floem::{
 };
 use im::HashMap;
 use lapce_core::buffer::rope_text::RopeText;
-use serde::{Deserialize, Serialize};
-
-use super::EditorData;
-use crate::config::{LapceConfig, color::LapceColor};
 
 /// Custom view for rendering line numbers in the editor gutter.
 /// Line numbers are right-aligned within the gutter width, and the current line
@@ -297,12 +295,10 @@ impl FoldingRange {
             start: FoldingPosition {
                 line: start_line,
                 character: start_character,
-                // kind: kind.clone().map(|x| FoldingRangeKind::from(x)),
             },
             end: FoldingPosition {
                 line: end_line,
                 character: end_character,
-                // kind: kind.map(|x| FoldingRangeKind::from(x)),
             },
             status,
             collapsed_text,
@@ -314,7 +310,6 @@ impl FoldingRange {
 pub struct FoldingPosition {
     pub line: u32,
     pub character: Option<u32>,
-    // pub kind: Option<FoldingRangeKind>,
 }
 
 #[derive(Debug, Clone, Default, Eq, PartialEq)]
@@ -325,19 +320,15 @@ pub enum FoldingRangeStatus {
 }
 
 impl FoldingRangeStatus {
-    /// Toggle fold state. Currently a no-op because code folding is not yet
-    /// fully implemented (the folding range view is hidden via `.hide()` in
-    /// `editor_gutter_folding_range`). The commented-out toggle logic is the
-    /// intended implementation.
     pub fn click(&mut self) {
-        // match self {
-        //     FoldingRangeStatus::Fold => {
-        //         *self = FoldingRangeStatus::Unfold;
-        //     }
-        //     FoldingRangeStatus::Unfold => {
-        //         *self = FoldingRangeStatus::Fold;
-        //     }
-        // }
+        match self {
+            FoldingRangeStatus::Fold => {
+                *self = FoldingRangeStatus::Unfold;
+            }
+            FoldingRangeStatus::Unfold => {
+                *self = FoldingRangeStatus::Fold;
+            }
+        }
     }
     pub fn is_folded(&self) -> bool {
         *self == Self::Fold
@@ -356,23 +347,6 @@ impl FoldingDisplayItem {
             FoldingDisplayItem::UnfoldStart(x) => *x,
             FoldingDisplayItem::Folded(x) => *x,
             FoldingDisplayItem::UnfoldEnd(x) => *x,
-        }
-    }
-}
-
-#[derive(Debug, Eq, PartialEq, Deserialize, Serialize, Clone, Hash, Copy)]
-pub enum FoldingRangeKind {
-    Comment,
-    Imports,
-    Region,
-}
-
-impl From<lsp_types::FoldingRangeKind> for FoldingRangeKind {
-    fn from(value: lsp_types::FoldingRangeKind) -> Self {
-        match value {
-            lsp_types::FoldingRangeKind::Comment => FoldingRangeKind::Comment,
-            lsp_types::FoldingRangeKind::Imports => FoldingRangeKind::Imports,
-            lsp_types::FoldingRangeKind::Region => FoldingRangeKind::Region,
         }
     }
 }

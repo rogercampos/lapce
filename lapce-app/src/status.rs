@@ -33,7 +33,6 @@ use crate::{
 pub fn status(
     workspace_data: Rc<WorkspaceData>,
     status_height: RwSignal<f64>,
-    _config: ReadSignal<Arc<LapceConfig>>,
 ) -> impl View {
     let config = workspace_data.common.config;
     let diagnostics = workspace_data.main_split.diagnostics;

@@ -45,8 +45,6 @@ impl ScoredCodeActionItem {
 pub struct CodeActionData {
     pub status: RwSignal<CodeActionStatus>,
     pub active: RwSignal<usize>,
-    pub request_id: usize,
-    pub input_id: usize,
     /// The document offset where code actions were requested (for positioning the popup).
     pub offset: usize,
     pub items: im::Vector<ScoredCodeActionItem>,
@@ -94,8 +92,6 @@ impl CodeActionData {
         let code_action = Self {
             status,
             active,
-            request_id: 0,
-            input_id: 0,
             offset: 0,
             items: im::Vector::new(),
             filtered_items: im::Vector::new(),
@@ -177,7 +173,6 @@ impl CodeActionData {
         self.status.set(CodeActionStatus::Active);
         self.offset = offset;
         self.mouse_click = mouse_click;
-        self.request_id += 1;
         self.items = code_actions
             .into_iter()
             .map(|code_action| ScoredCodeActionItem {

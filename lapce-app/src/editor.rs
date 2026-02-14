@@ -259,7 +259,7 @@ impl EditorData {
     ) -> Self {
         let cx = cx.create_child();
         let doc = Rc::new(Doc::new_local(cx, editors, common.clone()));
-        let editor = doc.create_editor(cx, editor_id, true);
+        let editor = doc.create_editor(cx, editor_id);
         Self::new(cx, editor, None, common)
     }
 
@@ -271,7 +271,7 @@ impl EditorData {
         editor_tab_id: Option<EditorTabId>,
         common: Rc<CommonData>,
     ) -> Self {
-        let editor = doc.create_editor(cx, EditorId::next(), false);
+        let editor = doc.create_editor(cx, EditorId::next());
         Self::new(cx, editor, editor_tab_id, common)
     }
 
@@ -394,16 +394,8 @@ impl EditorData {
         let mut cursor = self.editor.cursor.get_untracked();
         let mut register = self.common.register.get_untracked();
 
-        let yank_data = None;
-
         let deltas =
             batch(|| doc.do_edit(&mut cursor, cmd, modal, &mut register, smart_tab));
-
-        if !deltas.is_empty() {
-            if let Some(data) = yank_data {
-                register.add_delete(data);
-            }
-        }
 
         self.editor.cursor.set(cursor);
         self.editor.register.set(register);

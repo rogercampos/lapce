@@ -15,7 +15,6 @@ pub mod file_icon;
 pub mod find;
 pub mod focus_text;
 pub mod global_search;
-pub mod history;
 pub mod hover;
 pub mod id;
 pub mod inline_completion;

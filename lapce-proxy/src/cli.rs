@@ -8,13 +8,6 @@ use lapce_rpc::{
     proxy::{ProxyMessage, ProxyNotification},
 };
 
-#[derive(Default, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum PathObjectType {
-    #[default]
-    Directory,
-    File,
-}
-
 /// Parses a CLI path argument that may include line and column numbers in the
 /// format `path:line:column`. Splits from the RIGHT using `:` to handle paths
 /// that may contain colons (e.g., Windows drive letters like `C:\foo`).

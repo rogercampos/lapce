@@ -171,14 +171,6 @@ impl BracketParser {
         }
     }
 
-    /*pub fn enable(&self) {
-        *(self.active.borrow_mut()) = true;
-    }
-
-    pub fn disable(&self) {
-        *(self.active.borrow_mut()) = false;
-    }*/
-
     /// Recomputes bracket colorization for the given source code. If a tree-sitter
     /// syntax tree is available, uses AST-aware bracket matching (more accurate).
     /// Otherwise falls back to a naive text-based parser that tracks quote

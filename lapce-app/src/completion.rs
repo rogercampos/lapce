@@ -38,8 +38,6 @@ pub struct CompletionData {
     pub status: CompletionStatus,
     /// The current request id. This is used to discard old requests.
     pub request_id: usize,
-    /// An input id that is used for keeping track of whether the input has changed.
-    pub input_id: usize,
     // TODO: A `PathBuf` has the issue that the proxy may not have the same format.
     // TODO(minor): It might be nice to not require a path. LSPs cannot operate on scratch buffers
     // as of now, but they might be allowed in the future.
@@ -75,7 +73,6 @@ impl CompletionData {
         Self {
             status: CompletionStatus::Inactive,
             request_id: 0,
-            input_id: 0,
             path: PathBuf::new(),
             offset: 0,
             active,
@@ -143,7 +140,6 @@ impl CompletionData {
             return;
         }
         self.status = CompletionStatus::Inactive;
-        self.input_id = 0;
         self.latest_editor_id = None;
         self.active.set(0);
         self.input.clear();
@@ -179,7 +175,6 @@ impl CompletionData {
     }
 
     pub fn filter_items(&mut self) {
-        self.input_id += 1;
         if self.input.is_empty() {
             self.filtered_items = self.all_items();
             return;

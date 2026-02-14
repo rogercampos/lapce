@@ -34,30 +34,10 @@ use super::{
         handle_plugin_server_message,
     },
 };
-use crate::{buffer::Buffer, plugin::PluginCatalogRpcHandler};
+use crate::plugin::PluginCatalogRpcHandler;
 
 const HEADER_CONTENT_LENGTH: &str = "content-length";
 const HEADER_CONTENT_TYPE: &str = "content-type";
-
-pub enum LspRpc {
-    Request {
-        id: u64,
-        method: String,
-        params: Params,
-    },
-    Notification {
-        method: String,
-        params: Params,
-    },
-    Response {
-        id: u64,
-        result: Value,
-    },
-    Error {
-        id: u64,
-        error: RpcError,
-    },
-}
 
 /// Manages a single language server process. Owns the child process handle and
 /// coordinates three background threads:
@@ -561,25 +541,4 @@ pub fn read_message<T: BufRead>(reader: &mut T) -> Result<String> {
 
     let body = String::from_utf8(body_buffer)?;
     Ok(body)
-}
-
-pub fn get_change_for_sync_kind(
-    sync_kind: TextDocumentSyncKind,
-    buffer: &Buffer,
-    content_change: &TextDocumentContentChangeEvent,
-) -> Option<Vec<TextDocumentContentChangeEvent>> {
-    match sync_kind {
-        TextDocumentSyncKind::NONE => None,
-        TextDocumentSyncKind::FULL => {
-            let text_document_content_change_event =
-                TextDocumentContentChangeEvent {
-                    range: None,
-                    range_length: None,
-                    text: buffer.get_document(),
-                };
-            Some(vec![text_document_content_change_event])
-        }
-        TextDocumentSyncKind::INCREMENTAL => Some(vec![content_change.clone()]),
-        _ => None,
-    }
 }

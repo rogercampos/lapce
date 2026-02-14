@@ -379,12 +379,7 @@ impl Doc {
 
     /// Create an [`Editor`] instance from this [`Doc`]. Note that this needs to be registered
     /// appropriately to create the [`EditorData`] and such.
-    pub fn create_editor(
-        self: &Rc<Doc>,
-        cx: Scope,
-        id: EditorId,
-        _is_local: bool,
-    ) -> Editor {
+    pub fn create_editor(self: &Rc<Doc>, cx: Scope, id: EditorId) -> Editor {
         let common = &self.common;
         let config = common.config.get_untracked();
         let modal = false;

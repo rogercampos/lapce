@@ -53,7 +53,6 @@ pub mod kind;
 pub enum PaletteStatus {
     Inactive,
     Started,
-    Done,
 }
 
 #[derive(Clone, Debug)]

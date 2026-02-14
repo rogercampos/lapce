@@ -471,18 +471,6 @@ fn panel_view(
     })
 }
 
-pub fn panel_header(
-    header: String,
-    config: ReadSignal<Arc<LapceConfig>>,
-) -> impl View {
-    container(label(move || header.clone())).style(move |s| {
-        s.padding_horiz(10.0)
-            .padding_vert(6.0)
-            .width_pct(100.0)
-            .background(config.get().color(LapceColor::EDITOR_BACKGROUND))
-    })
-}
-
 /// Renders the icon strip for switching between panel kinds at a given position.
 /// Each icon shows the panel's SVG and has an active indicator (a colored border line).
 /// The picker is hidden when only one or zero panels exist at this position (no

@@ -1,5 +1,4 @@
 use std::{
-    collections::VecDeque,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -23,7 +22,6 @@ pub struct FileWatcher {
 
 #[derive(Debug, Default)]
 struct WatcherState {
-    events: EventQueue,
     watchees: Vec<Watchee>,
 }
 
@@ -50,8 +48,6 @@ pub struct WatchToken(pub usize);
 pub trait Notify: Send {
     fn notify(&self, events: Vec<(WatchToken, Event)>);
 }
-
-pub type EventQueue = VecDeque<(WatchToken, Event)>;
 
 pub type PathFilter = dyn Fn(&Path) -> bool + Send + 'static;
 
@@ -211,13 +207,6 @@ impl FileWatcher {
                 }
             }
         }
-    }
-
-    /// Takes ownership of this `Watcher`'s current event queue.
-    pub fn take_events(&self) -> VecDeque<(WatchToken, Event)> {
-        let mut state = self.state.lock();
-        let WatcherState { ref mut events, .. } = *state;
-        std::mem::take(events)
     }
 }
 

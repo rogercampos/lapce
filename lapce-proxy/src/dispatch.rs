@@ -64,8 +64,6 @@ pub struct Dispatcher {
     catalog_rpc: PluginCatalogRpcHandler,
     buffers: HashMap<PathBuf, Buffer>,
     file_watcher: FileWatcher,
-    window_id: usize,
-    tab_id: usize,
 }
 
 impl ProxyHandler for Dispatcher {
@@ -77,11 +75,9 @@ impl ProxyHandler for Dispatcher {
                 disabled_volts,
                 extra_plugin_paths,
                 plugin_configurations,
-                window_id,
-                tab_id,
+                window_id: _,
+                tab_id: _,
             } => {
-                self.window_id = window_id;
-                self.tab_id = tab_id;
                 self.workspace = workspace;
                 self.file_watcher.notify(FileWatchNotifier::new(
                     self.core_rpc.clone(),
@@ -1012,8 +1008,6 @@ impl Dispatcher {
             catalog_rpc: plugin_rpc,
             buffers: HashMap::new(),
             file_watcher,
-            window_id: 1,
-            tab_id: 1,
         }
     }
 

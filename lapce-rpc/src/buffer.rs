@@ -14,14 +14,3 @@ impl BufferId {
         Self(BUFFER_ID_COUNTER.next())
     }
 }
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NewBufferResponse {
-    pub content: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BufferHeadResponse {
-    pub version: String,
-    pub content: String,
-}

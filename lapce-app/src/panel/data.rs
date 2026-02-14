@@ -36,7 +36,6 @@ pub enum PanelSection {
     FileExplorer,
     Error,
     Warn,
-    Changes,
 }
 
 #[derive(Clone, Serialize, Deserialize)]

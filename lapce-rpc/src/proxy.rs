@@ -375,11 +375,6 @@ pub enum ProxyResponse {
 
 pub type ProxyMessage = RpcMessage<ProxyRequest, ProxyNotification, ProxyResponse>;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ReadDirResponse {
-    pub items: HashMap<PathBuf, FileNodeItem>,
-}
-
 pub trait ProxyCallback: Send + FnOnce(Result<ProxyResponse, RpcError>) {}
 
 impl<F: Send + FnOnce(Result<ProxyResponse, RpcError>)> ProxyCallback for F {}

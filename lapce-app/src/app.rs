@@ -2134,13 +2134,11 @@ fn palette_item(
                 .unwrap_or_default()
                 .to_string_lossy()
                 .into_owned();
-            // let (file_name, _) = create_signal(cx.scope, file_name);
             let folder = path
                 .parent()
                 .unwrap_or("".as_ref())
                 .to_string_lossy()
                 .into_owned();
-            // let (folder, _) = create_signal(cx.scope, folder);
             let folder_len = folder.len();
 
             let file_name_indices = item
@@ -2649,8 +2647,7 @@ fn completion(workspace_data: Rc<WorkspaceData>) -> impl View {
     let active_editor = workspace_data.main_split.active_editor;
     let config = workspace_data.common.config;
     let active = completion_data.with_untracked(|c| c.active);
-    let request_id =
-        move || completion_data.with_untracked(|c| (c.request_id, c.input_id));
+    let request_id = move || completion_data.with_untracked(|c| c.request_id);
     scroll(
         virtual_stack(
             move || completion_data.with(|c| VectorItems(c.filtered_items.clone())),
@@ -2771,8 +2768,6 @@ fn code_action(workspace_data: Rc<WorkspaceData>) -> impl View {
     let code_action = workspace_data.code_action;
     let (status, active) = code_action
         .with_untracked(|code_action| (code_action.status, code_action.active));
-    let request_id =
-        move || code_action.with_untracked(|code_action| code_action.request_id);
     scroll(
         container(
             dyn_stack(
@@ -2781,7 +2776,7 @@ fn code_action(workspace_data: Rc<WorkspaceData>) -> impl View {
                         code_action.filtered_items.clone().into_iter().enumerate()
                     })
                 },
-                move |(i, _item)| (request_id(), *i),
+                move |(i, _item)| *i,
                 move |(i, item)| {
                     container(
                         text(item.title().replace('\n', " "))
@@ -2914,7 +2909,7 @@ fn workspace_view(workspace_data: Rc<WorkspaceData>) -> impl View {
             stack((
                 title(workspace_data.clone()),
                 workbench(workspace_data.clone()),
-                status(workspace_data.clone(), status_height, config),
+                status(workspace_data.clone(), status_height),
             ))
             .on_resize(move |rect| {
                 layout_rect.set(rect);
