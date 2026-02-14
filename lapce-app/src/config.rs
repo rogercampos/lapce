@@ -421,14 +421,14 @@ impl LapceConfig {
             default_config.map(|c| &c.color.syntax),
         );
 
-        // Heuristic: if the sum of foreground RGB channels exceeds background's,
-        // the theme is light-on-dark, i.e. the background is dark.
+        // Heuristic: if the background RGB sum exceeds the foreground's,
+        // the background is bright, i.e. it's a light theme.
         let fg = self.color(LapceColor::EDITOR_FOREGROUND).to_rgba8();
         let bg = self.color(LapceColor::EDITOR_BACKGROUND).to_rgba8();
-        let is_light = fg.r as u32 + fg.g as u32 + fg.b as u32
-            > bg.r as u32 + bg.g as u32 + bg.b as u32;
+        let is_light_theme = bg.r as u32 + bg.g as u32 + bg.b as u32
+            > fg.r as u32 + fg.g as u32 + fg.b as u32;
         let high_contrast = self.color_theme.high_contrast.unwrap_or(false);
-        self.color.color_preference = match (is_light, high_contrast) {
+        self.color.color_preference = match (is_light_theme, high_contrast) {
             (true, true) => ThemeColorPreference::HighContrastLight,
             (false, true) => ThemeColorPreference::HighContrastDark,
             (true, false) => ThemeColorPreference::Light,
@@ -775,22 +775,34 @@ impl LapceConfig {
                     .unwrap_or(0),
                 items: self.wrap_style_list.clone(),
             }),
-            ("ui", "tab-close-button") => Some(DropdownInfo {
-                active_index: self.ui.tab_close_button as usize,
-                items: ui::TabCloseButton::VARIANTS
+            ("ui", "tab-close-button") => {
+                let items: Vec<String> = ui::TabCloseButton::VARIANTS
                     .iter()
                     .map(|s| s.to_string())
                     .sorted()
-                    .collect(),
-            }),
-            ("ui", "tab-separator-height") => Some(DropdownInfo {
-                active_index: self.ui.tab_separator_height as usize,
-                items: ui::TabSeparatorHeight::VARIANTS
+                    .collect();
+                let active_str = format!("{:?}", self.ui.tab_close_button);
+                let active_index =
+                    items.iter().position(|s| s == &active_str).unwrap_or(0);
+                Some(DropdownInfo {
+                    active_index,
+                    items: items.into(),
+                })
+            }
+            ("ui", "tab-separator-height") => {
+                let items: Vec<String> = ui::TabSeparatorHeight::VARIANTS
                     .iter()
                     .map(|s| s.to_string())
                     .sorted()
-                    .collect(),
-            }),
+                    .collect();
+                let active_str = format!("{:?}", self.ui.tab_separator_height);
+                let active_index =
+                    items.iter().position(|s| s == &active_str).unwrap_or(0);
+                Some(DropdownInfo {
+                    active_index,
+                    items: items.into(),
+                })
+            }
             _ => None,
         }
     }

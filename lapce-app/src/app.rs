@@ -363,7 +363,7 @@ impl AppData {
     ) -> floem::Application {
         let mut app = floem::Application::new();
 
-        let mut inital_windows = 0;
+        let mut initial_windows = 0;
 
         // Split user input into known existing directors and
         // file paths that exist or not
@@ -418,7 +418,7 @@ impl AppData {
                     move |window_id| app_data.app_view(window_id, info, files),
                     Some(config),
                 );
-                inital_windows += 1;
+                initial_windows += 1;
             }
         } else if files.is_none() {
             // There were no dirs and no files specified, so we'll load the last windows
@@ -443,7 +443,7 @@ impl AppData {
                             },
                             Some(config),
                         );
-                        inital_windows += 1;
+                        initial_windows += 1;
                     }
                 }
                 Err(err) => {
@@ -452,7 +452,7 @@ impl AppData {
             }
         }
 
-        if inital_windows == 0 {
+        if initial_windows == 0 {
             let mut info = db.get_window().unwrap_or_else(|_| WindowInfo {
                 size: Size::new(800.0, 600.0),
                 pos: Point::ZERO,
@@ -2347,7 +2347,6 @@ fn palette_content(
             .min_height(0.0)
             .max_height((layout_rect.get().height() * 0.45 - 36.0).round() as f32)
             .padding_bottom(5.0)
-            .padding_bottom(5.0)
     })
 }
 
@@ -2432,7 +2431,7 @@ fn palette(workspace_data: Rc<WorkspaceData>) -> impl View {
         .items_center()
         .pointer_events_none()
     })
-    .debug_name("Pallete Layer")
+    .debug_name("Palette Layer")
 }
 
 fn window_message_view(

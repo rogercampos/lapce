@@ -651,7 +651,10 @@ impl PluginData {
         let db: Arc<LapceDb> = use_context().unwrap();
         db.save_workspace_disabled_volts(
             self.common.workspace.clone(),
-            self.disabled.get_untracked().into_iter().collect(),
+            self.workspace_disabled
+                .get_untracked()
+                .into_iter()
+                .collect(),
         );
     }
 
@@ -664,7 +667,10 @@ impl PluginData {
         let db: Arc<LapceDb> = use_context().unwrap();
         db.save_workspace_disabled_volts(
             self.common.workspace.clone(),
-            self.disabled.get_untracked().into_iter().collect(),
+            self.workspace_disabled
+                .get_untracked()
+                .into_iter()
+                .collect(),
         );
     }
 

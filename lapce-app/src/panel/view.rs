@@ -424,7 +424,7 @@ pub fn panel_container_view(
             .border_color(config.color(LapceColor::LAPCE_BORDER))
             .color(config.color(LapceColor::PANEL_FOREGROUND))
     })
-    .debug_name(format!("{:?} Pannel Container View", position))
+    .debug_name(format!("{:?} Panel Container View", position))
 }
 
 /// Renders the active panel content for a given position using a `tab` view that

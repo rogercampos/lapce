@@ -145,13 +145,13 @@ impl Leaf for LensLeaf {
                 continue;
             }
 
-            let len = iv_end - (accum + sec.len);
+            let len = iv_end - accum;
             self.data.push(LensData {
                 len,
                 line_height: sec.line_height,
             });
             added_len += len;
-            added_height += sec.len * sec.line_height;
+            added_height += len * sec.line_height;
             break;
         }
         self.len += added_len;

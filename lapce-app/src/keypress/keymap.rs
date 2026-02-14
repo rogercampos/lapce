@@ -174,7 +174,7 @@ impl FromStr for KeyMapKey {
     /// is treated as a character key (lowercased for consistent matching).
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let key = if s.starts_with('[') && s.ends_with(']') {
-            let code = match s[1..s.len() - 2].to_lowercase().as_str() {
+            let code = match s[1..s.len() - 1].to_lowercase().as_str() {
                 "esc" => KeyCode::Escape,
                 "space" => KeyCode::Space,
                 "bs" => KeyCode::Backspace,

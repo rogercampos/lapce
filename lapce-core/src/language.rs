@@ -97,9 +97,9 @@ macro_rules! comment_properties {
             single_line_start: Some($sl_s),
             single_line_end: Some($sl_e),
 
-            multi_line_start: Some($sl_s),
-            multi_line_end: None,
-            multi_line_prefix: Some($sl_e),
+            multi_line_start: Some($ml_s),
+            multi_line_end: Some($ml_e),
+            multi_line_prefix: None,
         }
     };
 }

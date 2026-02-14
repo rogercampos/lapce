@@ -1183,12 +1183,11 @@ fn search_in_path(
                     }
 
                     let mymatch = matcher.find(line.as_bytes())?.unwrap();
-                    let line = if line.len() > 200 {
+                    let (line, start, end) = if line.len() > 200 {
                         // Truncate extremely long lines (e.g. minified JS) to ~200
                         // chars around the match. We keep 100 chars on each side of
                         // the match, counting by UTF-8 code points to avoid splitting
-                        // multi-byte characters. The start/end offsets in SearchMatch
-                        // become relative to this truncated snippet.
+                        // multi-byte characters.
                         let left_keep = line[..mymatch.start()]
                             .chars()
                             .rev()
@@ -1202,14 +1201,19 @@ fn search_in_path(
                             .sum::<usize>();
                         let display_range =
                             mymatch.start() - left_keep..mymatch.end() + right_keep;
-                        line[display_range].to_string()
+                        // Offsets must be relative to the truncated snippet
+                        (
+                            line[display_range].to_string(),
+                            left_keep,
+                            left_keep + (mymatch.end() - mymatch.start()),
+                        )
                     } else {
-                        line.to_string()
+                        (line.to_string(), mymatch.start(), mymatch.end())
                     };
                     line_matches.push(SearchMatch {
                         line: lnum as usize,
-                        start: mymatch.start(),
-                        end: mymatch.end(),
+                        start,
+                        end,
                         line_content: line,
                     });
                     Ok(true)

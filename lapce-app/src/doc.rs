@@ -1355,7 +1355,7 @@ impl Doc {
             return;
         };
 
-        let (line, col) = self.completion_pos.get_untracked();
+        let (line, col) = self.inline_completion_pos.get_untracked();
         let offset = self
             .buffer
             .with_untracked(|b| b.offset_of_line_col(line, col));
@@ -2055,9 +2055,10 @@ impl Styling for DocStyling {
 
             let size = layout.size();
             let x1 = if !config.editor.error_lens_end_of_line {
-                let error_end_x = size.width;
-                Some(error_end_x.max(size.width))
+                // Constrain background to the line layout width
+                Some(size.width)
             } else {
+                // None means the background extends to the edge of the viewport
                 None
             };
 

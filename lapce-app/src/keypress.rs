@@ -682,6 +682,6 @@ impl KeyPressData {
         table.insert("keymaps", toml_edit::Item::ArrayOfTables(array));
         let path = Self::file()?;
         std::fs::write(path, table.to_string().as_bytes()).ok()?;
-        None
+        Some(())
     }
 }

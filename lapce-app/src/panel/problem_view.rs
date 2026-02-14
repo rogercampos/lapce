@@ -97,7 +97,7 @@ fn file_view(
     internal_command: Listener<InternalCommand>,
     config: ReadSignal<Arc<LapceConfig>>,
 ) -> impl View {
-    let collpased = create_rw_signal(false);
+    let collapsed = create_rw_signal(false);
 
     let diagnostics = create_rw_signal(im::Vector::new());
     // The effect bridges two different diagnostic representations: diagnostics_span
@@ -191,7 +191,7 @@ fn file_view(
                 .style(move |s| s.width_pct(100.0).min_width(0.0)),
             )
             .on_click_stop(move |_| {
-                collpased.update(|collpased| *collpased = !*collpased);
+                collapsed.update(|collapsed| *collapsed = !*collapsed);
             })
             .style(move |s| {
                 let config = config.get();
@@ -207,7 +207,7 @@ fn file_view(
             }),
             stack((
                 svg(move || {
-                    config.get().ui_svg(if collpased.get() {
+                    config.get().ui_svg(if collapsed.get() {
                         LapceIcons::ITEM_CLOSED
                     } else {
                         LapceIcons::ITEM_OPENED
@@ -228,7 +228,7 @@ fn file_view(
         .style(move |s| s.width_pct(100.0).min_width(0.0)),
         dyn_stack(
             move || {
-                if collpased.get() {
+                if collapsed.get() {
                     im::Vector::new()
                 } else {
                     diagnostics.get()

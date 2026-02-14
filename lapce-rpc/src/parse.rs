@@ -69,7 +69,9 @@ impl RpcObject {
                     .0
                     .as_object_mut()
                     .and_then(|obj| obj.remove("error"))
-                    .unwrap();
+                    .ok_or_else(|| {
+                        "RPC response has no 'result' or 'error' field.".to_string()
+                    })?;
                 Ok(Err(error))
             }
         }

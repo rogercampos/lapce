@@ -1259,7 +1259,7 @@ impl PluginHostHandler {
     /// holds (full_change, incremental_change).
     pub fn handle_did_change_text_document(
         &mut self,
-        lanaguage_id: String,
+        language_id: String,
         document: VersionedTextDocumentIdentifier,
         delta: RopeDelta,
         text: Rope,
@@ -1322,7 +1322,7 @@ impl PluginHostHandler {
         self.server_rpc.server_notification(
             DidChangeTextDocument::METHOD,
             params,
-            Some(lanaguage_id),
+            Some(language_id),
             path,
             false,
         );

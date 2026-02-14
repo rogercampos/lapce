@@ -84,11 +84,12 @@ impl EditorTabInfo {
         let editor_tab_id = EditorTabId::next();
         let editor_tab_data = {
             let cx = data.scope.create_child();
+            let children_count = self.children.len();
             let editor_tab_data = EditorTabData {
                 scope: cx,
                 editor_tab_id,
                 split,
-                active: self.active,
+                active: self.active.min(children_count.saturating_sub(1)),
                 children: self
                     .children
                     .iter()

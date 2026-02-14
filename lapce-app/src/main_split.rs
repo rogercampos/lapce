@@ -2053,6 +2053,8 @@ impl MainSplitData {
                     return;
                 };
                 let id = editor_id.to_raw();
+                // Close only the specific editor tab child for the deleted file,
+                // not the entire editor tab pane.
                 if let Some(tab_id) = self.editor_tabs.with_untracked(|x| {
                     for (tab_id, tab_data) in x {
                         if tab_data.with_untracked(|x| {
@@ -2063,9 +2065,12 @@ impl MainSplitData {
                     }
                     None
                 }) {
-                    self.editor_tab_close(tab_id);
+                    self.editor_tab_child_close(
+                        tab_id,
+                        EditorTabChild::Editor(editor_id),
+                        true,
+                    );
                 }
-                self.editors.remove(editor_id);
                 self.docs.update(|x| {
                     x.remove(path);
                 });

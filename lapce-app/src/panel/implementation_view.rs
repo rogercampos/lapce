@@ -95,7 +95,7 @@ pub fn common_reference_panel(
                                         }),
                                 )
                         }),
-                        label(move || format!("{:?}", path))
+                        label(move || format!("{}", path.display()))
                             .style(move |s| {
                                 s.margin_left(6.0).color(
                                     config.get().color(LapceColor::EDITOR_DIM),

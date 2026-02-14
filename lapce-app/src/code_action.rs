@@ -193,7 +193,9 @@ impl CodeActionData {
 
     fn cancel(&self) {
         self.status.set(CodeActionStatus::Inactive);
-        self.common.focus.set(Focus::Workbench);
+        if let Focus::CodeAction = self.common.focus.get_untracked() {
+            self.common.focus.set(Focus::Workbench);
+        }
     }
 
     pub fn select(&self) {

@@ -94,22 +94,28 @@ impl KeyPressFocus for GlobalSearchData {
             return self.preview_editor.run_command(command, count, mods);
         }
         match &command.kind {
-            CommandKind::Workbench(_) => {}
-            CommandKind::Scroll(_) => {}
             CommandKind::Focus(cmd) => match cmd {
-                FocusCommand::ListNext => self.next(),
-                FocusCommand::ListPrevious => self.previous(),
-                FocusCommand::ListSelect => self.select(),
-                _ => return CommandExecuted::No,
+                FocusCommand::ListNext => {
+                    self.next();
+                    CommandExecuted::Yes
+                }
+                FocusCommand::ListPrevious => {
+                    self.previous();
+                    CommandExecuted::Yes
+                }
+                FocusCommand::ListSelect => {
+                    self.select();
+                    CommandExecuted::Yes
+                }
+                _ => CommandExecuted::No,
             },
             CommandKind::Edit(_)
             | CommandKind::Move(_)
             | CommandKind::MultiSelection(_) => {
-                return self.editor.run_command(command, count, mods);
+                self.editor.run_command(command, count, mods)
             }
-            CommandKind::MotionMode(_) => {}
+            _ => CommandExecuted::No,
         }
-        CommandExecuted::No
     }
 
     fn receive_char(&self, c: &str) {

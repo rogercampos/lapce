@@ -67,12 +67,10 @@ impl SyntaxEdit {
 }
 
 /// Converts a byte offset within a Rope into a tree-sitter Point (row, column).
-/// Note: the column is computed as the distance from the offset to the *end*
-/// of the line, not the start. This appears to be a bug -- see code review.
 fn point_at_offset(text: &Rope, offset: usize) -> Point {
     let text = RopeTextRef::new(text);
     let line = text.line_of_offset(offset);
-    let col = text.offset_of_line(line + 1).saturating_sub(offset);
+    let col = offset - text.offset_of_line(line);
     Point::new(line, col)
 }
 

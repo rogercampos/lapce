@@ -207,18 +207,18 @@ impl LapceDb {
     fn insert_recent_workspace(&self, workspace: LapceWorkspace) -> Result<()> {
         let mut workspaces = self.recent_workspaces().unwrap_or_default();
 
-        let mut exits = false;
+        let mut exists = false;
         for w in workspaces.iter_mut() {
             if w.path == workspace.path && w.kind == workspace.kind {
                 w.last_open = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap()
                     .as_secs();
-                exits = true;
+                exists = true;
                 break;
             }
         }
-        if !exits {
+        if !exists {
             let mut workspace = workspace;
             workspace.last_open = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
