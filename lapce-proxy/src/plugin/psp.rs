@@ -980,6 +980,7 @@ impl PluginHostHandler {
                 let catalog_rpc = self.catalog_rpc.clone();
                 let volt_id = self.volt_id.clone();
                 let volt_display_name = self.volt_display_name.clone();
+                let shell_env = self.catalog_rpc.shell_env.clone();
 
                 let spawned_by = self.server_rpc.plugin_id;
                 let plugin_id = PluginId::next();
@@ -998,6 +999,7 @@ impl PluginHostHandler {
                         params.server_uri,
                         params.server_args,
                         params.options,
+                        shell_env,
                     ) {
                         tracing::error!("{:?}", err);
                     }
@@ -1094,6 +1096,7 @@ impl PluginHostHandler {
                 let catalog_rpc = self.catalog_rpc.clone();
                 let volt_id = self.volt_id.clone();
                 let volt_display_name = self.volt_display_name.clone();
+                let shell_env = self.catalog_rpc.shell_env.clone();
                 thread::spawn(move || {
                     if let Err(err) = LspClient::start(
                         catalog_rpc,
@@ -1107,6 +1110,7 @@ impl PluginHostHandler {
                         params.server_uri,
                         params.server_args,
                         params.options,
+                        shell_env,
                     ) {
                         tracing::error!("{:?}", err);
                     }

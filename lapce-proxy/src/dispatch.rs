@@ -79,6 +79,10 @@ impl ProxyHandler for Dispatcher {
                         .watch(workspace, true, WORKSPACE_EVENT_TOKEN);
                 }
 
+                let env =
+                    crate::shell_env::resolve_shell_env(self.workspace.as_deref());
+                self.catalog_rpc.set_shell_env(env);
+
                 let plugin_rpc = self.catalog_rpc.clone();
                 let workspace = self.workspace.clone();
                 thread::spawn(move || {

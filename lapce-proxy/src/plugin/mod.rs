@@ -155,6 +155,7 @@ pub struct PluginCatalogRpcHandler {
     id: Arc<AtomicU64>,
     #[allow(dead_code, clippy::type_complexity)]
     pending: Arc<Mutex<HashMap<u64, Sender<Result<Value, RpcError>>>>>,
+    pub shell_env: Arc<HashMap<String, String>>,
 }
 
 impl PluginCatalogRpcHandler {
@@ -167,7 +168,12 @@ impl PluginCatalogRpcHandler {
             plugin_rx: Arc::new(Mutex::new(Some(plugin_rx))),
             id: Arc::new(AtomicU64::new(0)),
             pending: Arc::new(Mutex::new(HashMap::new())),
+            shell_env: Arc::new(HashMap::new()),
         }
+    }
+
+    pub fn set_shell_env(&mut self, env: HashMap<String, String>) {
+        self.shell_env = Arc::new(env);
     }
 
     #[allow(dead_code)]

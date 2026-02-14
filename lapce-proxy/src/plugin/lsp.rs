@@ -1,6 +1,7 @@
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
 use std::{
+    collections::HashMap,
     io::{BufRead, BufReader, BufWriter, Write},
     path::{Path, PathBuf},
     process::{self, Child, Command, Stdio},
@@ -183,6 +184,7 @@ impl LspClient {
         server_uri: Url,
         args: Vec<String>,
         options: Option<Value>,
+        env: Arc<HashMap<String, String>>,
     ) -> Result<Self> {
         let server = match server_uri.scheme() {
             "file" => {
@@ -201,7 +203,7 @@ impl LspClient {
             _ => return Err(anyhow!("uri not supported")),
         };
 
-        let mut process = Self::process(workspace.as_ref(), &server, &args)?;
+        let mut process = Self::process(workspace.as_ref(), &server, &args, &env)?;
         let stdin = process.stdin.take().unwrap();
         let stdout = process.stdout.take().unwrap();
         let stderr = process.stderr.take().unwrap();
@@ -335,6 +337,7 @@ impl LspClient {
         server_uri: Url,
         args: Vec<String>,
         options: Option<Value>,
+        env: Arc<HashMap<String, String>>,
     ) -> Result<PluginId> {
         let mut lsp = Self::new(
             plugin_rpc,
@@ -348,6 +351,7 @@ impl LspClient {
             server_uri,
             args,
             options,
+            env,
         )?;
         let plugin_id = lsp.server_rpc.plugin_id;
 
@@ -441,6 +445,7 @@ impl LspClient {
         workspace: Option<&PathBuf>,
         server: &str,
         args: &[String],
+        env: &HashMap<String, String>,
     ) -> Result<Child> {
         let mut process = Command::new(server);
         if let Some(workspace) = workspace {
@@ -448,6 +453,9 @@ impl LspClient {
         }
 
         process.args(args);
+        if !env.is_empty() {
+            process.envs(env);
+        }
 
         #[cfg(target_os = "windows")]
         let process = process.creation_flags(0x08000000);
