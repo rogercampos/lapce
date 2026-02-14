@@ -331,10 +331,7 @@ impl PluginCatalogRpcHandler {
                             got_success.store(true, Ordering::Release);
                             Ok(item)
                         } else {
-                            Err(RpcError {
-                                code: 0,
-                                message: "deserialize error".to_string(),
-                            })
+                            Err(RpcError::new("deserialize error"))
                         }
                     }
                     Err(e) => Err(e),
@@ -956,11 +953,7 @@ impl PluginCatalogRpcHandler {
                         {
                             Ok(item)
                         } else {
-                            Err(RpcError {
-                                code: 0,
-                                message: "completion item deserialize error"
-                                    .to_string(),
-                            })
+                            Err(RpcError::new("completion item deserialize error"))
                         }
                     }
                     Err(e) => Err(e),
@@ -1036,11 +1029,7 @@ impl PluginCatalogRpcHandler {
                         {
                             Ok(item)
                         } else {
-                            Err(RpcError {
-                                code: 0,
-                                message: "code_action item deserialize error"
-                                    .to_string(),
-                            })
+                            Err(RpcError::new("code_action item deserialize error"))
                         }
                     }
                     Err(e) => Err(e),
@@ -1264,27 +1253,27 @@ pub fn remove_volt(
                 .volt_removing(volt.clone(), "Plugin Directory not set".to_string());
             anyhow::anyhow!("don't have dir")
         })?;
-        let mut rs = Ok(());
-        // Try to remove dir
-        // This is due to some operating systems not releasing immediately, such as Windows.
-        for _ in 0..2 {
-            rs = std::fs::remove_dir_all(path);
-            if rs.is_err() {
-                std::thread::sleep(Duration::from_millis(500));
-            } else {
-                break;
+        // Retry removal a few times — on some OSes (Windows) file locks
+        // aren't released immediately after plugin deactivation.
+        let mut last_err = None;
+        for _ in 0..5 {
+            match std::fs::remove_dir_all(path) {
+                Ok(()) => {
+                    catalog_rpc.core_rpc.volt_removed(volt.info(), false);
+                    return Ok(());
+                }
+                Err(e) => {
+                    last_err = Some(e);
+                    std::thread::sleep(Duration::from_millis(500));
+                }
             }
         }
-        if let Err(e) = rs {
-            error!("remove_dir_all {:?}", e);
-            eprintln!("Could not delete plugin folder: {e}");
-            catalog_rpc.core_rpc.volt_removing(
-                volt.clone(),
-                "Could not remove Plugin Directory".to_string(),
-            );
-        } else {
-            catalog_rpc.core_rpc.volt_removed(volt.info(), false);
-        }
+        let e = last_err.unwrap();
+        error!("remove_dir_all {:?}", e);
+        catalog_rpc.core_rpc.volt_removing(
+            volt.clone(),
+            format!("Could not remove plugin directory: {e}"),
+        );
         Ok(())
     });
     Ok(())

@@ -33,3 +33,12 @@ pub struct RpcError {
     pub code: i64,
     pub message: String,
 }
+
+impl RpcError {
+    pub fn new(message: impl Into<String>) -> Self {
+        Self {
+            code: 0,
+            message: message.into(),
+        }
+    }
+}

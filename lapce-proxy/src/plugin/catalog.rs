@@ -103,13 +103,7 @@ impl PluginCatalog {
                     },
                 );
             } else {
-                f(
-                    plugin_id,
-                    Err(RpcError {
-                        code: 0,
-                        message: "plugin doesn't exist".to_string(),
-                    }),
-                );
+                f(plugin_id, Err(RpcError::new("plugin doesn't exist")));
             }
             return;
         }
@@ -124,10 +118,9 @@ impl PluginCatalog {
                 // make a direct callback with an "error"
                 f(
                     lapce_rpc::plugin::PluginId(0),
-                    Err(RpcError {
-                        code: 0,
-                        message: "no available plugin could make a callback, because the plugins list is empty".to_string(),
-                    }),
+                    Err(RpcError::new(
+                        "no available plugin could make a callback, because the plugins list is empty",
+                    )),
                 );
                 return;
             } else {
@@ -389,10 +382,7 @@ impl PluginCatalog {
                 f,
             });
         } else {
-            f.call(Err(RpcError {
-                code: 0,
-                message: "plugin doesn't exist".to_string(),
-            }));
+            f.call(Err(RpcError::new("plugin doesn't exist")));
         }
     }
 

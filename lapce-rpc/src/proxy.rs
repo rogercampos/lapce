@@ -465,12 +465,7 @@ impl ProxyRpcHandler {
     fn request(&self, request: ProxyRequest) -> Result<ProxyResponse, RpcError> {
         let (tx, rx) = crossbeam_channel::bounded(1);
         self.request_common(request, ResponseHandler::Chan(tx));
-        rx.recv().unwrap_or_else(|_| {
-            Err(RpcError {
-                code: 0,
-                message: "io error".to_string(),
-            })
-        })
+        rx.recv().unwrap_or_else(|_| Err(RpcError::new("io error")))
     }
 
     pub fn request_async(

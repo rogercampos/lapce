@@ -733,16 +733,45 @@ impl MainSplitData {
         same_editor_tab: bool,
     ) -> EditorTabChild {
         let config = self.common.config.get_untracked();
+        let active_editor_tab = self.ensure_active_editor_tab();
 
+        // Find existing child in active tab
+        let selected = if !config.editor.show_tab {
+            active_editor_tab
+                .with_untracked(|t| t.find_reusable_child(&source, self.editors))
+        } else {
+            active_editor_tab
+                .with_untracked(|t| t.find_matching_child(&source, self.editors))
+        };
+
+        // If found in active tab, reuse or replace it
+        if let Some(selected) = selected {
+            return self.reuse_or_replace_child(
+                active_editor_tab,
+                selected,
+                &source,
+            );
+        }
+
+        // Search non-active tabs for existing match
+        if config.editor.show_tab && !same_editor_tab {
+            if let Some(child) = self.find_in_other_tabs(&source) {
+                return child;
+            }
+        }
+
+        // No match found: create and insert new child
+        self.insert_new_child(active_editor_tab, &source)
+    }
+
+    /// Returns the active editor tab, creating one if none exists.
+    fn ensure_active_editor_tab(&self) -> RwSignal<EditorTabData> {
         let active_editor_tab_id = self.active_editor_tab.get_untracked();
         let editor_tabs = self.editor_tabs.get_untracked();
-        let active_editor_tab = active_editor_tab_id
-            .and_then(|id| editor_tabs.get(&id))
-            .cloned();
 
-        let editors = self.editors;
-
-        let active_editor_tab = if let Some(editor_tab) = active_editor_tab {
+        if let Some(editor_tab) =
+            active_editor_tab_id.and_then(|id| editor_tabs.get(&id).cloned())
+        {
             editor_tab
         } else if editor_tabs.is_empty() {
             let editor_tab_id = EditorTabId::next();
@@ -762,287 +791,171 @@ impl MainSplitData {
             let (editor_tab_id, editor_tab) = editor_tabs.iter().next().unwrap();
             self.active_editor_tab.set(Some(*editor_tab_id));
             *editor_tab
-        };
+        }
+    }
 
-        let selected = if !config.editor.show_tab {
-            active_editor_tab.with_untracked(|editor_tab| {
-                for (i, (_, _, child)) in editor_tab.children.iter().enumerate() {
-                    let can_be_selected = match child {
-                        EditorTabChild::Editor(editor_id) => {
-                            if let Some(editor) =
-                                editors.editor_untracked(*editor_id)
-                            {
-                                let doc = editor.doc();
-                                let same_path =
-                                    if let EditorTabChildSource::Editor {
-                                        path,
-                                        ..
-                                    } = &source
-                                    {
-                                        doc.content.with_untracked(|content| {
-                                            content
-                                                .path()
-                                                .map(|p| p == path)
-                                                .unwrap_or(false)
-                                        })
-                                    } else {
-                                        false
-                                    };
-
-                                same_path
-                                    || doc.buffer.with_untracked(|b| b.is_pristine())
-                            } else {
-                                false
-                            }
-                        }
-                        EditorTabChild::Settings(_) => true,
-                        EditorTabChild::ThemeColorSettings(_) => true,
-                        EditorTabChild::Keymap(_) => true,
-                        EditorTabChild::Volt(_, _) => true,
-                    };
-
-                    if can_be_selected {
-                        return Some(i);
-                    }
-                }
-                None
-            })
-        } else {
-            match &source {
-                EditorTabChildSource::Editor { path, .. } => active_editor_tab
-                    .with_untracked(|editor_tab| {
-                        editor_tab.get_editor(editors, path).map(|(i, _)| i)
-                    }),
-                EditorTabChildSource::NewFileEditor => None,
-                EditorTabChildSource::Settings => {
-                    active_editor_tab.with_untracked(|editor_tab| {
-                        editor_tab.children.iter().position(|(_, _, child)| {
-                            matches!(child, EditorTabChild::Settings(_))
-                        })
-                    })
-                }
-                EditorTabChildSource::ThemeColorSettings => active_editor_tab
-                    .with_untracked(|editor_tab| {
-                        editor_tab.children.iter().position(|(_, _, child)| {
-                            matches!(child, EditorTabChild::ThemeColorSettings(_))
-                        })
-                    }),
-                EditorTabChildSource::Keymap => {
-                    active_editor_tab.with_untracked(|editor_tab| {
-                        editor_tab.children.iter().position(|(_, _, child)| {
-                            matches!(child, EditorTabChild::Keymap(_))
-                        })
-                    })
-                }
-                EditorTabChildSource::Volt(id) => {
-                    active_editor_tab.with_untracked(|editor_tab| {
-                        editor_tab.children.iter().position(|(_, _, child)| {
-                            if let EditorTabChild::Volt(_, current_id) = child {
-                                current_id == id
-                            } else {
-                                false
-                            }
-                        })
-                    })
-                }
-            }
-        };
-
-        let new_child_from_source =
-            |editor_tab_id: EditorTabId, source: &EditorTabChildSource| match source
-            {
-                EditorTabChildSource::Editor { doc, .. } => {
-                    let editor_id = editors.new_from_doc(
-                        self.scope,
-                        doc.clone(),
-                        Some(editor_tab_id),
-                        self.common.clone(),
-                    );
-
-                    EditorTabChild::Editor(editor_id)
-                }
-                EditorTabChildSource::NewFileEditor => {
-                    let name = self.get_name_for_new_file();
-                    let doc_content = DocContent::Scratch {
-                        id: BufferId::next(),
-                        name: name.clone(),
-                    };
-                    let doc = Doc::new_content(
-                        self.scope,
-                        doc_content,
-                        self.editors,
-                        self.common.clone(),
-                    );
-                    let doc = Rc::new(doc);
-                    self.scratch_docs.update(|scratch_docs| {
-                        scratch_docs.insert(name, doc.clone());
-                    });
-                    let editor_id = editors.new_from_doc(
-                        self.scope,
-                        doc,
-                        Some(editor_tab_id),
-                        self.common.clone(),
-                    );
-
-                    EditorTabChild::Editor(editor_id)
-                }
-                EditorTabChildSource::Settings => {
-                    EditorTabChild::Settings(SettingsId::next())
-                }
-                EditorTabChildSource::ThemeColorSettings => {
-                    EditorTabChild::ThemeColorSettings(SettingsId::next())
-                }
-                EditorTabChildSource::Keymap => {
-                    EditorTabChild::Keymap(KeymapId::next())
-                }
-                EditorTabChildSource::Volt(id) => {
-                    EditorTabChild::Volt(VoltViewId::next(), id.to_owned())
-                }
-            };
-
-        if let Some(selected) = selected {
-            let (editor_tab_id, current_child) =
-                active_editor_tab.with_untracked(|editor_tab| {
-                    let editor_tab_id = editor_tab.editor_tab_id;
-                    let (_, _, current_child) = &editor_tab.children[selected];
-                    match current_child {
-                        EditorTabChild::Editor(editor_id) => {
-                            if let Some(editor) =
-                                editors.editor_untracked(*editor_id)
-                            {
-                                editor.save_doc_position();
-                            }
-                        }
-                        EditorTabChild::Settings(_) => {}
-                        EditorTabChild::ThemeColorSettings(_) => {}
-                        EditorTabChild::Keymap(_) => {}
-                        EditorTabChild::Volt(_, _) => {}
-                    }
-                    (editor_tab_id, current_child.clone())
-                });
-
-            // firstly, if they are the same type of child, load the new doc to the old editor
-            let is_same = match (&current_child, &source) {
-                (
-                    EditorTabChild::Editor(editor_id),
-                    EditorTabChildSource::Editor { path, doc },
-                ) => {
-                    if let Some(editor) = editors.editor_untracked(*editor_id) {
-                        let same_path = editor
-                            .doc()
-                            .content
-                            .with_untracked(|content| content.path() == Some(path));
-                        if !same_path {
-                            editor.update_doc(doc.clone());
-                            editor.cursor().set(Cursor::origin(false));
-                        }
-                    }
-
-                    true
-                }
-                (EditorTabChild::Settings(_), EditorTabChildSource::Settings) => {
-                    true
-                }
-                _ => false,
-            };
-            if is_same {
-                let (_, _, child) = active_editor_tab.with_untracked(|editor_tab| {
-                    editor_tab.children[selected].clone()
-                });
-                active_editor_tab.update(|editor_tab| {
-                    editor_tab.active = selected;
-                });
-                return child;
-            }
-
-            // We're loading a different kind of child, clean up the old resources
-            match &current_child {
-                EditorTabChild::Editor(editor_id) => {
-                    self.remove_editor(*editor_id);
-                }
-                EditorTabChild::Settings(_) => {}
-                EditorTabChild::ThemeColorSettings(_) => {}
-                EditorTabChild::Keymap(_) => {}
-                EditorTabChild::Volt(_, _) => {}
-            }
-
-            // Now loading the new child
-            let child = new_child_from_source(editor_tab_id, &source);
-            active_editor_tab.update(|editor_tab| {
-                editor_tab.children[selected] = (
-                    editor_tab.scope.create_rw_signal(0),
-                    editor_tab.scope.create_rw_signal(Rect::ZERO),
-                    child.clone(),
+    /// Creates an `EditorTabChild` from the given source description.
+    fn new_child_from_source(
+        &self,
+        editor_tab_id: EditorTabId,
+        source: &EditorTabChildSource,
+    ) -> EditorTabChild {
+        match source {
+            EditorTabChildSource::Editor { doc, .. } => {
+                let editor_id = self.editors.new_from_doc(
+                    self.scope,
+                    doc.clone(),
+                    Some(editor_tab_id),
+                    self.common.clone(),
                 );
+                EditorTabChild::Editor(editor_id)
+            }
+            EditorTabChildSource::NewFileEditor => {
+                let name = self.get_name_for_new_file();
+                let doc_content = DocContent::Scratch {
+                    id: BufferId::next(),
+                    name: name.clone(),
+                };
+                let doc = Doc::new_content(
+                    self.scope,
+                    doc_content,
+                    self.editors,
+                    self.common.clone(),
+                );
+                let doc = Rc::new(doc);
+                self.scratch_docs.update(|scratch_docs| {
+                    scratch_docs.insert(name, doc.clone());
+                });
+                let editor_id = self.editors.new_from_doc(
+                    self.scope,
+                    doc,
+                    Some(editor_tab_id),
+                    self.common.clone(),
+                );
+                EditorTabChild::Editor(editor_id)
+            }
+            EditorTabChildSource::Settings => {
+                EditorTabChild::Settings(SettingsId::next())
+            }
+            EditorTabChildSource::ThemeColorSettings => {
+                EditorTabChild::ThemeColorSettings(ThemeColorSettingsId::next())
+            }
+            EditorTabChildSource::Keymap => EditorTabChild::Keymap(KeymapId::next()),
+            EditorTabChildSource::Volt(id) => {
+                EditorTabChild::Volt(VoltViewId::next(), id.to_owned())
+            }
+        }
+    }
+
+    /// Handles the case where a matching child was found at `selected` in the active tab.
+    /// If the existing child is the same type, reuses it (loading the new doc into the
+    /// existing editor). Otherwise, replaces it with a new child.
+    fn reuse_or_replace_child(
+        &self,
+        editor_tab: RwSignal<EditorTabData>,
+        selected: usize,
+        source: &EditorTabChildSource,
+    ) -> EditorTabChild {
+        let editors = self.editors;
+        let (editor_tab_id, current_child) =
+            editor_tab.with_untracked(|editor_tab| {
+                let (_, _, current_child) = &editor_tab.children[selected];
+                if let EditorTabChild::Editor(editor_id) = current_child {
+                    if let Some(editor) = editors.editor_untracked(*editor_id) {
+                        editor.save_doc_position();
+                    }
+                }
+                (editor_tab.editor_tab_id, current_child.clone())
+            });
+
+        // If same type of child, load the new doc into the existing editor
+        let is_same = match (&current_child, source) {
+            (
+                EditorTabChild::Editor(editor_id),
+                EditorTabChildSource::Editor { path, doc },
+            ) => {
+                if let Some(editor) = editors.editor_untracked(*editor_id) {
+                    let same_path = editor
+                        .doc()
+                        .content
+                        .with_untracked(|content| content.path() == Some(path));
+                    if !same_path {
+                        editor.update_doc(doc.clone());
+                        editor.cursor().set(Cursor::origin(false));
+                    }
+                }
+                true
+            }
+            (EditorTabChild::Settings(_), EditorTabChildSource::Settings) => true,
+            _ => false,
+        };
+        if is_same {
+            let (_, _, child) = editor_tab
+                .with_untracked(|editor_tab| editor_tab.children[selected].clone());
+            editor_tab.update(|editor_tab| {
                 editor_tab.active = selected;
             });
             return child;
         }
 
-        // check file exists in non active editor tabs
-        if config.editor.show_tab && !same_editor_tab {
-            for (editor_tab_id, editor_tab) in &editor_tabs {
-                if Some(*editor_tab_id) != active_editor_tab_id {
-                    if let Some(index) =
-                        editor_tab.with_untracked(|editor_tab| match &source {
-                            EditorTabChildSource::Editor { path, .. } => editor_tab
-                                .get_editor(editors, path)
-                                .map(|(index, _)| index),
-                            EditorTabChildSource::Settings => editor_tab
-                                .children
-                                .iter()
-                                .position(|(_, _, child)| {
-                                    matches!(child, EditorTabChild::Settings(_))
-                                }),
-                            EditorTabChildSource::ThemeColorSettings => editor_tab
-                                .children
-                                .iter()
-                                .position(|(_, _, child)| {
-                                    matches!(
-                                        child,
-                                        EditorTabChild::ThemeColorSettings(_)
-                                    )
-                                }),
-                            EditorTabChildSource::Keymap => editor_tab
-                                .children
-                                .iter()
-                                .position(|(_, _, child)| {
-                                    matches!(child, EditorTabChild::Keymap(_))
-                                }),
-                            EditorTabChildSource::Volt(id) => editor_tab
-                                .children
-                                .iter()
-                                .position(|(_, _, child)| {
-                                    if let EditorTabChild::Volt(_, current_id) =
-                                        child
-                                    {
-                                        current_id == id
-                                    } else {
-                                        false
-                                    }
-                                }),
-                            EditorTabChildSource::NewFileEditor => None,
-                        })
-                    {
-                        self.active_editor_tab.set(Some(*editor_tab_id));
-                        editor_tab.update(|editor_tab| {
-                            editor_tab.active = index;
-                        });
-                        let (_, _, child) =
-                            editor_tab.with_untracked(|editor_tab| {
-                                editor_tab.children[index].clone()
-                            });
-                        return child;
-                    }
-                }
-            }
+        // Different kind of child — clean up old resources
+        if let EditorTabChild::Editor(editor_id) = &current_child {
+            self.remove_editor(*editor_id);
         }
 
-        let editor_tab_id =
-            active_editor_tab.with_untracked(|editor_tab| editor_tab.editor_tab_id);
-        let child = new_child_from_source(editor_tab_id, &source);
+        // Replace with the new child
+        let child = self.new_child_from_source(editor_tab_id, source);
+        editor_tab.update(|editor_tab| {
+            editor_tab.children[selected] = (
+                editor_tab.scope.create_rw_signal(0),
+                editor_tab.scope.create_rw_signal(Rect::ZERO),
+                child.clone(),
+            );
+            editor_tab.active = selected;
+        });
+        child
+    }
 
-        active_editor_tab.update(|editor_tab| {
+    /// Searches non-active editor tabs for a child matching the source.
+    /// If found, activates that tab and returns the child.
+    fn find_in_other_tabs(
+        &self,
+        source: &EditorTabChildSource,
+    ) -> Option<EditorTabChild> {
+        let active_editor_tab_id = self.active_editor_tab.get_untracked();
+        let editor_tabs = self.editor_tabs.get_untracked();
+        let editors = self.editors;
+
+        for (editor_tab_id, editor_tab) in &editor_tabs {
+            if Some(*editor_tab_id) == active_editor_tab_id {
+                continue;
+            }
+            if let Some(index) =
+                editor_tab.with_untracked(|t| t.find_matching_child(source, editors))
+            {
+                self.active_editor_tab.set(Some(*editor_tab_id));
+                editor_tab.update(|editor_tab| {
+                    editor_tab.active = index;
+                });
+                let (_, _, child) = editor_tab
+                    .with_untracked(|editor_tab| editor_tab.children[index].clone());
+                return Some(child);
+            }
+        }
+        None
+    }
+
+    /// Creates a new child from the source and inserts it after the active position.
+    fn insert_new_child(
+        &self,
+        editor_tab: RwSignal<EditorTabData>,
+        source: &EditorTabChildSource,
+    ) -> EditorTabChild {
+        let editor_tab_id =
+            editor_tab.with_untracked(|editor_tab| editor_tab.editor_tab_id);
+        let child = self.new_child_from_source(editor_tab_id, source);
+
+        editor_tab.update(|editor_tab| {
             let active = editor_tab
                 .active
                 .min(editor_tab.children.len().saturating_sub(1));

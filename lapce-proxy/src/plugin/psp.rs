@@ -209,10 +209,8 @@ impl ResponseSender {
     }
 
     pub fn send(&self, result: impl Serialize) {
-        let result = serde_json::to_value(result).map_err(|e| RpcError {
-            code: 0,
-            message: e.to_string(),
-        });
+        let result =
+            serde_json::to_value(result).map_err(|e| RpcError::new(e.to_string()));
         if let Err(err) = self.tx.send(result) {
             tracing::error!("{:?}", err);
         }
@@ -402,12 +400,7 @@ impl PluginServerRpcHandler {
             check,
             ResponseHandler::Chan(tx),
         );
-        rx.recv().unwrap_or_else(|_| {
-            Err(RpcError {
-                code: 0,
-                message: "io error".to_string(),
-            })
-        })
+        rx.recv().unwrap_or_else(|_| Err(RpcError::new("io error")))
     }
 
     pub fn server_request_async<P: Serialize>(
@@ -491,10 +484,7 @@ impl PluginServerRpcHandler {
                     {
                         self.send_server_request(id, &method, params, rh);
                     } else {
-                        rh.invoke(Err(RpcError {
-                            code: 0,
-                            message: "server not capable".to_string(),
-                        }));
+                        rh.invoke(Err(RpcError::new("server not capable")));
                     }
                 }
                 PluginServerRpc::ServerNotification {
@@ -1340,10 +1330,7 @@ impl PluginHostHandler {
             self.server_capabilities.semantic_tokens_provider.as_ref(),
             &tokens,
         )
-        .ok_or_else(|| RpcError {
-            code: 0,
-            message: "can't get styles".to_string(),
-        });
+        .ok_or_else(|| RpcError::new("can't get styles"));
         f.call(result);
     }
 

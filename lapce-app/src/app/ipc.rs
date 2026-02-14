@@ -62,14 +62,18 @@ pub fn load_shell_env() {
 
     env.split('\n')
         .filter_map(|line| line.split_once('='))
-        .for_each(|(key, value)| unsafe {
+        .for_each(|(key, value)| {
             let value = value.trim_matches('\r');
             if let Ok(v) = std::env::var(key) {
                 if v != value {
                     warn!("Overwriting '{key}', previous value: '{v}', new value '{value}'");
                 }
             };
-            std::env::set_var(key, value);
+            // SAFETY: This is called once at startup in `launch()` before any
+            // other threads are spawned, so there are no concurrent readers of
+            // the environment. `set_var` is unsafe in Rust 2024 because it is
+            // not thread-safe, but single-threaded use at process init is sound.
+            unsafe { std::env::set_var(key, value) };
         })
 }
 

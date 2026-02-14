@@ -158,7 +158,10 @@ impl ProxyHandler for Dispatcher {
                 self.proxy_rpc.shutdown();
             }
             Update { path, delta, rev } => {
-                let buffer = self.buffers.get_mut(&path).unwrap();
+                let Some(buffer) = self.buffers.get_mut(&path) else {
+                    tracing::error!("Update for unknown buffer: {path:?}");
+                    return;
+                };
                 // Clone the old text before applying the delta because the LSP
                 // needs both old and new text to compute incremental changes.
                 let old_text = buffer.rope.clone();
@@ -234,13 +237,7 @@ impl ProxyHandler for Dispatcher {
                 );
             }
             BufferHead { .. } => {
-                self.respond_rpc(
-                    id,
-                    Err(RpcError {
-                        code: 0,
-                        message: "git support removed".to_string(),
-                    }),
-                );
+                self.respond_rpc(id, Err(RpcError::new("git support removed")));
             }
             GlobalSearch {
                 pattern,
@@ -434,15 +431,9 @@ impl ProxyHandler for Dispatcher {
                             }),
                             DocumentDiagnosticReportResult::Report(
                                 DocumentDiagnosticReport::Unchanged(_),
-                            ) => Err(RpcError {
-                                code: 0,
-                                message: "unchanged".to_string(),
-                            }),
+                            ) => Err(RpcError::new("unchanged")),
                             DocumentDiagnosticReportResult::Partial(_) => {
-                                Err(RpcError {
-                                    code: 0,
-                                    message: "partial not supported".to_string(),
-                                })
+                                Err(RpcError::new("partial not supported"))
                             }
                         });
                         proxy_rpc.handle_response(id, result);
@@ -655,10 +646,7 @@ impl ProxyHandler for Dispatcher {
 
                             ProxyResponse::ReadDirResponse { items }
                         })
-                        .map_err(|e| RpcError {
-                            code: 0,
-                            message: e.to_string(),
-                        });
+                        .map_err(|e| RpcError::new(e.to_string()));
                     proxy_rpc.handle_response(id, result);
                 });
             }
@@ -667,18 +655,19 @@ impl ProxyHandler for Dispatcher {
                 path,
                 create_parents,
             } => {
-                let buffer = self.buffers.get_mut(&path).unwrap();
-                let result = buffer
-                    .save(rev, create_parents)
-                    .map(|_r| {
-                        self.catalog_rpc
-                            .did_save_text_document(&path, buffer.rope.clone());
-                        ProxyResponse::SaveResponse {}
-                    })
-                    .map_err(|e| RpcError {
-                        code: 0,
-                        message: e.to_string(),
-                    });
+                let result = match self.buffers.get_mut(&path) {
+                    Some(buffer) => buffer
+                        .save(rev, create_parents)
+                        .map(|_r| {
+                            self.catalog_rpc
+                                .did_save_text_document(&path, buffer.rope.clone());
+                            ProxyResponse::SaveResponse {}
+                        })
+                        .map_err(|e| RpcError::new(e.to_string())),
+                    None => {
+                        Err(RpcError::new(format!("No buffer for path: {path:?}")))
+                    }
+                };
                 self.respond_rpc(id, result);
             }
             SaveBufferAs {
@@ -694,10 +683,7 @@ impl ProxyHandler for Dispatcher {
                 let result = buffer
                     .save(rev, create_parents)
                     .map(|_| ProxyResponse::Success {})
-                    .map_err(|e| RpcError {
-                        code: 0,
-                        message: e.to_string(),
-                    });
+                    .map_err(|e| RpcError::new(e.to_string()));
                 self.buffers.insert(path, buffer);
                 self.respond_rpc(id, result);
             }
@@ -712,28 +698,19 @@ impl ProxyHandler for Dispatcher {
                             .open(path)
                     })
                     .map(|_| ProxyResponse::Success {})
-                    .map_err(|e| RpcError {
-                        code: 0,
-                        message: e.to_string(),
-                    });
+                    .map_err(|e| RpcError::new(e.to_string()));
                 self.respond_rpc(id, result);
             }
             CreateDirectory { path } => {
                 let result = std::fs::create_dir_all(path)
                     .map(|_| ProxyResponse::Success {})
-                    .map_err(|e| RpcError {
-                        code: 0,
-                        message: e.to_string(),
-                    });
+                    .map_err(|e| RpcError::new(e.to_string()));
                 self.respond_rpc(id, result);
             }
             TrashPath { path } => {
                 let result = trash::delete(path)
                     .map(|_| ProxyResponse::Success {})
-                    .map_err(|e| RpcError {
-                        code: 0,
-                        message: e.to_string(),
-                    });
+                    .map_err(|e| RpcError::new(e.to_string()));
                 self.respond_rpc(id, result);
             }
             DuplicatePath {
@@ -743,27 +720,18 @@ impl ProxyHandler for Dispatcher {
                 // We first check if the destination already exists, because copy can overwrite it
                 // and that's not the default behavior we want for when a user duplicates a document.
                 let result = if new_path.exists() {
-                    Err(RpcError {
-                        code: 0,
-                        message: format!("{new_path:?} already exists"),
-                    })
+                    Err(RpcError::new(format!("{new_path:?} already exists")))
                 } else {
                     if let Some(parent) = new_path.parent() {
                         if let Err(error) = std::fs::create_dir_all(parent) {
-                            let result = Err(RpcError {
-                                code: 0,
-                                message: error.to_string(),
-                            });
+                            let result = Err(RpcError::new(error.to_string()));
                             self.respond_rpc(id, result);
                             return;
                         }
                     }
                     std::fs::copy(existing_path, new_path)
                         .map(|_| ProxyResponse::Success {})
-                        .map_err(|e| RpcError {
-                            code: 0,
-                            message: e.to_string(),
-                        })
+                        .map_err(|e| RpcError::new(e.to_string()))
                 };
                 self.respond_rpc(id, result);
             }
@@ -842,7 +810,7 @@ impl ProxyHandler for Dispatcher {
 
                         ProxyResponse::CreatePathResponse { path: to }
                     })
-                    .map_err(|message| RpcError { code: 0, message });
+                    .map_err(RpcError::new);
 
                 self.respond_rpc(id, result);
             }
@@ -874,7 +842,7 @@ impl ProxyHandler for Dispatcher {
                             ))
                         }
                     })
-                    .map_err(|message| RpcError { code: 0, message });
+                    .map_err(RpcError::new);
 
                 self.respond_rpc(id, result);
             }
@@ -1152,18 +1120,12 @@ fn search_in_path(
     } else {
         matcher.build_literals(&[&regex::escape(pattern)])
     };
-    let matcher = matcher.map_err(|_| RpcError {
-        code: 0,
-        message: "can't build matcher".to_string(),
-    })?;
+    let matcher = matcher.map_err(|_| RpcError::new("can't build matcher"))?;
     let mut searcher = SearcherBuilder::new().build();
 
     for path in paths {
         if current_id.load(Ordering::SeqCst) != id {
-            return Err(RpcError {
-                code: 0,
-                message: "expired search job".to_string(),
-            });
+            return Err(RpcError::new("expired search job"));
         }
 
         if path.is_file() {

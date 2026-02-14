@@ -354,6 +354,77 @@ impl EditorTabData {
         None
     }
 
+    /// Finds the index of a child that matches the given source type.
+    /// Used for tab deduplication: avoids opening a second tab for the same content.
+    pub fn find_matching_child(
+        &self,
+        source: &EditorTabChildSource,
+        editors: Editors,
+    ) -> Option<usize> {
+        match source {
+            EditorTabChildSource::Editor { path, .. } => {
+                self.get_editor(editors, path).map(|(i, _)| i)
+            }
+            EditorTabChildSource::NewFileEditor => None,
+            EditorTabChildSource::Settings => self
+                .children
+                .iter()
+                .position(|(_, _, child)| matches!(child, EditorTabChild::Settings(_))),
+            EditorTabChildSource::ThemeColorSettings => {
+                self.children.iter().position(|(_, _, child)| {
+                    matches!(child, EditorTabChild::ThemeColorSettings(_))
+                })
+            }
+            EditorTabChildSource::Keymap => self
+                .children
+                .iter()
+                .position(|(_, _, child)| matches!(child, EditorTabChild::Keymap(_))),
+            EditorTabChildSource::Volt(id) => {
+                self.children.iter().position(|(_, _, child)| {
+                    matches!(child, EditorTabChild::Volt(_, current_id) if current_id == id)
+                })
+            }
+        }
+    }
+
+    /// Finds the first reusable child slot when tabs are hidden (show_tab=false).
+    /// A slot is reusable if it matches the source path or contains a pristine editor.
+    /// Non-editor children (Settings, Keymap, etc.) are always reusable.
+    pub fn find_reusable_child(
+        &self,
+        source: &EditorTabChildSource,
+        editors: Editors,
+    ) -> Option<usize> {
+        for (i, (_, _, child)) in self.children.iter().enumerate() {
+            let can_be_selected = match child {
+                EditorTabChild::Editor(editor_id) => {
+                    if let Some(editor) = editors.editor_untracked(*editor_id) {
+                        let doc = editor.doc();
+                        let same_path = if let EditorTabChildSource::Editor {
+                            path,
+                            ..
+                        } = source
+                        {
+                            doc.content.with_untracked(|content| {
+                                content.path().map(|p| p == path).unwrap_or(false)
+                            })
+                        } else {
+                            false
+                        };
+                        same_path || doc.buffer.with_untracked(|b| b.is_pristine())
+                    } else {
+                        false
+                    }
+                }
+                _ => true,
+            };
+            if can_be_selected {
+                return Some(i);
+            }
+        }
+        None
+    }
+
     pub fn tab_info(&self, data: &WorkspaceData) -> EditorTabInfo {
         EditorTabInfo {
             active: self.active,

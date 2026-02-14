@@ -190,12 +190,7 @@ impl CoreRpcHandler {
         if let Err(err) = self.tx.send(CoreRpc::Request(id, request)) {
             tracing::error!("{:?}", err);
         }
-        rx.recv().unwrap_or_else(|_| {
-            Err(RpcError {
-                code: 0,
-                message: "io error".to_string(),
-            })
-        })
+        rx.recv().unwrap_or_else(|_| Err(RpcError::new("io error")))
     }
 
     pub fn shutdown(&self) {
