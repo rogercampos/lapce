@@ -65,7 +65,6 @@ mod ipc;
 mod logging;
 mod lsp_views;
 mod menu;
-mod palette_view;
 mod ui_components;
 
 pub use menu::window_menu;
@@ -728,8 +727,8 @@ fn empty_workspace_view(workspace_data: Rc<WorkspaceData>) -> impl View {
 
 /// The full view for a single workspace tab. This is the root of the per-workspace UI tree.
 /// It uses a layered stack where the base layer (title + workbench + status bar) is overlaid
-/// by floating elements in z-order: completion, hover, code actions, rename, palette,
-/// search modal, recent files, about popup, plugin popup, and alert dialog.
+/// by floating elements in z-order: completion, hover, code actions, rename,
+/// go-to-file, search modal, recent files, about popup, and alert dialog.
 /// If no folder is open, shows a simplified "Open Folder" landing page instead.
 fn workspace_view(workspace_data: Rc<WorkspaceData>) -> impl View {
     let window_origin = workspace_data.common.window_origin;
@@ -760,7 +759,6 @@ fn workspace_view(workspace_data: Rc<WorkspaceData>) -> impl View {
             lsp_views::hover(workspace_data.clone()),
             lsp_views::code_action(workspace_data.clone()),
             lsp_views::rename(workspace_data.clone()),
-            palette_view::palette(workspace_data.clone()),
             go_to_file::go_to_file_popup(workspace_data.clone()),
             crate::search_modal::search_modal_popup(workspace_data.clone()),
             recent_files::recent_files_popup(workspace_data.clone()),

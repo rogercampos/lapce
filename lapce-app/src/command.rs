@@ -294,14 +294,6 @@ pub enum LapceWorkbenchCommand {
     #[strum(serialize = "focus_editor")]
     FocusEditor,
 
-    #[strum(serialize = "change_file_language")]
-    #[strum(message = "Change current file language")]
-    ChangeFileLanguage,
-
-    #[strum(serialize = "change_file_line_ending")]
-    #[strum(message = "Change current file line ending")]
-    ChangeFileLineEnding,
-
     #[strum(serialize = "next_editor_tab")]
     #[strum(message = "Next Editor Tab")]
     NextEditorTab,

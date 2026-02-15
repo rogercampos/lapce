@@ -69,7 +69,6 @@ use crate::{
     listener::Listener,
     lsp::path_from_url,
     main_split::{MainSplitData, SplitData, SplitDirection, SplitMoveDirection},
-    palette::{PaletteData, PaletteStatus, kind::PaletteKind},
     panel::{
         data::{PanelData, PanelSection, default_panel_order},
         kind::PanelKind,
@@ -92,7 +91,6 @@ use crate::{
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Focus {
     Workbench,
-    Palette,
     CodeAction,
     Rename,
     AboutPopup,
@@ -150,7 +148,7 @@ impl std::fmt::Debug for CommonData {
 }
 
 /// The per-workspace-tab state container. Each OS window tab has its own WorkspaceData
-/// with its own proxy process, editor splits, panels, palette, and configuration.
+/// with its own proxy process, editor splits, panels, and configuration.
 /// This is the central orchestrator that wires together all subsystems and handles
 /// command dispatch via the three command listeners (lapce, workbench, internal).
 #[derive(Clone)]
@@ -158,7 +156,6 @@ pub struct WorkspaceData {
     pub scope: Scope,
     pub workspace_id: WorkspaceId,
     pub workspace: Arc<LapceWorkspace>,
-    pub palette: PaletteData,
     pub main_split: MainSplitData,
     pub file_explorer: FileExplorerData,
     pub panel: PanelData,
@@ -263,8 +260,8 @@ impl KeyPressFocus for WorkspaceData {
 impl WorkspaceData {
     /// Master initialization: creates the entire workspace state graph.
     /// Order matters: proxy must be started before components that send RPC calls,
-    /// and the split tree must be populated from persisted info before the palette
-    /// (which references main_split) is created.
+    /// and the split tree must be populated from persisted info before components
+    /// that reference main_split are created.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         cx: Scope,
@@ -381,13 +378,6 @@ impl WorkspaceData {
             });
         }
 
-        let palette = PaletteData::new(
-            cx,
-            workspace.clone(),
-            main_split.clone(),
-            common.clone(),
-        );
-
         let title_height = cx.create_rw_signal(0.0);
         let status_height = cx.create_rw_signal(0.0);
         let panel_available_size = cx.create_memo(move |_| {
@@ -455,7 +445,6 @@ impl WorkspaceData {
             scope: cx,
             workspace_id: WorkspaceId::next(),
             workspace,
-            palette,
             main_split,
             panel,
             file_explorer,
@@ -566,14 +555,10 @@ impl WorkspaceData {
             | CommandKind::Focus(_)
             | CommandKind::Edit(_)
             | CommandKind::Move(_) => {
-                if self.palette.status.get_untracked() != PaletteStatus::Inactive {
-                    self.palette.run_command(&cmd, None, Modifiers::empty());
-                } else if let Some(editor_data) =
+                if let Some(editor_data) =
                     self.main_split.active_editor.get_untracked()
                 {
                     editor_data.run_command(&cmd, None, Modifiers::empty());
-                } else {
-                    // TODO: dispatch to current focused view?
                 }
             }
             CommandKind::MotionMode(_) => {}
@@ -793,18 +778,12 @@ impl WorkspaceData {
                 }
             }
 
-            // ==== Palette Commands ====
+            // ==== Navigation ====
             GoToLine => {
                 self.go_to_line_data.open();
             }
             GoToFile => {
                 self.go_to_file_data.open();
-            }
-            ChangeFileLanguage => {
-                self.palette.run(PaletteKind::Language);
-            }
-            ChangeFileLineEnding => {
-                self.palette.run(PaletteKind::LineEnding);
             }
             // ==== UI ====
             ZoomIn => {
@@ -1545,7 +1524,6 @@ impl WorkspaceData {
         let keypress = self.common.keypress.get_untracked();
         let handle = match focus {
             Focus::Workbench => self.main_split.key_down(event, &keypress),
-            Focus::Palette => Some(keypress.key_down(event, &self.palette)),
             Focus::CodeAction => {
                 let code_action = self.code_action.get_untracked();
                 Some(keypress.key_down(event, &code_action))

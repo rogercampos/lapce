@@ -26,7 +26,6 @@ pub mod listener;
 pub mod lsp;
 pub mod main_split;
 pub mod markdown;
-pub mod palette;
 pub mod panel;
 pub mod proxy;
 pub mod recent_files;

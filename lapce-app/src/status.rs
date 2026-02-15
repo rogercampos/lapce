@@ -18,7 +18,6 @@ use crate::{
     app::clickable_icon,
     config::{LapceConfig, color::LapceColor, icon::LapceIcons},
     editor::EditorData,
-    palette::kind::PaletteKind,
     panel::position::PanelContainerPosition,
     workspace_data::{WorkProgress, WorkspaceData},
 };
@@ -26,10 +25,7 @@ use crate::{
 /// The status bar at the bottom of the workspace. Layout is a three-section row:
 /// Left: diagnostic counts (errors/warnings) + LSP progress indicators
 /// Center-Right: panel toggle buttons (left, bottom, right panels)
-/// Far-Right: cursor position, line ending, language mode (click to open palette)
-///
-/// Each right-side status text is clickable and opens the relevant palette mode
-/// (e.g. clicking line info opens "Go to Line", clicking language opens "Change Language").
+/// Far-Right: cursor position (clickable, opens Go to Line), line ending, language
 pub fn status(
     workspace_data: Rc<WorkspaceData>,
     status_height: RwSignal<f64>,
@@ -38,7 +34,6 @@ pub fn status(
     let diagnostics = workspace_data.main_split.diagnostics;
     let editor = workspace_data.main_split.active_editor;
     let panel = workspace_data.panel.clone();
-    let palette = workspace_data.palette.clone();
     let diagnostic_count = create_memo(move |_| {
         let mut errors = 0;
         let mut warnings = 0;
@@ -224,29 +219,73 @@ pub fn status(
             .on_click_stop(move |_| {
                 go_to_line_data.open();
             });
-            let palette_clone = palette.clone();
-            let line_ending_info = status_text(config, editor, move || {
+            let line_ending_info = label(move || {
                 if let Some(editor) = editor.get() {
                     let doc = editor.doc_signal().get();
-                    doc.buffer.with(|b| b.line_ending()).as_str()
+                    doc.buffer.with(|b| b.line_ending()).as_str().to_string()
                 } else {
-                    ""
+                    String::new()
                 }
             })
-            .on_click_stop(move |_| {
-                palette_clone.run(PaletteKind::LineEnding);
+            .style(move |s| {
+                let config = config.get();
+                let display = if editor
+                    .get()
+                    .map(|editor| {
+                        editor.doc_signal().get().content.with(|c| {
+                            use crate::doc::DocContent;
+                            matches!(
+                                c,
+                                DocContent::File { .. } | DocContent::Scratch { .. }
+                            )
+                        })
+                    })
+                    .unwrap_or(false)
+                {
+                    Display::Flex
+                } else {
+                    Display::None
+                };
+                s.display(display)
+                    .height_full()
+                    .padding_horiz(10.0)
+                    .items_center()
+                    .color(config.color(LapceColor::STATUS_FOREGROUND))
+                    .selectable(false)
             });
-            let palette_clone = palette.clone();
-            let language_info = status_text(config, editor, move || {
+            let language_info = label(move || {
                 if let Some(editor) = editor.get() {
                     let doc = editor.doc_signal().get();
-                    doc.syntax().with(|s| s.language.name())
+                    doc.syntax().with(|s| s.language.name().to_string())
                 } else {
-                    "unknown"
+                    "unknown".to_string()
                 }
             })
-            .on_click_stop(move |_| {
-                palette_clone.run(PaletteKind::Language);
+            .style(move |s| {
+                let config = config.get();
+                let display = if editor
+                    .get()
+                    .map(|editor| {
+                        editor.doc_signal().get().content.with(|c| {
+                            use crate::doc::DocContent;
+                            matches!(
+                                c,
+                                DocContent::File { .. } | DocContent::Scratch { .. }
+                            )
+                        })
+                    })
+                    .unwrap_or(false)
+                {
+                    Display::Flex
+                } else {
+                    Display::None
+                };
+                s.display(display)
+                    .height_full()
+                    .padding_horiz(10.0)
+                    .items_center()
+                    .color(config.color(LapceColor::STATUS_FOREGROUND))
+                    .selectable(false)
             });
             (cursor_info, line_ending_info, language_info)
         })

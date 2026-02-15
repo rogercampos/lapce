@@ -2064,10 +2064,7 @@ fn should_blink(
         let Some(focus) = focus.try_get_untracked() else {
             return false;
         };
-        if matches!(
-            focus,
-            Focus::Workbench | Focus::Palette | Focus::Panel(PanelKind::Search)
-        ) {
+        if matches!(focus, Focus::Workbench | Focus::Panel(PanelKind::Search)) {
             return true;
         }
 
