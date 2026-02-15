@@ -31,3 +31,37 @@ impl PanelKind {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn svg_name_file_explorer() {
+        assert_eq!(
+            PanelKind::FileExplorer.svg_name(),
+            LapceIcons::FILE_EXPLORER
+        );
+    }
+
+    #[test]
+    fn svg_name_search() {
+        assert_eq!(PanelKind::Search.svg_name(), LapceIcons::SEARCH);
+    }
+
+    #[test]
+    fn default_position_file_explorer() {
+        assert_eq!(
+            PanelKind::FileExplorer.default_position(),
+            PanelPosition::LeftTop
+        );
+    }
+
+    #[test]
+    fn default_position_search() {
+        assert_eq!(
+            PanelKind::Search.default_position(),
+            PanelPosition::BottomLeft
+        );
+    }
+}

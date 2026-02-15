@@ -165,4 +165,108 @@ mod tests {
         assert_eq!(offset_utf16_to_utf8_str("×a", 1), 2);
         assert_eq!(offset_utf16_to_utf8_str("×a", 2), 3);
     }
+
+    // --- 3-byte UTF-8 (CJK characters) ---
+
+    #[test]
+    fn utf8_to_utf16_cjk() {
+        // '中' is U+4E2D, 3 bytes in UTF-8, 1 code unit in UTF-16
+        let text = "a中b";
+        assert_eq!(offset_utf8_to_utf16_str(text, 0), 0); // before 'a'
+        assert_eq!(offset_utf8_to_utf16_str(text, 1), 1); // before '中' (byte 1)
+        assert_eq!(offset_utf8_to_utf16_str(text, 2), 2); // inside '中' -> snaps to char boundary
+        assert_eq!(offset_utf8_to_utf16_str(text, 3), 2); // still inside '中'
+        assert_eq!(offset_utf8_to_utf16_str(text, 4), 2); // before 'b'
+        assert_eq!(offset_utf8_to_utf16_str(text, 5), 3); // end
+    }
+
+    #[test]
+    fn utf16_to_utf8_cjk() {
+        // '中' is U+4E2D, 3 bytes in UTF-8, 1 code unit in UTF-16
+        let text = "a中b";
+        assert_eq!(offset_utf16_to_utf8_str(text, 0), 0); // before 'a'
+        assert_eq!(offset_utf16_to_utf8_str(text, 1), 1); // before '中'
+        assert_eq!(offset_utf16_to_utf8_str(text, 2), 4); // before 'b'
+        assert_eq!(offset_utf16_to_utf8_str(text, 3), 5); // end
+    }
+
+    // --- 4-byte UTF-8 (emoji / supplementary plane, surrogate pairs in UTF-16) ---
+
+    #[test]
+    fn utf8_to_utf16_emoji() {
+        // '😀' is U+1F600, 4 bytes in UTF-8, 2 code units in UTF-16 (surrogate pair)
+        let text = "a😀b";
+        assert_eq!(offset_utf8_to_utf16_str(text, 0), 0); // before 'a'
+        assert_eq!(offset_utf8_to_utf16_str(text, 1), 1); // before '😀'
+        // offsets 2,3,4 are inside '😀' -> snap to start of char
+        assert_eq!(offset_utf8_to_utf16_str(text, 2), 3);
+        assert_eq!(offset_utf8_to_utf16_str(text, 3), 3);
+        assert_eq!(offset_utf8_to_utf16_str(text, 4), 3);
+        assert_eq!(offset_utf8_to_utf16_str(text, 5), 3); // before 'b'
+        assert_eq!(offset_utf8_to_utf16_str(text, 6), 4); // end
+    }
+
+    #[test]
+    fn utf16_to_utf8_emoji() {
+        // '😀' is U+1F600, 4 bytes in UTF-8, 2 code units in UTF-16
+        let text = "a😀b";
+        assert_eq!(offset_utf16_to_utf8_str(text, 0), 0); // before 'a'
+        assert_eq!(offset_utf16_to_utf8_str(text, 1), 1); // before '😀'
+        // offset 2 is inside the surrogate pair -> snaps
+        assert_eq!(offset_utf16_to_utf8_str(text, 2), 5);
+        assert_eq!(offset_utf16_to_utf8_str(text, 3), 5); // before 'b'
+        assert_eq!(offset_utf16_to_utf8_str(text, 4), 6); // end
+    }
+
+    // --- Roundtrip tests ---
+
+    #[test]
+    fn roundtrip_ascii() {
+        let text = "hello world";
+        for i in 0..=text.len() {
+            let utf16 = offset_utf8_to_utf16_str(text, i);
+            let back = offset_utf16_to_utf8_str(text, utf16);
+            assert_eq!(back, i, "roundtrip failed for ascii offset {i}");
+        }
+    }
+
+    #[test]
+    fn roundtrip_mixed_multibyte() {
+        // Mix of 1-byte (ASCII), 2-byte (×), 3-byte (中), 4-byte (😀)
+        let text = "a×中😀z";
+        // Valid utf8 char boundaries
+        let boundaries: Vec<usize> = text.char_indices().map(|(i, _)| i).collect();
+        let mut boundaries_with_end = boundaries.clone();
+        boundaries_with_end.push(text.len());
+
+        for &offset in &boundaries_with_end {
+            let utf16 = offset_utf8_to_utf16_str(text, offset);
+            let back = offset_utf16_to_utf8_str(text, utf16);
+            assert_eq!(
+                back, offset,
+                "roundtrip failed for offset {offset} (utf16={utf16})"
+            );
+        }
+    }
+
+    #[test]
+    fn roundtrip_utf16_direction() {
+        // Verify utf16->utf8->utf16 roundtrip at char boundaries
+        let text = "a×中😀z";
+        // UTF-16 length: a(1) + ×(1) + 中(1) + 😀(2) + z(1) = 6
+        let utf16_len = text.chars().map(|c| c.len_utf16()).sum::<usize>();
+        assert_eq!(utf16_len, 6);
+
+        // Check at each valid utf16 boundary
+        // Valid utf16 boundaries: 0, 1, 2, 3, 5, 6 (not 4, which is inside surrogate pair)
+        let valid_utf16_boundaries = [0usize, 1, 2, 3, 5, 6];
+        for &utf16_off in &valid_utf16_boundaries {
+            let utf8 = offset_utf16_to_utf8_str(text, utf16_off);
+            let back = offset_utf8_to_utf16_str(text, utf8);
+            assert_eq!(
+                back, utf16_off,
+                "utf16 roundtrip failed for utf16 offset {utf16_off} (utf8={utf8})"
+            );
+        }
+    }
 }

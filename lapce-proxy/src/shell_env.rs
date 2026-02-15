@@ -118,3 +118,72 @@ fn resolve_shell_env_unix(workspace: Option<&Path>) -> HashMap<String, String> {
 fn shell_escape(s: &str) -> String {
     format!("'{}'", s.replace('\'', "'\\''"))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn shell_escape_simple_string() {
+        assert_eq!(shell_escape("hello"), "'hello'");
+    }
+
+    #[test]
+    fn shell_escape_empty_string() {
+        assert_eq!(shell_escape(""), "''");
+    }
+
+    #[test]
+    fn shell_escape_with_spaces() {
+        assert_eq!(shell_escape("hello world"), "'hello world'");
+    }
+
+    #[test]
+    fn shell_escape_with_single_quote() {
+        assert_eq!(shell_escape("it's"), "'it'\\''s'");
+    }
+
+    #[test]
+    fn shell_escape_with_multiple_single_quotes() {
+        assert_eq!(shell_escape("a'b'c"), "'a'\\''b'\\''c'");
+    }
+
+    #[test]
+    fn shell_escape_with_double_quotes() {
+        // Double quotes are not special inside single quotes
+        assert_eq!(shell_escape("say \"hi\""), "'say \"hi\"'");
+    }
+
+    #[test]
+    fn shell_escape_with_special_shell_chars() {
+        // All these are safely quoted inside single quotes
+        assert_eq!(shell_escape("$HOME"), "'$HOME'");
+        assert_eq!(shell_escape("foo;bar"), "'foo;bar'");
+        assert_eq!(shell_escape("a && b"), "'a && b'");
+        assert_eq!(shell_escape("$(cmd)"), "'$(cmd)'");
+        assert_eq!(shell_escape("`cmd`"), "'`cmd`'");
+    }
+
+    #[test]
+    fn shell_escape_with_path() {
+        assert_eq!(
+            shell_escape("/home/user/my project"),
+            "'/home/user/my project'"
+        );
+    }
+
+    #[test]
+    fn shell_escape_with_newline() {
+        assert_eq!(shell_escape("line1\nline2"), "'line1\nline2'");
+    }
+
+    #[test]
+    fn shell_escape_with_backslash() {
+        assert_eq!(shell_escape("back\\slash"), "'back\\slash'");
+    }
+
+    #[test]
+    fn shell_escape_only_single_quote() {
+        assert_eq!(shell_escape("'"), "''\\'''");
+    }
+}

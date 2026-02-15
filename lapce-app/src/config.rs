@@ -4,7 +4,6 @@ use std::{
     sync::Arc,
 };
 
-use ::core::slice;
 use floem::{peniko::Color, prelude::palette::css};
 use itertools::Itertools;
 use lapce_core::directory::Directory;
@@ -14,6 +13,7 @@ use lsp_types::{CompletionItemKind, SymbolKind};
 use once_cell::sync::Lazy;
 use parking_lot::RwLock;
 use serde::Deserialize;
+use std::slice;
 use strum::VariantNames;
 use tracing::error;
 
@@ -867,5 +867,261 @@ impl LapceConfig {
         std::fs::write(path, main_table.to_string().as_bytes()).ok()?;
 
         Some(())
+    }
+
+    /// Get a fully-initialized default config for tests with resolved colors.
+    #[cfg(test)]
+    pub fn test_default() -> LapceConfig {
+        DEFAULT_LAPCE_CONFIG.clone()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── load_color_theme_from_str ───────────────────────────────────
+
+    #[test]
+    fn load_color_theme_from_str_valid() {
+        let toml = r##"
+            [color-theme]
+            name = "My Theme"
+            [color-theme.base]
+            red = "#FF0000"
+        "##;
+        let result = LapceConfig::load_color_theme_from_str(toml);
+        assert!(result.is_some());
+        let (name, _config) = result.unwrap();
+        assert_eq!(name, "My Theme");
+    }
+
+    #[test]
+    fn load_color_theme_from_str_missing_section() {
+        let toml = r#"
+            [some-other-section]
+            name = "Foo"
+        "#;
+        assert!(LapceConfig::load_color_theme_from_str(toml).is_none());
+    }
+
+    #[test]
+    fn load_color_theme_from_str_invalid_toml() {
+        assert!(
+            LapceConfig::load_color_theme_from_str("not valid { toml").is_none()
+        );
+    }
+
+    #[test]
+    fn load_color_theme_from_str_missing_name() {
+        let toml = r##"
+            [color-theme]
+            base = { red = "#FF0000" }
+        "##;
+        assert!(LapceConfig::load_color_theme_from_str(toml).is_none());
+    }
+
+    // ── load_icon_theme_from_str ────────────────────────────────────
+
+    #[test]
+    fn load_icon_theme_from_str_valid() {
+        let toml = r#"
+            [icon-theme]
+            name = "My Icons"
+        "#;
+        let result = LapceConfig::load_icon_theme_from_str(toml);
+        assert!(result.is_some());
+        let (name, _config) = result.unwrap();
+        assert_eq!(name, "My Icons");
+    }
+
+    #[test]
+    fn load_icon_theme_from_str_missing_section() {
+        let toml = r#"
+            [other]
+            name = "Foo"
+        "#;
+        assert!(LapceConfig::load_icon_theme_from_str(toml).is_none());
+    }
+
+    #[test]
+    fn load_icon_theme_from_str_invalid_toml() {
+        assert!(LapceConfig::load_icon_theme_from_str("{{bad").is_none());
+    }
+
+    // ── export_theme ────────────────────────────────────────────────
+
+    #[test]
+    fn export_theme_produces_valid_toml() {
+        let config = LapceConfig::test_default();
+        let exported = config.export_theme();
+        // Should parse back as valid TOML
+        let parsed: Result<toml::Value, _> = toml::from_str(&exported);
+        assert!(parsed.is_ok(), "Exported theme is not valid TOML");
+        let table = parsed.unwrap();
+        // Should have a "color-theme" section with an empty name
+        let ct = table.get("color-theme").unwrap();
+        assert_eq!(ct.get("name").unwrap().as_str().unwrap(), "");
+    }
+
+    // ── completion_color ────────────────────────────────────────────
+
+    #[test]
+    fn completion_color_none_kind_returns_none() {
+        let config = LapceConfig::test_default();
+        assert!(config.completion_color(None).is_none());
+    }
+
+    #[test]
+    fn completion_color_method_returns_some() {
+        let config = LapceConfig::test_default();
+        // "method" is defined in the default dark theme
+        assert!(
+            config
+                .completion_color(Some(CompletionItemKind::METHOD))
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn completion_color_function_returns_same_as_method() {
+        let config = LapceConfig::test_default();
+        let method = config.completion_color(Some(CompletionItemKind::METHOD));
+        let function = config.completion_color(Some(CompletionItemKind::FUNCTION));
+        assert_eq!(method, function);
+    }
+
+    #[test]
+    fn completion_color_enum_returns_some() {
+        let config = LapceConfig::test_default();
+        assert!(
+            config
+                .completion_color(Some(CompletionItemKind::ENUM))
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn completion_color_keyword_returns_some() {
+        let config = LapceConfig::test_default();
+        assert!(
+            config
+                .completion_color(Some(CompletionItemKind::KEYWORD))
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn completion_color_struct_returns_some() {
+        let config = LapceConfig::test_default();
+        assert!(
+            config
+                .completion_color(Some(CompletionItemKind::STRUCT))
+                .is_some()
+        );
+    }
+
+    // ── symbol_color ────────────────────────────────────────────────
+
+    #[test]
+    fn symbol_color_method_returns_some() {
+        let config = LapceConfig::test_default();
+        assert!(config.symbol_color(&SymbolKind::METHOD).is_some());
+    }
+
+    #[test]
+    fn symbol_color_variable_maps_to_field() {
+        let config = LapceConfig::test_default();
+        let var_color = config.symbol_color(&SymbolKind::VARIABLE);
+        let field_color = config.symbol_color(&SymbolKind::FIELD);
+        assert_eq!(var_color, field_color);
+    }
+
+    #[test]
+    fn symbol_color_empty_string_kinds_return_none() {
+        let config = LapceConfig::test_default();
+        // These map to "" which has no syntax color
+        for kind in [
+            SymbolKind::ARRAY,
+            SymbolKind::BOOLEAN,
+            SymbolKind::EVENT,
+            SymbolKind::KEY,
+            SymbolKind::OPERATOR,
+            SymbolKind::TYPE_PARAMETER,
+        ] {
+            assert!(
+                config.symbol_color(&kind).is_none(),
+                "Expected None for {:?}",
+                kind
+            );
+        }
+    }
+
+    #[test]
+    fn symbol_color_null_returns_some() {
+        let config = LapceConfig::test_default();
+        // SymbolKind::NULL hits the wildcard, returns None
+        assert!(config.symbol_color(&SymbolKind::NULL).is_none());
+    }
+
+    // ── symbol_svg ──────────────────────────────────────────────────
+
+    #[test]
+    fn symbol_svg_known_kinds_return_some() {
+        let config = LapceConfig::test_default();
+        for kind in [
+            SymbolKind::FUNCTION,
+            SymbolKind::METHOD,
+            SymbolKind::CLASS,
+            SymbolKind::STRUCT,
+            SymbolKind::ENUM,
+            SymbolKind::VARIABLE,
+        ] {
+            assert!(
+                config.symbol_svg(&kind).is_some(),
+                "Expected SVG for {:?}",
+                kind
+            );
+        }
+    }
+
+    #[test]
+    fn symbol_svg_wildcard_returns_none() {
+        let config = LapceConfig::test_default();
+        assert!(config.symbol_svg(&SymbolKind::NULL).is_none());
+    }
+
+    // ── get_dropdown_info ───────────────────────────────────────────
+
+    #[test]
+    fn dropdown_info_tab_close_button() {
+        let config = LapceConfig::test_default();
+        let info = config.get_dropdown_info("ui", "tab-close-button");
+        assert!(info.is_some());
+        let info = info.unwrap();
+        assert!(!info.items.is_empty());
+    }
+
+    #[test]
+    fn dropdown_info_tab_separator_height() {
+        let config = LapceConfig::test_default();
+        let info = config.get_dropdown_info("ui", "tab-separator-height");
+        assert!(info.is_some());
+        let info = info.unwrap();
+        assert!(!info.items.is_empty());
+    }
+
+    #[test]
+    fn dropdown_info_unknown_returns_none() {
+        let config = LapceConfig::test_default();
+        assert!(config.get_dropdown_info("foo", "bar").is_none());
+    }
+
+    // ── logo_svg ────────────────────────────────────────────────────
+
+    #[test]
+    fn logo_svg_returns_non_empty() {
+        let config = LapceConfig::test_default();
+        assert!(!config.logo_svg().is_empty());
     }
 }

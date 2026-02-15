@@ -59,6 +59,20 @@ pub struct LapceDb {
 }
 
 impl LapceDb {
+    /// Creates a `LapceDb` backed by a custom folder, without spawning the
+    /// background save thread. Only available in tests.
+    #[cfg(test)]
+    fn new_in(folder: PathBuf) -> Result<Self> {
+        let workspace_folder = folder.join("workspaces");
+        std::fs::create_dir_all(&workspace_folder)?;
+        let (save_tx, _save_rx) = unbounded();
+        Ok(Self {
+            save_tx,
+            workspace_folder,
+            folder,
+        })
+    }
+
     /// Creates the db directory structure and spawns the background save thread.
     /// The save thread runs an infinite loop processing SaveEvents from the channel.
     /// Errors during individual saves are logged but don't crash the app.
@@ -437,4 +451,399 @@ fn doc_path_name(path: &Path) -> String {
     let mut hasher = Sha256::new();
     hasher.update(path.to_string_lossy().as_bytes());
     format!("{:x}", hasher.finalize())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::workspace::LapceWorkspaceType;
+
+    /// Helper to create a LapceDb backed by a temporary directory.
+    fn temp_db() -> (LapceDb, tempfile::TempDir) {
+        let dir = tempfile::tempdir().unwrap();
+        let db = LapceDb::new_in(dir.path().to_path_buf()).unwrap();
+        (db, dir)
+    }
+
+    // -- get_app / get_window min-size clamping tests --
+
+    #[test]
+    fn get_app_clamps_small_width() {
+        let (db, _dir) = temp_db();
+        let json = serde_json::json!({
+            "windows": [{
+                "size": {"width": 5.0, "height": 600.0},
+                "pos": {"x": 0.0, "y": 0.0},
+                "maximised": false,
+                "tabs": {"active_tab": 0, "workspaces": []}
+            }]
+        });
+        std::fs::write(db.folder.join(APP), json.to_string()).unwrap();
+        let info = db.get_app().unwrap();
+        assert_eq!(info.windows[0].size.width, 800.0);
+        assert_eq!(info.windows[0].size.height, 600.0);
+    }
+
+    #[test]
+    fn get_app_clamps_small_height() {
+        let (db, _dir) = temp_db();
+        let json = serde_json::json!({
+            "windows": [{
+                "size": {"width": 1024.0, "height": 0.0},
+                "pos": {"x": 0.0, "y": 0.0},
+                "maximised": false,
+                "tabs": {"active_tab": 0, "workspaces": []}
+            }]
+        });
+        std::fs::write(db.folder.join(APP), json.to_string()).unwrap();
+        let info = db.get_app().unwrap();
+        assert_eq!(info.windows[0].size.width, 1024.0);
+        assert_eq!(info.windows[0].size.height, 600.0);
+    }
+
+    #[test]
+    fn get_app_preserves_normal_sizes() {
+        let (db, _dir) = temp_db();
+        let json = serde_json::json!({
+            "windows": [{
+                "size": {"width": 1200.0, "height": 800.0},
+                "pos": {"x": 100.0, "y": 50.0},
+                "maximised": false,
+                "tabs": {"active_tab": 0, "workspaces": []}
+            }]
+        });
+        std::fs::write(db.folder.join(APP), json.to_string()).unwrap();
+        let info = db.get_app().unwrap();
+        assert_eq!(info.windows[0].size.width, 1200.0);
+        assert_eq!(info.windows[0].size.height, 800.0);
+    }
+
+    #[test]
+    fn get_app_clamps_both_dimensions() {
+        let (db, _dir) = temp_db();
+        let json = serde_json::json!({
+            "windows": [{
+                "size": {"width": 0.0, "height": 0.0},
+                "pos": {"x": 0.0, "y": 0.0},
+                "maximised": false,
+                "tabs": {"active_tab": 0, "workspaces": []}
+            }]
+        });
+        std::fs::write(db.folder.join(APP), json.to_string()).unwrap();
+        let info = db.get_app().unwrap();
+        assert_eq!(info.windows[0].size.width, 800.0);
+        assert_eq!(info.windows[0].size.height, 600.0);
+    }
+
+    #[test]
+    fn get_app_clamps_multiple_windows() {
+        let (db, _dir) = temp_db();
+        let json = serde_json::json!({
+            "windows": [
+                {
+                    "size": {"width": 5.0, "height": 5.0},
+                    "pos": {"x": 0.0, "y": 0.0},
+                    "maximised": false,
+                    "tabs": {"active_tab": 0, "workspaces": []}
+                },
+                {
+                    "size": {"width": 1920.0, "height": 1080.0},
+                    "pos": {"x": 100.0, "y": 100.0},
+                    "maximised": true,
+                    "tabs": {"active_tab": 0, "workspaces": []}
+                }
+            ]
+        });
+        std::fs::write(db.folder.join(APP), json.to_string()).unwrap();
+        let info = db.get_app().unwrap();
+        assert_eq!(info.windows[0].size.width, 800.0);
+        assert_eq!(info.windows[0].size.height, 600.0);
+        assert_eq!(info.windows[1].size.width, 1920.0);
+        assert_eq!(info.windows[1].size.height, 1080.0);
+    }
+
+    #[test]
+    fn get_window_clamps_small_size() {
+        let (db, _dir) = temp_db();
+        let json = serde_json::json!({
+            "size": {"width": 3.0, "height": 2.0},
+            "pos": {"x": 0.0, "y": 0.0},
+            "maximised": false,
+            "tabs": {"active_tab": 0, "workspaces": []}
+        });
+        std::fs::write(db.folder.join(WINDOW), json.to_string()).unwrap();
+        let info = db.get_window().unwrap();
+        assert_eq!(info.size.width, 800.0);
+        assert_eq!(info.size.height, 600.0);
+    }
+
+    #[test]
+    fn get_window_preserves_normal_size() {
+        let (db, _dir) = temp_db();
+        let json = serde_json::json!({
+            "size": {"width": 1440.0, "height": 900.0},
+            "pos": {"x": 50.0, "y": 50.0},
+            "maximised": false,
+            "tabs": {"active_tab": 0, "workspaces": []}
+        });
+        std::fs::write(db.folder.join(WINDOW), json.to_string()).unwrap();
+        let info = db.get_window().unwrap();
+        assert_eq!(info.size.width, 1440.0);
+        assert_eq!(info.size.height, 900.0);
+    }
+
+    #[test]
+    fn get_window_boundary_value_at_10() {
+        let (db, _dir) = temp_db();
+        // Exactly 10.0 should NOT be clamped (< 10.0 triggers clamping)
+        let json = serde_json::json!({
+            "size": {"width": 10.0, "height": 10.0},
+            "pos": {"x": 0.0, "y": 0.0},
+            "maximised": false,
+            "tabs": {"active_tab": 0, "workspaces": []}
+        });
+        std::fs::write(db.folder.join(WINDOW), json.to_string()).unwrap();
+        let info = db.get_window().unwrap();
+        assert_eq!(info.size.width, 10.0);
+        assert_eq!(info.size.height, 10.0);
+    }
+
+    // -- insert_recent_workspace tests --
+
+    #[test]
+    fn insert_recent_workspace_adds_new_entry() {
+        let (db, _dir) = temp_db();
+        let ws = LapceWorkspace {
+            kind: LapceWorkspaceType::Local,
+            path: Some(PathBuf::from("/project/a")),
+            last_open: 0,
+        };
+        db.insert_recent_workspace(ws).unwrap();
+        let workspaces = db.recent_workspaces().unwrap();
+        assert_eq!(workspaces.len(), 1);
+        assert_eq!(workspaces[0].path, Some(PathBuf::from("/project/a")));
+        // last_open should be set to current time (non-zero)
+        assert!(workspaces[0].last_open > 0);
+    }
+
+    #[test]
+    fn insert_recent_workspace_updates_existing_entry() {
+        let (db, _dir) = temp_db();
+        let ws = LapceWorkspace {
+            kind: LapceWorkspaceType::Local,
+            path: Some(PathBuf::from("/project/a")),
+            last_open: 0,
+        };
+        db.insert_recent_workspace(ws.clone()).unwrap();
+        let first_open = db.recent_workspaces().unwrap()[0].last_open;
+
+        // Insert same workspace again — should update, not duplicate
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        db.insert_recent_workspace(ws).unwrap();
+        let workspaces = db.recent_workspaces().unwrap();
+        assert_eq!(workspaces.len(), 1);
+        assert!(workspaces[0].last_open >= first_open);
+    }
+
+    #[test]
+    fn insert_recent_workspace_sorts_most_recent_first() {
+        let (db, _dir) = temp_db();
+        let ws_a = LapceWorkspace {
+            kind: LapceWorkspaceType::Local,
+            path: Some(PathBuf::from("/project/a")),
+            last_open: 0,
+        };
+        let ws_b = LapceWorkspace {
+            kind: LapceWorkspaceType::Local,
+            path: Some(PathBuf::from("/project/b")),
+            last_open: 0,
+        };
+        db.insert_recent_workspace(ws_a.clone()).unwrap();
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        db.insert_recent_workspace(ws_b).unwrap();
+
+        let workspaces = db.recent_workspaces().unwrap();
+        assert_eq!(workspaces.len(), 2);
+        // Most recently opened should be first
+        assert_eq!(workspaces[0].path, Some(PathBuf::from("/project/b")));
+        assert_eq!(workspaces[1].path, Some(PathBuf::from("/project/a")));
+    }
+
+    #[test]
+    fn insert_recent_workspace_reopen_moves_to_front() {
+        let (db, _dir) = temp_db();
+        let ws_a = LapceWorkspace {
+            kind: LapceWorkspaceType::Local,
+            path: Some(PathBuf::from("/project/a")),
+            last_open: 0,
+        };
+        let ws_b = LapceWorkspace {
+            kind: LapceWorkspaceType::Local,
+            path: Some(PathBuf::from("/project/b")),
+            last_open: 0,
+        };
+        db.insert_recent_workspace(ws_a.clone()).unwrap();
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        db.insert_recent_workspace(ws_b).unwrap();
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        // Re-open A — should move to front
+        db.insert_recent_workspace(ws_a).unwrap();
+
+        let workspaces = db.recent_workspaces().unwrap();
+        assert_eq!(workspaces.len(), 2);
+        assert_eq!(workspaces[0].path, Some(PathBuf::from("/project/a")));
+    }
+
+    // -- Roundtrip persistence tests --
+
+    #[test]
+    fn roundtrip_disabled_volts() {
+        let (db, _dir) = temp_db();
+        let volts = vec![
+            VoltID {
+                author: "test".into(),
+                name: "plugin-a".into(),
+            },
+            VoltID {
+                author: "test".into(),
+                name: "plugin-b".into(),
+            },
+        ];
+        db.insert_disabled_volts(volts.clone()).unwrap();
+        let loaded = db.get_disabled_volts().unwrap();
+        assert_eq!(loaded.len(), 2);
+        assert_eq!(loaded[0].author, "test");
+        assert_eq!(loaded[0].name, "plugin-a");
+        assert_eq!(loaded[1].name, "plugin-b");
+    }
+
+    #[test]
+    fn roundtrip_workspace_disabled_volts() {
+        let (db, _dir) = temp_db();
+        let ws = LapceWorkspace {
+            kind: LapceWorkspaceType::Local,
+            path: Some(PathBuf::from("/project/x")),
+            last_open: 0,
+        };
+        let volts = vec![VoltID {
+            author: "a".into(),
+            name: "b".into(),
+        }];
+        db.insert_workspace_disabled_volts(Arc::new(ws.clone()), volts)
+            .unwrap();
+        let loaded = db.get_workspace_disabled_volts(&ws).unwrap();
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].name, "b");
+    }
+
+    #[test]
+    fn roundtrip_doc_info() {
+        let (db, _dir) = temp_db();
+        let ws = LapceWorkspace {
+            kind: LapceWorkspaceType::Local,
+            path: Some(PathBuf::from("/project/y")),
+            last_open: 0,
+        };
+        let info = DocInfo {
+            workspace: ws.clone(),
+            path: PathBuf::from("/project/y/src/main.rs"),
+            scroll_offset: (100.5, 200.0),
+            cursor_offset: 42,
+        };
+        db.insert_doc(&info).unwrap();
+        let loaded = db
+            .get_doc_info(&ws, Path::new("/project/y/src/main.rs"))
+            .unwrap();
+        assert_eq!(loaded.cursor_offset, 42);
+        assert_eq!(loaded.scroll_offset, (100.5, 200.0));
+    }
+
+    // -- existing pure-function tests --
+
+    #[test]
+    fn workspace_folder_name_encodes_local_workspace() {
+        let ws = LapceWorkspace {
+            kind: crate::workspace::LapceWorkspaceType::Local,
+            path: Some(PathBuf::from("/home/user/project")),
+            last_open: 0,
+        };
+        let name = workspace_folder_name(&ws);
+        // The Display impl produces "Local:/home/user/project"
+        // URL-encoding turns the colon and slashes into percent-encoded form
+        assert!(name.contains("Local"));
+        assert!(name.contains("home"));
+        assert!(name.contains("project"));
+        // Colons and slashes should be percent-encoded
+        assert!(!name.contains('/'));
+        assert!(!name.contains(':'));
+    }
+
+    #[test]
+    fn workspace_folder_name_empty_path() {
+        let ws = LapceWorkspace::default();
+        let name = workspace_folder_name(&ws);
+        // "Local:" => URL-encoded
+        assert!(name.contains("Local"));
+        assert!(!name.contains(':'));
+    }
+
+    #[test]
+    fn workspace_folder_name_is_deterministic() {
+        let ws = LapceWorkspace {
+            kind: crate::workspace::LapceWorkspaceType::Local,
+            path: Some(PathBuf::from("/some/path")),
+            last_open: 42,
+        };
+        let name1 = workspace_folder_name(&ws);
+        let name2 = workspace_folder_name(&ws);
+        assert_eq!(name1, name2);
+    }
+
+    #[test]
+    fn workspace_folder_name_different_paths_differ() {
+        let ws1 = LapceWorkspace {
+            kind: crate::workspace::LapceWorkspaceType::Local,
+            path: Some(PathBuf::from("/path/a")),
+            last_open: 0,
+        };
+        let ws2 = LapceWorkspace {
+            kind: crate::workspace::LapceWorkspaceType::Local,
+            path: Some(PathBuf::from("/path/b")),
+            last_open: 0,
+        };
+        assert_ne!(workspace_folder_name(&ws1), workspace_folder_name(&ws2));
+    }
+
+    #[test]
+    fn doc_path_name_returns_hex_sha256() {
+        let path = Path::new("/home/user/project/main.rs");
+        let name = doc_path_name(path);
+        // SHA-256 hex digest is 64 characters
+        assert_eq!(name.len(), 64);
+        assert!(name.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn doc_path_name_is_deterministic() {
+        let path = Path::new("/some/file.rs");
+        assert_eq!(doc_path_name(path), doc_path_name(path));
+    }
+
+    #[test]
+    fn doc_path_name_different_paths_differ() {
+        let a = doc_path_name(Path::new("/a.rs"));
+        let b = doc_path_name(Path::new("/b.rs"));
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn doc_path_name_known_hash() {
+        // Verify against a known SHA-256 hash
+        let path = Path::new("/test");
+        let name = doc_path_name(path);
+        let mut hasher = Sha256::new();
+        hasher.update(b"/test");
+        let expected = format!("{:x}", hasher.finalize());
+        assert_eq!(name, expected);
+    }
 }

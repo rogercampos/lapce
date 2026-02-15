@@ -230,4 +230,185 @@ command = "goto_definition"
             KeyMapKey::Logical(Key::Character("+".into()))
         );
     }
+
+    #[test]
+    fn test_unbinding_removes_previous_binding() {
+        let keymaps = r#"
+[[keymaps]]
+key = "Ctrl+s"
+command = "save"
+
+[[keymaps]]
+key = "Ctrl+a"
+command = "select_all"
+        "#;
+        let unbind = r#"
+[[keymaps]]
+key = "Ctrl+s"
+command = "-save"
+        "#;
+
+        let mut loader = KeyMapLoader::new();
+        loader.load_from_str(keymaps).unwrap();
+        loader.load_from_str(unbind).unwrap();
+
+        let (keymaps, command_keymaps) = loader.finalize();
+
+        // The Ctrl+s binding should be removed from the key lookup
+        let keypress = KeyMapPress::parse("Ctrl+s");
+        let entries = keymaps.get(&keypress);
+        assert!(
+            entries.is_none() || entries.unwrap().is_empty(),
+            "Ctrl+s should be unbound"
+        );
+
+        // The save command should have no bindings left
+        let save_bindings = command_keymaps.get("save");
+        assert!(
+            save_bindings.is_none() || save_bindings.unwrap().is_empty(),
+            "save command should have no bindings"
+        );
+
+        // The Ctrl+a binding should remain unaffected
+        let keypress = KeyMapPress::parse("Ctrl+a");
+        assert_eq!(keymaps.get(&keypress).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn test_unbinding_with_when_condition() {
+        let keymaps = r#"
+[[keymaps]]
+key = "j"
+command = "down"
+when = "n"
+
+[[keymaps]]
+key = "j"
+command = "other_down"
+when = "v"
+        "#;
+        let unbind = r#"
+[[keymaps]]
+key = "j"
+command = "-down"
+when = "n"
+        "#;
+
+        let mut loader = KeyMapLoader::new();
+        loader.load_from_str(keymaps).unwrap();
+        loader.load_from_str(unbind).unwrap();
+
+        let (keymaps, _) = loader.finalize();
+
+        // Only one binding for "j" should remain (the "v" one)
+        let keypress = KeyMapPress::parse("j");
+        let entries = keymaps.get(&keypress).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].command, "other_down");
+        assert_eq!(entries[0].when.as_deref(), Some("v"));
+    }
+
+    #[test]
+    fn test_missing_keymaps_section_errors() {
+        let toml = r#"
+[settings]
+theme = "dark"
+        "#;
+        let mut loader = KeyMapLoader::new();
+        let result = loader.load_from_str(toml);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_empty_keymaps_section_errors() {
+        // An empty document with no [[keymaps]] array of tables
+        let toml = r#"
+keymaps = []
+        "#;
+        let mut loader = KeyMapLoader::new();
+        // toml_edit parses `keymaps = []` as a regular array, not array of
+        // tables, so `as_array_of_tables()` returns None → error.
+        let result = loader.load_from_str(toml);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_load_multiple_sources_accumulate() {
+        let source1 = r#"
+[[keymaps]]
+key = "Ctrl+s"
+command = "save"
+        "#;
+        let source2 = r#"
+[[keymaps]]
+key = "Ctrl+o"
+command = "open"
+        "#;
+
+        let mut loader = KeyMapLoader::new();
+        loader.load_from_str(source1).unwrap();
+        loader.load_from_str(source2).unwrap();
+
+        let (keymaps, command_keymaps) = loader.finalize();
+
+        let ks = KeyMapPress::parse("Ctrl+s");
+        assert_eq!(keymaps.get(&ks).unwrap().len(), 1);
+
+        let ko = KeyMapPress::parse("Ctrl+o");
+        assert_eq!(keymaps.get(&ko).unwrap().len(), 1);
+
+        assert!(command_keymaps.contains_key("save"));
+        assert!(command_keymaps.contains_key("open"));
+    }
+
+    #[test]
+    fn test_chord_prefix_registration() {
+        let keymaps = r#"
+[[keymaps]]
+key = "Ctrl+k Ctrl+s"
+command = "save_all"
+        "#;
+
+        let mut loader = KeyMapLoader::new();
+        loader.load_from_str(keymaps).unwrap();
+
+        let (keymaps, _) = loader.finalize();
+
+        // The prefix "Ctrl+k" should be registered
+        let prefix = KeyMapPress::parse("Ctrl+k");
+        assert!(keymaps.contains_key(&prefix));
+
+        // The full chord should also be registered
+        let full = KeyMapPress::parse("Ctrl+k Ctrl+s");
+        assert!(keymaps.contains_key(&full));
+    }
+
+    #[test]
+    fn test_unbinding_chord_removes_from_all_prefixes() {
+        let keymaps = r#"
+[[keymaps]]
+key = "Ctrl+k Ctrl+s"
+command = "save_all"
+        "#;
+        let unbind = r#"
+[[keymaps]]
+key = "Ctrl+k Ctrl+s"
+command = "-save_all"
+        "#;
+
+        let mut loader = KeyMapLoader::new();
+        loader.load_from_str(keymaps).unwrap();
+        loader.load_from_str(unbind).unwrap();
+
+        let (keymaps, _) = loader.finalize();
+
+        // Both the prefix and full chord entries should be empty
+        let prefix = KeyMapPress::parse("Ctrl+k");
+        let prefix_entries = keymaps.get(&prefix);
+        assert!(prefix_entries.is_none() || prefix_entries.unwrap().is_empty());
+
+        let full = KeyMapPress::parse("Ctrl+k Ctrl+s");
+        let full_entries = keymaps.get(&full);
+        assert!(full_entries.is_none() || full_entries.unwrap().is_empty());
+    }
 }

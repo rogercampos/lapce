@@ -371,3 +371,721 @@ pub fn get_mod_time<P: AsRef<Path>>(path: P) -> Option<SystemTime> {
         .and_then(|meta| meta.modified())
         .ok()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn language_id_rust() {
+        assert_eq!(language_id_from_path(Path::new("main.rs")), Some("rust"));
+    }
+
+    #[test]
+    fn language_id_python() {
+        assert_eq!(
+            language_id_from_path(Path::new("script.py")),
+            Some("python")
+        );
+        assert_eq!(language_id_from_path(Path::new("stub.pyi")), Some("python"));
+    }
+
+    #[test]
+    fn language_id_javascript_and_typescript() {
+        assert_eq!(
+            language_id_from_path(Path::new("app.js")),
+            Some("javascript")
+        );
+        assert_eq!(
+            language_id_from_path(Path::new("app.jsx")),
+            Some("javascriptreact")
+        );
+        assert_eq!(
+            language_id_from_path(Path::new("app.ts")),
+            Some("typescript")
+        );
+        assert_eq!(
+            language_id_from_path(Path::new("app.tsx")),
+            Some("typescriptreact")
+        );
+    }
+
+    #[test]
+    fn language_id_go() {
+        assert_eq!(language_id_from_path(Path::new("main.go")), Some("go"));
+    }
+
+    #[test]
+    fn language_id_c_and_cpp() {
+        assert_eq!(language_id_from_path(Path::new("main.c")), Some("c"));
+        assert_eq!(language_id_from_path(Path::new("header.h")), Some("c"));
+        assert_eq!(language_id_from_path(Path::new("main.cpp")), Some("cpp"));
+        assert_eq!(language_id_from_path(Path::new("header.hpp")), Some("cpp"));
+        assert_eq!(language_id_from_path(Path::new("main.cc")), Some("cpp"));
+        assert_eq!(language_id_from_path(Path::new("header.hh")), Some("cpp"));
+    }
+
+    #[test]
+    fn language_id_case_sensitive_uppercase_c_h() {
+        // Uppercase .C and .H are treated as C++ (case-sensitive branch)
+        assert_eq!(language_id_from_path(Path::new("main.C")), Some("cpp"));
+        assert_eq!(language_id_from_path(Path::new("header.H")), Some("cpp"));
+    }
+
+    #[test]
+    fn language_id_case_sensitive_uppercase_m() {
+        // Uppercase .M is objective-c (case-sensitive branch)
+        assert_eq!(
+            language_id_from_path(Path::new("file.M")),
+            Some("objective-c")
+        );
+    }
+
+    #[test]
+    fn language_id_case_insensitive_lowercase_extensions() {
+        // lowercase .rs should match "rust" via the case-insensitive branch
+        assert_eq!(language_id_from_path(Path::new("foo.RS")), Some("rust"));
+        assert_eq!(language_id_from_path(Path::new("foo.Py")), Some("python"));
+        assert_eq!(language_id_from_path(Path::new("foo.Go")), Some("go"));
+    }
+
+    #[test]
+    fn language_id_various_languages() {
+        assert_eq!(language_id_from_path(Path::new("style.css")), Some("css"));
+        assert_eq!(language_id_from_path(Path::new("page.html")), Some("html"));
+        assert_eq!(language_id_from_path(Path::new("data.json")), Some("json"));
+        assert_eq!(
+            language_id_from_path(Path::new("config.yaml")),
+            Some("yaml")
+        );
+        assert_eq!(language_id_from_path(Path::new("config.yml")), Some("yaml"));
+        assert_eq!(
+            language_id_from_path(Path::new("config.toml")),
+            Some("toml")
+        );
+        assert_eq!(
+            language_id_from_path(Path::new("readme.md")),
+            Some("markdown")
+        );
+        assert_eq!(language_id_from_path(Path::new("query.sql")), Some("sql"));
+        assert_eq!(language_id_from_path(Path::new("script.rb")), Some("ruby"));
+        assert_eq!(language_id_from_path(Path::new("main.java")), Some("java"));
+        assert_eq!(language_id_from_path(Path::new("main.kt")), Some("kotlin"));
+        assert_eq!(
+            language_id_from_path(Path::new("main.swift")),
+            Some("swift")
+        );
+        assert_eq!(language_id_from_path(Path::new("main.dart")), Some("dart"));
+        assert_eq!(language_id_from_path(Path::new("main.lua")), Some("lua"));
+        assert_eq!(language_id_from_path(Path::new("main.zig")), Some("zig"));
+        assert_eq!(language_id_from_path(Path::new("app.vue")), Some("vue"));
+        assert_eq!(
+            language_id_from_path(Path::new("app.svelte")),
+            Some("svelte")
+        );
+        assert_eq!(
+            language_id_from_path(Path::new("script.sh")),
+            Some("shellscript")
+        );
+        assert_eq!(
+            language_id_from_path(Path::new("script.bash")),
+            Some("shellscript")
+        );
+        assert_eq!(
+            language_id_from_path(Path::new("script.zsh")),
+            Some("shellscript")
+        );
+    }
+
+    #[test]
+    fn language_id_filename_based_dockerfile() {
+        assert_eq!(
+            language_id_from_path(Path::new("Dockerfile")),
+            Some("dockerfile")
+        );
+        // Case-insensitive filename match
+        assert_eq!(
+            language_id_from_path(Path::new("dockerfile")),
+            Some("dockerfile")
+        );
+    }
+
+    #[test]
+    fn language_id_filename_based_makefile() {
+        assert_eq!(
+            language_id_from_path(Path::new("Makefile")),
+            Some("makefile")
+        );
+        assert_eq!(
+            language_id_from_path(Path::new("makefile")),
+            Some("makefile")
+        );
+        assert_eq!(
+            language_id_from_path(Path::new("GNUmakefile")),
+            Some("makefile")
+        );
+    }
+
+    #[test]
+    fn language_id_extension_based_dockerfile_makefile() {
+        // .dockerfile extension also maps to dockerfile
+        assert_eq!(
+            language_id_from_path(Path::new("my.dockerfile")),
+            Some("dockerfile")
+        );
+        // .makefile extension also maps to makefile
+        assert_eq!(
+            language_id_from_path(Path::new("my.makefile")),
+            Some("makefile")
+        );
+    }
+
+    #[test]
+    fn language_id_unknown_extension() {
+        assert_eq!(language_id_from_path(Path::new("file.xyz")), None);
+        assert_eq!(language_id_from_path(Path::new("file.unknown")), None);
+    }
+
+    #[test]
+    fn language_id_unknown_filename_no_extension() {
+        assert_eq!(language_id_from_path(Path::new("SOMEFILE")), None);
+    }
+
+    #[test]
+    fn language_id_with_directory_path() {
+        assert_eq!(
+            language_id_from_path(Path::new("/home/user/project/src/main.rs")),
+            Some("rust")
+        );
+    }
+
+    #[test]
+    fn language_id_objective_cpp() {
+        assert_eq!(
+            language_id_from_path(Path::new("file.mm")),
+            Some("objective-cpp")
+        );
+        // lowercase .m is objective-c
+        assert_eq!(
+            language_id_from_path(Path::new("file.m")),
+            Some("objective-c")
+        );
+    }
+
+    #[test]
+    fn language_id_clojure() {
+        assert_eq!(
+            language_id_from_path(Path::new("core.clj")),
+            Some("clojure")
+        );
+        assert_eq!(
+            language_id_from_path(Path::new("core.cljs")),
+            Some("clojure")
+        );
+        assert_eq!(
+            language_id_from_path(Path::new("core.edn")),
+            Some("clojure")
+        );
+    }
+
+    #[test]
+    fn language_id_elixir_erlang() {
+        assert_eq!(language_id_from_path(Path::new("lib.ex")), Some("elixir"));
+        assert_eq!(language_id_from_path(Path::new("test.exs")), Some("elixir"));
+        assert_eq!(language_id_from_path(Path::new("lib.erl")), Some("erlang"));
+    }
+
+    #[test]
+    fn language_id_scss_sass() {
+        assert_eq!(language_id_from_path(Path::new("style.scss")), Some("scss"));
+        assert_eq!(language_id_from_path(Path::new("style.sass")), Some("scss"));
+    }
+
+    // --- get_document_content_change tests ---
+
+    use lapce_xi_rope::{Delta, Interval, rope::Rope as XiRope};
+
+    fn make_rope(s: &str) -> XiRope {
+        XiRope::from(s)
+    }
+
+    #[test]
+    fn content_change_simple_insert_at_start() {
+        let rope = make_rope("hello");
+        // Insert "abc" at position 0 (no deletion)
+        let delta = Delta::simple_edit(Interval::new(0, 0), XiRope::from("abc"), 5);
+        let result = get_document_content_change(&rope, &delta);
+        let change = result.expect("should be Some for simple insert");
+        let range = change.range.expect("should have a range");
+        assert_eq!(range.start.line, 0);
+        assert_eq!(range.start.character, 0);
+        assert_eq!(range.end.line, 0);
+        assert_eq!(range.end.character, 0);
+        assert_eq!(change.text, "abc");
+    }
+
+    #[test]
+    fn content_change_simple_insert_mid_text() {
+        let rope = make_rope("hello world");
+        // Insert "XY" at position 5 (between "hello" and " world")
+        let delta = Delta::simple_edit(Interval::new(5, 5), XiRope::from("XY"), 11);
+        let result = get_document_content_change(&rope, &delta);
+        let change = result.expect("should be Some");
+        let range = change.range.expect("range");
+        assert_eq!(range.start.line, 0);
+        assert_eq!(range.start.character, 5);
+        assert_eq!(range.end.character, 5);
+        assert_eq!(change.text, "XY");
+    }
+
+    #[test]
+    fn content_change_simple_insert_multiline() {
+        let rope = make_rope("line1\nline2\nline3");
+        // Insert at start of line2 (offset 6)
+        let delta = Delta::simple_edit(Interval::new(6, 6), XiRope::from("NEW"), 17);
+        let result = get_document_content_change(&rope, &delta);
+        let change = result.expect("should be Some");
+        let range = change.range.expect("range");
+        assert_eq!(range.start.line, 1);
+        assert_eq!(range.start.character, 0);
+        assert_eq!(change.text, "NEW");
+    }
+
+    #[test]
+    fn content_change_simple_delete() {
+        let rope = make_rope("hello world");
+        // Delete characters 5..11 (" world")
+        let delta = Delta::simple_edit(Interval::new(5, 11), XiRope::from(""), 11);
+        let result = get_document_content_change(&rope, &delta);
+        let change = result.expect("should be Some for delete");
+        let range = change.range.expect("range");
+        assert_eq!(range.start.line, 0);
+        assert_eq!(range.start.character, 5);
+        assert_eq!(range.end.line, 0);
+        assert_eq!(range.end.character, 11);
+        assert_eq!(change.text, "");
+    }
+
+    #[test]
+    fn content_change_delete_across_lines() {
+        let rope = make_rope("line1\nline2\nline3");
+        // Delete from offset 3 ("e1\nline2\n") to offset 12
+        let delta = Delta::simple_edit(Interval::new(3, 12), XiRope::from(""), 17);
+        let result = get_document_content_change(&rope, &delta);
+        let change = result.expect("should be Some");
+        let range = change.range.expect("range");
+        assert_eq!(range.start.line, 0);
+        assert_eq!(range.start.character, 3);
+        assert_eq!(range.end.line, 2);
+        assert_eq!(range.end.character, 0);
+        assert_eq!(change.text, "");
+    }
+
+    #[test]
+    fn content_change_replace_returns_none() {
+        // A replace (delete + insert different text at same position) is complex
+        // and should return None
+        let rope = make_rope("hello");
+        let delta =
+            Delta::simple_edit(Interval::new(1, 3), XiRope::from("REPLACED"), 5);
+        let result = get_document_content_change(&rope, &delta);
+        // A replace that is not a simple insert or simple delete returns None
+        // Note: simple_edit with non-empty interval and non-empty replacement
+        // creates a replace delta, which is neither simple insert nor simple delete
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn content_change_empty_rope_insert() {
+        let rope = make_rope("");
+        let delta =
+            Delta::simple_edit(Interval::new(0, 0), XiRope::from("hello"), 0);
+        let result = get_document_content_change(&rope, &delta);
+        let change = result.expect("should be Some");
+        assert_eq!(change.text, "hello");
+        let range = change.range.expect("range");
+        assert_eq!(range.start.line, 0);
+        assert_eq!(range.start.character, 0);
+    }
+
+    // --- Buffer construction and methods ---
+
+    #[test]
+    fn buffer_new_from_existing_file() {
+        let dir = std::env::temp_dir().join("lapce_test_buffer_new");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("test.rs");
+        std::fs::write(&path, "fn main() {}").unwrap();
+
+        let buf = Buffer::new(BufferId::next(), path.clone());
+        assert_eq!(buf.rope.to_string(), "fn main() {}");
+        assert_eq!(buf.language_id, "rust");
+        assert!(!buf.read_only);
+        assert_eq!(buf.rev, 1); // non-empty file starts at rev 1
+        assert!(buf.mod_time.is_some());
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn buffer_new_nonexistent_file() {
+        let path = PathBuf::from("/tmp/lapce_test_nonexistent_file_buffer.rs");
+        let _ = std::fs::remove_file(&path); // ensure it doesn't exist
+        let buf = Buffer::new(BufferId::next(), path);
+        assert_eq!(buf.rope.to_string(), "");
+        assert!(!buf.read_only); // NotFound treated as new file
+        assert_eq!(buf.rev, 0); // empty file starts at rev 0
+    }
+
+    #[test]
+    fn buffer_new_empty_file() {
+        let dir = std::env::temp_dir().join("lapce_test_buffer_empty");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("empty.txt");
+        std::fs::write(&path, "").unwrap();
+
+        let buf = Buffer::new(BufferId::next(), path);
+        assert_eq!(buf.rope.to_string(), "");
+        assert_eq!(buf.rev, 0); // empty file starts at rev 0
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn buffer_offset_to_position_ascii() {
+        let buf = Buffer {
+            language_id: "rust",
+            read_only: false,
+            id: BufferId::next(),
+            rope: XiRope::from("hello\nworld"),
+            path: PathBuf::from("test.rs"),
+            rev: 1,
+            mod_time: None,
+        };
+        // "hello" is line 0, "world" is line 1
+        let pos = buf.offset_to_position(0);
+        assert_eq!(pos.line, 0);
+        assert_eq!(pos.character, 0);
+
+        let pos = buf.offset_to_position(5); // the '\n'
+        assert_eq!(pos.line, 0);
+        assert_eq!(pos.character, 5);
+
+        let pos = buf.offset_to_position(6); // 'w' in "world"
+        assert_eq!(pos.line, 1);
+        assert_eq!(pos.character, 0);
+
+        let pos = buf.offset_to_position(11); // end of "world"
+        assert_eq!(pos.line, 1);
+        assert_eq!(pos.character, 5);
+    }
+
+    #[test]
+    fn buffer_offset_to_position_multibyte() {
+        // "café" has 5 bytes (é is 2 bytes), UTF-16 length is 4
+        let buf = Buffer {
+            language_id: "",
+            read_only: false,
+            id: BufferId::next(),
+            rope: XiRope::from("café"),
+            path: PathBuf::from("test.txt"),
+            rev: 1,
+            mod_time: None,
+        };
+        // offset 0 → (0, 0)
+        let pos = buf.offset_to_position(0);
+        assert_eq!(pos.line, 0);
+        assert_eq!(pos.character, 0);
+
+        // offset 5 (end) → character 4 in UTF-16
+        let pos = buf.offset_to_position(5);
+        assert_eq!(pos.line, 0);
+        assert_eq!(pos.character, 4);
+    }
+
+    #[test]
+    fn buffer_offset_to_position_emoji() {
+        // "😀" is 4 bytes in UTF-8, but 2 code units in UTF-16 (surrogate pair)
+        let buf = Buffer {
+            language_id: "",
+            read_only: false,
+            id: BufferId::next(),
+            rope: XiRope::from("a😀b"),
+            path: PathBuf::from("test.txt"),
+            rev: 1,
+            mod_time: None,
+        };
+        // 'a' at offset 0
+        let pos = buf.offset_to_position(0);
+        assert_eq!(pos.character, 0);
+
+        // '😀' starts at offset 1 → UTF-16 character 1
+        let pos = buf.offset_to_position(1);
+        assert_eq!(pos.character, 1);
+
+        // 'b' starts at offset 5 → UTF-16 character 3 (1 for 'a' + 2 for 😀)
+        let pos = buf.offset_to_position(5);
+        assert_eq!(pos.character, 3);
+    }
+
+    #[test]
+    fn buffer_update_correct_rev() {
+        let mut buf = Buffer {
+            language_id: "rust",
+            read_only: false,
+            id: BufferId::next(),
+            rope: XiRope::from("hello"),
+            path: PathBuf::from("test.rs"),
+            rev: 1,
+            mod_time: None,
+        };
+        // Insert " world" at end (rev must be current + 1 = 2)
+        let delta =
+            Delta::simple_edit(Interval::new(5, 5), XiRope::from(" world"), 5);
+        let result = buf.update(&delta, 2);
+        assert!(result.is_some());
+        assert_eq!(buf.rev, 2);
+        assert_eq!(buf.rope.to_string(), "hello world");
+    }
+
+    #[test]
+    fn buffer_update_wrong_rev_returns_none() {
+        let mut buf = Buffer {
+            language_id: "rust",
+            read_only: false,
+            id: BufferId::next(),
+            rope: XiRope::from("hello"),
+            path: PathBuf::from("test.rs"),
+            rev: 1,
+            mod_time: None,
+        };
+        // Send rev=5 instead of expected rev=2
+        let delta =
+            Delta::simple_edit(Interval::new(5, 5), XiRope::from(" world"), 5);
+        let result = buf.update(&delta, 5);
+        assert!(result.is_none());
+        assert_eq!(buf.rev, 1); // rev unchanged
+        assert_eq!(buf.rope.to_string(), "hello"); // rope unchanged
+    }
+
+    #[test]
+    fn buffer_update_sequential() {
+        let mut buf = Buffer {
+            language_id: "",
+            read_only: false,
+            id: BufferId::next(),
+            rope: XiRope::from("ab"),
+            path: PathBuf::from("test.txt"),
+            rev: 1,
+            mod_time: None,
+        };
+        // Insert "X" at position 1 (between 'a' and 'b'), rev 2
+        let delta = Delta::simple_edit(Interval::new(1, 1), XiRope::from("X"), 2);
+        let r1 = buf.update(&delta, 2);
+        assert!(r1.is_some());
+        assert_eq!(buf.rope.to_string(), "aXb");
+        assert_eq!(buf.rev, 2);
+
+        // Delete 'X' (offset 1..2), rev 3
+        let delta = Delta::simple_edit(Interval::new(1, 2), XiRope::from(""), 3);
+        let r2 = buf.update(&delta, 3);
+        assert!(r2.is_some());
+        assert_eq!(buf.rope.to_string(), "ab");
+        assert_eq!(buf.rev, 3);
+    }
+
+    #[test]
+    fn buffer_update_complex_delta_falls_back_to_full_text() {
+        let mut buf = Buffer {
+            language_id: "",
+            read_only: false,
+            id: BufferId::next(),
+            rope: XiRope::from("hello"),
+            path: PathBuf::from("test.txt"),
+            rev: 1,
+            mod_time: None,
+        };
+        // A replace is not simple insert or delete, so content_change is None
+        // and the update falls back to full document text
+        let delta =
+            Delta::simple_edit(Interval::new(1, 3), XiRope::from("REPLACED"), 5);
+        let result = buf.update(&delta, 2);
+        let change = result.expect("update should succeed");
+        // When get_document_content_change returns None, range is None (full doc)
+        assert!(change.range.is_none());
+        assert_eq!(change.text, "hREPLACEDlo");
+    }
+
+    #[test]
+    fn buffer_len_and_is_empty() {
+        let buf = Buffer {
+            language_id: "",
+            read_only: false,
+            id: BufferId::next(),
+            rope: XiRope::from("abc"),
+            path: PathBuf::from("test.txt"),
+            rev: 1,
+            mod_time: None,
+        };
+        assert_eq!(buf.len(), 3);
+        assert!(!buf.is_empty());
+
+        let empty_buf = Buffer {
+            language_id: "",
+            read_only: false,
+            id: BufferId::next(),
+            rope: XiRope::from(""),
+            path: PathBuf::from("test.txt"),
+            rev: 0,
+            mod_time: None,
+        };
+        assert_eq!(empty_buf.len(), 0);
+        assert!(empty_buf.is_empty());
+    }
+
+    #[test]
+    fn buffer_get_document() {
+        let buf = Buffer {
+            language_id: "",
+            read_only: false,
+            id: BufferId::next(),
+            rope: XiRope::from("line1\nline2"),
+            path: PathBuf::from("test.txt"),
+            rev: 1,
+            mod_time: None,
+        };
+        assert_eq!(buf.get_document(), "line1\nline2");
+    }
+
+    #[test]
+    fn buffer_offset_of_line_and_line_of_offset() {
+        let buf = Buffer {
+            language_id: "",
+            read_only: false,
+            id: BufferId::next(),
+            rope: XiRope::from("abc\ndef\nghi"),
+            path: PathBuf::from("test.txt"),
+            rev: 1,
+            mod_time: None,
+        };
+        assert_eq!(buf.offset_of_line(0), 0);
+        assert_eq!(buf.offset_of_line(1), 4);
+        assert_eq!(buf.offset_of_line(2), 8);
+        assert_eq!(buf.line_of_offset(0), 0);
+        assert_eq!(buf.line_of_offset(4), 1);
+        assert_eq!(buf.line_of_offset(8), 2);
+    }
+
+    #[test]
+    fn buffer_offset_to_line_col() {
+        let buf = Buffer {
+            language_id: "",
+            read_only: false,
+            id: BufferId::next(),
+            rope: XiRope::from("abc\ndef"),
+            path: PathBuf::from("test.txt"),
+            rev: 1,
+            mod_time: None,
+        };
+        assert_eq!(buf.offset_to_line_col(0), (0, 0));
+        assert_eq!(buf.offset_to_line_col(2), (0, 2));
+        assert_eq!(buf.offset_to_line_col(4), (1, 0));
+        assert_eq!(buf.offset_to_line_col(6), (1, 2));
+    }
+
+    // --- save tests ---
+
+    #[test]
+    fn buffer_save_basic() {
+        let dir = std::env::temp_dir().join("lapce_test_buffer_save");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("save_test.txt");
+        std::fs::write(&path, "original").unwrap();
+
+        let mut buf = Buffer::new(BufferId::next(), path.clone());
+        // Modify the buffer
+        buf.rope = XiRope::from("modified content");
+        let result = buf.save(buf.rev, false);
+        assert!(result.is_ok());
+        let saved = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(saved, "modified content");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn buffer_save_read_only_rejected() {
+        let mut buf = Buffer {
+            language_id: "",
+            read_only: true,
+            id: BufferId::next(),
+            rope: XiRope::from("content"),
+            path: PathBuf::from("/tmp/lapce_test_readonly.txt"),
+            rev: 1,
+            mod_time: None,
+        };
+        let result = buf.save(1, false);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("read only"));
+    }
+
+    #[test]
+    fn buffer_save_wrong_rev_rejected() {
+        let dir = std::env::temp_dir().join("lapce_test_buffer_save_rev");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("rev_test.txt");
+        std::fs::write(&path, "content").unwrap();
+
+        let mut buf = Buffer::new(BufferId::next(), path);
+        let result = buf.save(999, false);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("rev"));
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn buffer_save_creates_parents() {
+        let dir = std::env::temp_dir().join("lapce_test_save_parents");
+        let _ = std::fs::remove_dir_all(&dir); // clean up from previous runs
+        let nested = dir.join("a").join("b").join("c");
+        let path = nested.join("file.txt");
+
+        let mut buf = Buffer {
+            language_id: "",
+            read_only: false,
+            id: BufferId::next(),
+            rope: XiRope::from("new file"),
+            path: path.clone(),
+            rev: 1,
+            mod_time: None,
+        };
+        let result = buf.save(1, true);
+        assert!(result.is_ok());
+        let saved = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(saved, "new file");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    // --- get_mod_time ---
+
+    #[test]
+    fn get_mod_time_existing_file() {
+        let dir = std::env::temp_dir().join("lapce_test_mod_time");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("modtime_test.txt");
+        std::fs::write(&path, "content").unwrap();
+
+        let mt = get_mod_time(&path);
+        assert!(mt.is_some());
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn get_mod_time_nonexistent() {
+        let mt = get_mod_time("/tmp/lapce_definitely_not_a_file_12345");
+        assert!(mt.is_none());
+    }
+}

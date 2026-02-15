@@ -131,3 +131,136 @@ pub fn create_delete_edit(
         new_end_position: start_position,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use lapce_xi_rope::Rope;
+    use tree_sitter::Point;
+
+    // --- traverse ---
+
+    #[test]
+    fn traverse_empty_string() {
+        let p = traverse(Point::new(0, 0), "");
+        assert_eq!(p, Point::new(0, 0));
+    }
+
+    #[test]
+    fn traverse_single_line() {
+        let p = traverse(Point::new(0, 0), "hello");
+        assert_eq!(p, Point::new(0, 5));
+    }
+
+    #[test]
+    fn traverse_with_newline() {
+        let p = traverse(Point::new(0, 0), "ab\ncd");
+        assert_eq!(p, Point::new(1, 2));
+    }
+
+    #[test]
+    fn traverse_multiple_newlines() {
+        let p = traverse(Point::new(0, 0), "a\n\nc");
+        assert_eq!(p, Point::new(2, 1));
+    }
+
+    #[test]
+    fn traverse_ending_with_newline() {
+        let p = traverse(Point::new(0, 0), "abc\n");
+        assert_eq!(p, Point::new(1, 0));
+    }
+
+    #[test]
+    fn traverse_from_nonzero_start() {
+        let p = traverse(Point::new(3, 5), "xy\nz");
+        assert_eq!(p, Point::new(4, 1));
+    }
+
+    // --- point_at_offset ---
+
+    #[test]
+    fn point_at_offset_start_of_text() {
+        let rope = Rope::from("hello\nworld");
+        assert_eq!(point_at_offset(&rope, 0), Point::new(0, 0));
+    }
+
+    #[test]
+    fn point_at_offset_middle_of_first_line() {
+        let rope = Rope::from("hello\nworld");
+        assert_eq!(point_at_offset(&rope, 3), Point::new(0, 3));
+    }
+
+    #[test]
+    fn point_at_offset_start_of_second_line() {
+        let rope = Rope::from("hello\nworld");
+        // offset 6 = 'w' on line 1
+        assert_eq!(point_at_offset(&rope, 6), Point::new(1, 0));
+    }
+
+    #[test]
+    fn point_at_offset_end_of_text() {
+        let rope = Rope::from("ab\ncd");
+        // offset 5 = end of text
+        assert_eq!(point_at_offset(&rope, 5), Point::new(1, 2));
+    }
+
+    // --- create_insert_edit ---
+
+    #[test]
+    fn create_insert_edit_at_start() {
+        let old = Rope::from("hello");
+        let inserted = Rope::from("XX");
+        let edit = create_insert_edit(&old, 0, &inserted);
+
+        assert_eq!(edit.start_byte, 0);
+        assert_eq!(edit.old_end_byte, 0);
+        assert_eq!(edit.new_end_byte, 2);
+        assert_eq!(edit.start_position, Point::new(0, 0));
+        assert_eq!(edit.old_end_position, Point::new(0, 0));
+        assert_eq!(edit.new_end_position, Point::new(0, 2));
+    }
+
+    #[test]
+    fn create_insert_edit_multiline_insertion() {
+        let old = Rope::from("ab");
+        let inserted = Rope::from("x\ny");
+        let edit = create_insert_edit(&old, 1, &inserted);
+
+        assert_eq!(edit.start_byte, 1);
+        assert_eq!(edit.old_end_byte, 1);
+        assert_eq!(edit.new_end_byte, 4); // 1 + 3
+        assert_eq!(edit.start_position, Point::new(0, 1));
+        assert_eq!(edit.old_end_position, Point::new(0, 1));
+        // traverse from (0,1) through "x\ny" => (1, 1)
+        assert_eq!(edit.new_end_position, Point::new(1, 1));
+    }
+
+    // --- create_delete_edit ---
+
+    #[test]
+    fn create_delete_edit_single_line() {
+        let old = Rope::from("hello world");
+        let edit = create_delete_edit(&old, 5, 11);
+
+        assert_eq!(edit.start_byte, 5);
+        assert_eq!(edit.old_end_byte, 11);
+        assert_eq!(edit.new_end_byte, 5);
+        assert_eq!(edit.start_position, Point::new(0, 5));
+        assert_eq!(edit.old_end_position, Point::new(0, 11));
+        assert_eq!(edit.new_end_position, Point::new(0, 5));
+    }
+
+    #[test]
+    fn create_delete_edit_across_lines() {
+        let old = Rope::from("aa\nbb\ncc");
+        // Delete from offset 1 (second char of line 0) to offset 6 (first char of line 2)
+        let edit = create_delete_edit(&old, 1, 6);
+
+        assert_eq!(edit.start_byte, 1);
+        assert_eq!(edit.old_end_byte, 6);
+        assert_eq!(edit.new_end_byte, 1);
+        assert_eq!(edit.start_position, Point::new(0, 1));
+        assert_eq!(edit.old_end_position, Point::new(2, 0));
+        assert_eq!(edit.new_end_position, Point::new(0, 1));
+    }
+}

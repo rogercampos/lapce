@@ -96,3 +96,57 @@ pub fn path_from_url(url: &Url) -> PathBuf {
         PathBuf::from(path)
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn path_from_url_simple_unix_path() {
+        let url = Url::parse("file:///home/user/project/main.rs").unwrap();
+        assert_eq!(
+            path_from_url(&url),
+            PathBuf::from("/home/user/project/main.rs")
+        );
+    }
+
+    #[test]
+    fn path_from_url_root_path() {
+        let url = Url::parse("file:///").unwrap();
+        assert_eq!(path_from_url(&url), PathBuf::from("/"));
+    }
+
+    #[test]
+    fn path_from_url_percent_encoded_spaces() {
+        let url = Url::parse("file:///home/user/my%20project/main.rs").unwrap();
+        assert_eq!(
+            path_from_url(&url),
+            PathBuf::from("/home/user/my project/main.rs")
+        );
+    }
+
+    #[test]
+    fn path_from_url_percent_encoded_special_chars() {
+        let url = Url::parse("file:///home/user/project%23name/file.rs").unwrap();
+        assert_eq!(
+            path_from_url(&url),
+            PathBuf::from("/home/user/project#name/file.rs")
+        );
+    }
+
+    #[test]
+    fn path_from_url_deeply_nested() {
+        let url = Url::parse("file:///a/b/c/d/e/f/g.txt").unwrap();
+        assert_eq!(path_from_url(&url), PathBuf::from("/a/b/c/d/e/f/g.txt"));
+    }
+
+    #[test]
+    fn path_from_url_unicode_path() {
+        let url =
+            Url::parse("file:///home/user/%E4%B8%AD%E6%96%87/file.rs").unwrap();
+        assert_eq!(
+            path_from_url(&url),
+            PathBuf::from("/home/user/中文/file.rs")
+        );
+    }
+}

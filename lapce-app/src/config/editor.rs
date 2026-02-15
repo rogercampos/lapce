@@ -231,6 +231,61 @@ pub struct EditorConfig {
 }
 
 impl EditorConfig {
+    #[cfg(test)]
+    fn test_default() -> Self {
+        EditorConfig {
+            font_family: String::new(),
+            font_size: 14,
+            code_glance_font_size: 14,
+            line_height: 1.6,
+            smart_tab: false,
+            tab_width: 4,
+            show_tab: true,
+            show_bread_crumbs: true,
+            scroll_beyond_last_line: false,
+            cursor_surrounding_lines: 1,
+            wrap_style: WrapStyle::default(),
+            wrap_width: 0,
+            sticky_header: false,
+            completion_width: 0,
+            completion_show_documentation: false,
+            completion_item_show_detail: false,
+            show_signature: false,
+            signature_label_code_block: false,
+            auto_closing_matching_pairs: false,
+            auto_surround: false,
+            hover_delay: 300,
+            format_on_save: false,
+            normalize_line_endings: false,
+            highlight_matching_brackets: false,
+            highlight_scope_lines: false,
+            enable_inlay_hints: false,
+            inlay_hint_font_family: String::new(),
+            inlay_hint_font_size: 0,
+            enable_error_lens: false,
+            only_render_error_styling: false,
+            error_lens_end_of_line: false,
+            error_lens_multiline: false,
+            error_lens_font_family: String::new(),
+            error_lens_font_size: 0,
+            enable_completion_lens: false,
+            enable_inline_completion: false,
+            completion_lens_font_family: String::new(),
+            completion_lens_font_size: 0,
+            blink_interval: 500,
+            render_whitespace: RenderWhitespace::default(),
+            show_indent_guide: false,
+            autosave_interval: 0,
+            atomic_soft_tabs: false,
+            double_click: ClickMode::default(),
+            move_focus_while_search: false,
+            diff_context_lines: 3,
+            bracket_pair_colorization: false,
+            bracket_colorization_limit: 0,
+            files_exclude: String::new(),
+        }
+    }
+
     /// Clamps the font size to a safe range to prevent rendering issues.
     pub fn font_size(&self) -> usize {
         self.font_size.clamp(6, 32)
@@ -291,5 +346,252 @@ impl EditorConfig {
             return 0;
         }
         self.blink_interval.max(200)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // -- font_size() --
+
+    #[test]
+    fn font_size_clamps_below_minimum() {
+        let mut cfg = EditorConfig::test_default();
+        cfg.font_size = 2;
+        assert_eq!(cfg.font_size(), 6);
+    }
+
+    #[test]
+    fn font_size_clamps_above_maximum() {
+        let mut cfg = EditorConfig::test_default();
+        cfg.font_size = 100;
+        assert_eq!(cfg.font_size(), 32);
+    }
+
+    #[test]
+    fn font_size_in_range_passes_through() {
+        let mut cfg = EditorConfig::test_default();
+        cfg.font_size = 16;
+        assert_eq!(cfg.font_size(), 16);
+    }
+
+    #[test]
+    fn font_size_at_boundaries() {
+        let mut cfg = EditorConfig::test_default();
+        cfg.font_size = 6;
+        assert_eq!(cfg.font_size(), 6);
+        cfg.font_size = 32;
+        assert_eq!(cfg.font_size(), 32);
+    }
+
+    // -- line_height() --
+
+    #[test]
+    fn line_height_multiplier_mode() {
+        // line_height < 5.0 → treated as a multiplier of font_size
+        let mut cfg = EditorConfig::test_default();
+        cfg.font_size = 10;
+        cfg.line_height = 1.5;
+        // 1.5 * 10 = 15.0 → round → 15
+        assert_eq!(cfg.line_height(), 15);
+    }
+
+    #[test]
+    fn line_height_absolute_mode() {
+        // line_height >= 5.0 → treated as absolute pixel value
+        let mut cfg = EditorConfig::test_default();
+        cfg.font_size = 10;
+        cfg.line_height = 24.0;
+        assert_eq!(cfg.line_height(), 24);
+    }
+
+    #[test]
+    fn line_height_at_boundary() {
+        // Exactly 5.0 → absolute mode
+        let mut cfg = EditorConfig::test_default();
+        cfg.font_size = 10;
+        cfg.line_height = 5.0;
+        assert_eq!(cfg.line_height(), 10); // max(5, font_size=10)
+    }
+
+    #[test]
+    fn line_height_just_below_boundary() {
+        let mut cfg = EditorConfig::test_default();
+        cfg.font_size = 10;
+        cfg.line_height = 4.9;
+        // 4.9 * 10 = 49.0 → multiplier mode
+        assert_eq!(cfg.line_height(), 49);
+    }
+
+    #[test]
+    fn line_height_never_below_font_size() {
+        let mut cfg = EditorConfig::test_default();
+        cfg.font_size = 20;
+        cfg.line_height = 0.1;
+        // 0.1 * 20 = 2.0, clamped to max(2, 20) = 20
+        assert_eq!(cfg.line_height(), 20);
+    }
+
+    #[test]
+    fn line_height_absolute_never_below_font_size() {
+        let mut cfg = EditorConfig::test_default();
+        cfg.font_size = 20;
+        cfg.line_height = 8.0;
+        // Absolute 8, but font_size is 20, so max(8, 20) = 20
+        assert_eq!(cfg.line_height(), 20);
+    }
+
+    // -- inlay_hint_font_size() --
+
+    #[test]
+    fn inlay_hint_font_size_falls_back_when_too_small() {
+        let mut cfg = EditorConfig::test_default();
+        cfg.font_size = 14;
+        cfg.inlay_hint_font_size = 3; // < 5
+        assert_eq!(cfg.inlay_hint_font_size(), 14);
+    }
+
+    #[test]
+    fn inlay_hint_font_size_falls_back_when_larger_than_font_size() {
+        let mut cfg = EditorConfig::test_default();
+        cfg.font_size = 14;
+        cfg.inlay_hint_font_size = 20; // > font_size
+        assert_eq!(cfg.inlay_hint_font_size(), 14);
+    }
+
+    #[test]
+    fn inlay_hint_font_size_uses_value_in_valid_range() {
+        let mut cfg = EditorConfig::test_default();
+        cfg.font_size = 14;
+        cfg.inlay_hint_font_size = 10;
+        assert_eq!(cfg.inlay_hint_font_size(), 10);
+    }
+
+    #[test]
+    fn inlay_hint_font_size_boundary_equal_to_font_size() {
+        let mut cfg = EditorConfig::test_default();
+        cfg.font_size = 14;
+        cfg.inlay_hint_font_size = 14; // == font_size, NOT > font_size
+        assert_eq!(cfg.inlay_hint_font_size(), 14);
+    }
+
+    #[test]
+    fn inlay_hint_font_size_boundary_at_5() {
+        let mut cfg = EditorConfig::test_default();
+        cfg.font_size = 14;
+        cfg.inlay_hint_font_size = 5; // >= 5 and <= font_size
+        assert_eq!(cfg.inlay_hint_font_size(), 5);
+    }
+
+    // -- error_lens_font_size() --
+
+    #[test]
+    fn error_lens_font_size_zero_falls_back_to_inlay_hint() {
+        let mut cfg = EditorConfig::test_default();
+        cfg.font_size = 14;
+        cfg.inlay_hint_font_size = 10;
+        cfg.error_lens_font_size = 0;
+        assert_eq!(cfg.error_lens_font_size(), 10);
+    }
+
+    #[test]
+    fn error_lens_font_size_nonzero_passes_through() {
+        let mut cfg = EditorConfig::test_default();
+        cfg.error_lens_font_size = 12;
+        assert_eq!(cfg.error_lens_font_size(), 12);
+    }
+
+    // -- completion_lens_font_size() --
+
+    #[test]
+    fn completion_lens_font_size_zero_falls_back_to_inlay_hint() {
+        let mut cfg = EditorConfig::test_default();
+        cfg.font_size = 14;
+        cfg.inlay_hint_font_size = 10;
+        cfg.completion_lens_font_size = 0;
+        assert_eq!(cfg.completion_lens_font_size(), 10);
+    }
+
+    #[test]
+    fn completion_lens_font_size_nonzero_passes_through() {
+        let mut cfg = EditorConfig::test_default();
+        cfg.completion_lens_font_size = 9;
+        assert_eq!(cfg.completion_lens_font_size(), 9);
+    }
+
+    // -- atomic_soft_tab_width() --
+
+    #[test]
+    fn atomic_soft_tab_width_enabled() {
+        let mut cfg = EditorConfig::test_default();
+        cfg.atomic_soft_tabs = true;
+        cfg.tab_width = 4;
+        assert_eq!(cfg.atomic_soft_tab_width(), Some(4));
+    }
+
+    #[test]
+    fn atomic_soft_tab_width_disabled() {
+        let mut cfg = EditorConfig::test_default();
+        cfg.atomic_soft_tabs = false;
+        assert_eq!(cfg.atomic_soft_tab_width(), None);
+    }
+
+    // -- blink_interval() --
+
+    #[test]
+    fn blink_interval_zero_stays_zero() {
+        let mut cfg = EditorConfig::test_default();
+        cfg.blink_interval = 0;
+        assert_eq!(cfg.blink_interval(), 0);
+    }
+
+    #[test]
+    fn blink_interval_below_200_clamps() {
+        let mut cfg = EditorConfig::test_default();
+        cfg.blink_interval = 50;
+        assert_eq!(cfg.blink_interval(), 200);
+    }
+
+    #[test]
+    fn blink_interval_at_200_passes_through() {
+        let mut cfg = EditorConfig::test_default();
+        cfg.blink_interval = 200;
+        assert_eq!(cfg.blink_interval(), 200);
+    }
+
+    #[test]
+    fn blink_interval_above_200_passes_through() {
+        let mut cfg = EditorConfig::test_default();
+        cfg.blink_interval = 1000;
+        assert_eq!(cfg.blink_interval(), 1000);
+    }
+
+    // -- WrapStyle --
+
+    #[test]
+    fn wrap_style_as_str_roundtrip() {
+        let variants = [
+            WrapStyle::None,
+            WrapStyle::EditorWidth,
+            WrapStyle::WrapWidth,
+        ];
+        for v in variants {
+            let s = v.as_str();
+            let parsed = WrapStyle::try_from_str(s);
+            assert_eq!(parsed, Some(v), "roundtrip failed for {s}");
+        }
+    }
+
+    #[test]
+    fn wrap_style_try_from_str_unknown_returns_none() {
+        assert_eq!(WrapStyle::try_from_str("banana"), None);
+        assert_eq!(WrapStyle::try_from_str(""), None);
+    }
+
+    #[test]
+    fn wrap_style_display_matches_as_str() {
+        let v = WrapStyle::EditorWidth;
+        assert_eq!(format!("{v}"), v.as_str());
     }
 }

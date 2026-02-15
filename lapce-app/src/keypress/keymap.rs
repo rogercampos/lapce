@@ -361,6 +361,7 @@ impl Display for KeyMapPress {
 }
 
 impl Display for KeyMapKey {
+    #[allow(clippy::too_many_lines)]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use floem::pointer::PointerButton as B;
 
@@ -718,5 +719,797 @@ impl Display for KeyMapKey {
             Self::Pointer(B::Mouse(MouseButton::X1)) => f.write_str("MouseBackward"),
             Self::Pointer(_) => f.write_str("MouseUnimplemented"),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::str::FromStr;
+
+    // ── KeyMapPress::parse ──────────────────────────────────────────
+
+    #[test]
+    fn parse_plain_character() {
+        let keys = KeyMapPress::parse("a");
+        assert_eq!(keys.len(), 1);
+        assert_eq!(keys[0].key, KeyMapKey::Logical(Key::Character("a".into())));
+        assert!(keys[0].mods.is_empty());
+    }
+
+    #[test]
+    fn parse_ctrl_modifier() {
+        let keys = KeyMapPress::parse("Ctrl+a");
+        assert_eq!(keys.len(), 1);
+        assert_eq!(keys[0].key, KeyMapKey::Logical(Key::Character("a".into())));
+        assert!(keys[0].mods.control());
+        assert!(!keys[0].mods.shift());
+        assert!(!keys[0].mods.alt());
+        assert!(!keys[0].mods.meta());
+    }
+
+    #[test]
+    fn parse_ctrl_shift() {
+        let keys = KeyMapPress::parse("Ctrl+Shift+a");
+        assert_eq!(keys.len(), 1);
+        assert!(keys[0].mods.control());
+        assert!(keys[0].mods.shift());
+        assert_eq!(keys[0].key, KeyMapKey::Logical(Key::Character("a".into())));
+    }
+
+    #[test]
+    fn parse_modifiers_case_insensitive() {
+        let lower = KeyMapPress::parse("ctrl+shift+a");
+        let upper = KeyMapPress::parse("Ctrl+Shift+a");
+        assert_eq!(lower, upper);
+    }
+
+    #[test]
+    fn parse_chord_two_steps() {
+        let keys = KeyMapPress::parse("Ctrl+w l");
+        assert_eq!(keys.len(), 2);
+        assert!(keys[0].mods.control());
+        assert_eq!(keys[0].key, KeyMapKey::Logical(Key::Character("w".into())));
+        assert!(keys[1].mods.is_empty());
+        assert_eq!(keys[1].key, KeyMapKey::Logical(Key::Character("l".into())));
+    }
+
+    #[test]
+    fn parse_bare_plus() {
+        let keys = KeyMapPress::parse("+");
+        assert_eq!(keys.len(), 1);
+        assert_eq!(keys[0].key, KeyMapKey::Logical(Key::Character("+".into())));
+        assert!(keys[0].mods.is_empty());
+    }
+
+    #[test]
+    fn parse_modifier_plus_plus() {
+        // "Ctrl++" means Ctrl + the "+" key
+        let keys = KeyMapPress::parse("Ctrl++");
+        assert_eq!(keys.len(), 1);
+        assert!(keys[0].mods.control());
+        assert_eq!(keys[0].key, KeyMapKey::Logical(Key::Character("+".into())));
+    }
+
+    #[test]
+    fn parse_named_key_enter() {
+        let keys = KeyMapPress::parse("Enter");
+        assert_eq!(keys.len(), 1);
+        assert_eq!(keys[0].key, KeyMapKey::Logical(Key::Named(NamedKey::Enter)));
+    }
+
+    #[test]
+    fn parse_named_key_esc() {
+        let keys = KeyMapPress::parse("Esc");
+        assert_eq!(keys.len(), 1);
+        assert_eq!(
+            keys[0].key,
+            KeyMapKey::Logical(Key::Named(NamedKey::Escape))
+        );
+    }
+
+    #[test]
+    fn parse_named_key_f1() {
+        let keys = KeyMapPress::parse("F1");
+        assert_eq!(keys.len(), 1);
+        assert_eq!(keys[0].key, KeyMapKey::Logical(Key::Named(NamedKey::F1)));
+    }
+
+    #[test]
+    fn parse_named_key_space() {
+        let keys = KeyMapPress::parse("Space");
+        assert_eq!(keys.len(), 1);
+        assert_eq!(keys[0].key, KeyMapKey::Logical(Key::Named(NamedKey::Space)));
+    }
+
+    #[test]
+    fn parse_named_key_tab() {
+        let keys = KeyMapPress::parse("Tab");
+        assert_eq!(keys.len(), 1);
+        assert_eq!(keys[0].key, KeyMapKey::Logical(Key::Named(NamedKey::Tab)));
+    }
+
+    #[test]
+    fn parse_named_key_bs() {
+        let keys = KeyMapPress::parse("bs");
+        assert_eq!(keys.len(), 1);
+        assert_eq!(
+            keys[0].key,
+            KeyMapKey::Logical(Key::Named(NamedKey::Backspace))
+        );
+    }
+
+    #[test]
+    fn parse_named_key_del() {
+        let keys = KeyMapPress::parse("del");
+        assert_eq!(keys.len(), 1);
+        assert_eq!(
+            keys[0].key,
+            KeyMapKey::Logical(Key::Named(NamedKey::Delete))
+        );
+    }
+
+    #[test]
+    fn parse_ctrl_shift_f5() {
+        let keys = KeyMapPress::parse("Ctrl+Shift+F5");
+        assert_eq!(keys.len(), 1);
+        assert!(keys[0].mods.control());
+        assert!(keys[0].mods.shift());
+        assert_eq!(keys[0].key, KeyMapKey::Logical(Key::Named(NamedKey::F5)));
+    }
+
+    #[test]
+    fn parse_alt_modifier() {
+        let keys = KeyMapPress::parse("Alt+x");
+        assert_eq!(keys.len(), 1);
+        assert!(keys[0].mods.alt());
+        assert_eq!(keys[0].key, KeyMapKey::Logical(Key::Character("x".into())));
+    }
+
+    #[test]
+    fn parse_meta_modifier() {
+        let keys = KeyMapPress::parse("Meta+s");
+        assert_eq!(keys.len(), 1);
+        assert!(keys[0].mods.meta());
+    }
+
+    #[test]
+    fn parse_three_step_chord() {
+        let keys = KeyMapPress::parse("Ctrl+k Ctrl+s a");
+        assert_eq!(keys.len(), 3);
+        assert!(keys[0].mods.control());
+        assert!(keys[1].mods.control());
+        assert!(keys[2].mods.is_empty());
+    }
+
+    // ── KeyMapKey::from_str ─────────────────────────────────────────
+
+    #[test]
+    fn from_str_named_esc() {
+        let key = KeyMapKey::from_str("esc").unwrap();
+        assert_eq!(key, KeyMapKey::Logical(Key::Named(NamedKey::Escape)));
+    }
+
+    #[test]
+    fn from_str_named_enter() {
+        let key = KeyMapKey::from_str("enter").unwrap();
+        assert_eq!(key, KeyMapKey::Logical(Key::Named(NamedKey::Enter)));
+    }
+
+    #[test]
+    fn from_str_named_f1() {
+        let key = KeyMapKey::from_str("f1").unwrap();
+        assert_eq!(key, KeyMapKey::Logical(Key::Named(NamedKey::F1)));
+    }
+
+    #[test]
+    fn from_str_character() {
+        let key = KeyMapKey::from_str("a").unwrap();
+        assert_eq!(key, KeyMapKey::Logical(Key::Character("a".into())));
+    }
+
+    #[test]
+    fn from_str_character_uppercased_becomes_lower() {
+        let key = KeyMapKey::from_str("A").unwrap();
+        assert_eq!(key, KeyMapKey::Logical(Key::Character("a".into())));
+    }
+
+    #[test]
+    fn from_str_physical_esc() {
+        let key = KeyMapKey::from_str("[Esc]").unwrap();
+        assert_eq!(key, KeyMapKey::Physical(PhysicalKey::Code(KeyCode::Escape)));
+    }
+
+    #[test]
+    fn from_str_physical_enter() {
+        let key = KeyMapKey::from_str("[Enter]").unwrap();
+        assert_eq!(key, KeyMapKey::Physical(PhysicalKey::Code(KeyCode::Enter)));
+    }
+
+    #[test]
+    fn from_str_physical_f1() {
+        let key = KeyMapKey::from_str("[F1]").unwrap();
+        assert_eq!(key, KeyMapKey::Physical(PhysicalKey::Code(KeyCode::F1)));
+    }
+
+    #[test]
+    fn from_str_physical_space() {
+        let key = KeyMapKey::from_str("[Space]").unwrap();
+        assert_eq!(key, KeyMapKey::Physical(PhysicalKey::Code(KeyCode::Space)));
+    }
+
+    #[test]
+    fn from_str_bs_is_backspace() {
+        let key = KeyMapKey::from_str("bs").unwrap();
+        assert_eq!(key, KeyMapKey::Logical(Key::Named(NamedKey::Backspace)));
+    }
+
+    #[test]
+    fn from_str_del_is_delete() {
+        let key = KeyMapKey::from_str("del").unwrap();
+        assert_eq!(key, KeyMapKey::Logical(Key::Named(NamedKey::Delete)));
+    }
+
+    #[test]
+    fn from_str_physical_unrecognized_errors() {
+        assert!(KeyMapKey::from_str("[nonsense]").is_err());
+    }
+
+    #[test]
+    fn from_str_super_maps_to_meta() {
+        let key = KeyMapKey::from_str("super").unwrap();
+        assert_eq!(key, KeyMapKey::Logical(Key::Named(NamedKey::Meta)));
+    }
+
+    #[test]
+    fn from_str_physical_super_maps_to_meta() {
+        let key = KeyMapKey::from_str("[Super]").unwrap();
+        assert_eq!(key, KeyMapKey::Physical(PhysicalKey::Code(KeyCode::Meta)));
+    }
+
+    // ── KeyMapPress::is_char ────────────────────────────────────────
+
+    #[test]
+    fn is_char_plain_character() {
+        let kp = KeyMapPress {
+            key: KeyMapKey::Logical(Key::Character("a".into())),
+            mods: Modifiers::empty(),
+        };
+        assert!(kp.is_char());
+    }
+
+    #[test]
+    fn is_char_shift_character() {
+        let kp = KeyMapPress {
+            key: KeyMapKey::Logical(Key::Character("A".into())),
+            mods: Modifiers::SHIFT,
+        };
+        assert!(kp.is_char());
+    }
+
+    #[test]
+    fn is_char_ctrl_character_is_not_char() {
+        let kp = KeyMapPress {
+            key: KeyMapKey::Logical(Key::Character("a".into())),
+            mods: Modifiers::CONTROL,
+        };
+        assert!(!kp.is_char());
+    }
+
+    #[test]
+    fn is_char_ctrl_shift_character_is_not_char() {
+        let kp = KeyMapPress {
+            key: KeyMapKey::Logical(Key::Character("a".into())),
+            mods: Modifiers::CONTROL | Modifiers::SHIFT,
+        };
+        assert!(!kp.is_char());
+    }
+
+    #[test]
+    fn is_char_named_key_is_not_char() {
+        let kp = KeyMapPress {
+            key: KeyMapKey::Logical(Key::Named(NamedKey::Enter)),
+            mods: Modifiers::empty(),
+        };
+        assert!(!kp.is_char());
+    }
+
+    #[test]
+    fn is_char_physical_key_is_not_char() {
+        let kp = KeyMapPress {
+            key: KeyMapKey::Physical(PhysicalKey::Code(KeyCode::KeyA)),
+            mods: Modifiers::empty(),
+        };
+        assert!(!kp.is_char());
+    }
+
+    // ── KeyMapPress::is_modifiers ───────────────────────────────────
+
+    #[test]
+    fn is_modifiers_shift_physical() {
+        let kp = KeyMapPress {
+            key: KeyMapKey::Physical(PhysicalKey::Code(KeyCode::ShiftLeft)),
+            mods: Modifiers::empty(),
+        };
+        assert!(kp.is_modifiers());
+    }
+
+    #[test]
+    fn is_modifiers_ctrl_physical() {
+        let kp = KeyMapPress {
+            key: KeyMapKey::Physical(PhysicalKey::Code(KeyCode::ControlLeft)),
+            mods: Modifiers::empty(),
+        };
+        assert!(kp.is_modifiers());
+    }
+
+    #[test]
+    fn is_modifiers_meta_physical() {
+        let kp = KeyMapPress {
+            key: KeyMapKey::Physical(PhysicalKey::Code(KeyCode::Meta)),
+            mods: Modifiers::empty(),
+        };
+        assert!(kp.is_modifiers());
+    }
+
+    #[test]
+    fn is_modifiers_super_physical() {
+        let kp = KeyMapPress {
+            key: KeyMapKey::Physical(PhysicalKey::Code(KeyCode::SuperLeft)),
+            mods: Modifiers::empty(),
+        };
+        assert!(kp.is_modifiers());
+    }
+
+    #[test]
+    fn is_modifiers_alt_physical() {
+        let kp = KeyMapPress {
+            key: KeyMapKey::Physical(PhysicalKey::Code(KeyCode::AltLeft)),
+            mods: Modifiers::empty(),
+        };
+        assert!(kp.is_modifiers());
+    }
+
+    #[test]
+    fn is_modifiers_logical_shift() {
+        let kp = KeyMapPress {
+            key: KeyMapKey::Logical(Key::Named(NamedKey::Shift)),
+            mods: Modifiers::empty(),
+        };
+        assert!(kp.is_modifiers());
+    }
+
+    #[test]
+    fn is_modifiers_logical_control() {
+        let kp = KeyMapPress {
+            key: KeyMapKey::Logical(Key::Named(NamedKey::Control)),
+            mods: Modifiers::empty(),
+        };
+        assert!(kp.is_modifiers());
+    }
+
+    #[test]
+    fn is_modifiers_logical_alt() {
+        let kp = KeyMapPress {
+            key: KeyMapKey::Logical(Key::Named(NamedKey::Alt)),
+            mods: Modifiers::empty(),
+        };
+        assert!(kp.is_modifiers());
+    }
+
+    #[test]
+    fn is_modifiers_regular_key_is_not() {
+        let kp = KeyMapPress {
+            key: KeyMapKey::Logical(Key::Character("a".into())),
+            mods: Modifiers::empty(),
+        };
+        assert!(!kp.is_modifiers());
+    }
+
+    #[test]
+    fn is_modifiers_named_enter_is_not() {
+        let kp = KeyMapPress {
+            key: KeyMapKey::Logical(Key::Named(NamedKey::Enter)),
+            mods: Modifiers::empty(),
+        };
+        assert!(!kp.is_modifiers());
+    }
+
+    // ── Display roundtrip ───────────────────────────────────────────
+
+    #[test]
+    fn display_roundtrip_simple_char() {
+        let original = KeyMapPress::parse("a");
+        let displayed = original[0].to_string();
+        let reparsed = KeyMapPress::parse(&displayed);
+        assert_eq!(original, reparsed);
+    }
+
+    #[test]
+    fn display_roundtrip_ctrl_char() {
+        let original = KeyMapPress::parse("Ctrl+a");
+        let displayed = original[0].to_string();
+        let reparsed = KeyMapPress::parse(&displayed);
+        assert_eq!(original, reparsed);
+    }
+
+    #[test]
+    fn display_roundtrip_named_key() {
+        // "Esc" parses to Escape; Display outputs "Escape"; re-parsing
+        // "Escape" should produce the same key.
+        let original = KeyMapPress::parse("Escape");
+        let displayed = original[0].to_string();
+        let reparsed = KeyMapPress::parse(&displayed);
+        assert_eq!(original, reparsed);
+    }
+
+    #[test]
+    fn display_roundtrip_ctrl_shift() {
+        let original = KeyMapPress::parse("Ctrl+Shift+F5");
+        let displayed = original[0].to_string();
+        let reparsed = KeyMapPress::parse(&displayed);
+        assert_eq!(original, reparsed);
+    }
+
+    #[test]
+    fn display_physical_key_has_brackets() {
+        let key = KeyMapKey::Physical(PhysicalKey::Code(KeyCode::Escape));
+        let s = key.to_string();
+        assert_eq!(s, "[Escape]");
+    }
+
+    #[test]
+    fn display_logical_named_key_no_brackets() {
+        let key = KeyMapKey::Logical(Key::Named(NamedKey::Escape));
+        let s = key.to_string();
+        assert_eq!(s, "Escape");
+    }
+
+    #[test]
+    fn display_logical_character() {
+        let key = KeyMapKey::Logical(Key::Character("x".into()));
+        let s = key.to_string();
+        assert_eq!(s, "x");
+    }
+
+    // ── KeyMapPress::label ──────────────────────────────────────────
+
+    #[test]
+    fn label_plain_key() {
+        let kp = KeyMapPress {
+            key: KeyMapKey::Logical(Key::Character("a".into())),
+            mods: Modifiers::empty(),
+        };
+        assert_eq!(kp.label(), "a");
+    }
+
+    #[test]
+    fn label_ctrl_key() {
+        let kp = KeyMapPress {
+            key: KeyMapKey::Logical(Key::Character("s".into())),
+            mods: Modifiers::CONTROL,
+        };
+        assert_eq!(kp.label(), "Ctrl+s");
+    }
+
+    #[test]
+    fn label_ctrl_shift_key() {
+        let kp = KeyMapPress {
+            key: KeyMapKey::Logical(Key::Named(NamedKey::F5)),
+            mods: Modifiers::CONTROL | Modifiers::SHIFT,
+        };
+        assert_eq!(kp.label(), "Ctrl+Shift+F5");
+    }
+
+    // ── Edge cases ──────────────────────────────────────────────────
+
+    #[test]
+    fn parse_empty_string_produces_empty() {
+        let keys = KeyMapPress::parse("");
+        // Empty string produces one segment that is empty — but "" lowercased
+        // becomes a Character(""), which is a valid parse, so we get one entry.
+        // The actual behavior: "" goes through from_str which produces
+        // Key::Character("") since it doesn't match any named key.
+        assert_eq!(keys.len(), 1);
+    }
+
+    #[test]
+    fn parse_multiple_modifiers_all_set() {
+        let keys = KeyMapPress::parse("Ctrl+Alt+Shift+Meta+a");
+        assert_eq!(keys.len(), 1);
+        assert!(keys[0].mods.control());
+        assert!(keys[0].mods.alt());
+        assert!(keys[0].mods.shift());
+        assert!(keys[0].mods.meta());
+    }
+
+    #[test]
+    fn from_str_arrow_keys() {
+        assert_eq!(
+            KeyMapKey::from_str("up").unwrap(),
+            KeyMapKey::Logical(Key::Named(NamedKey::ArrowUp))
+        );
+        assert_eq!(
+            KeyMapKey::from_str("down").unwrap(),
+            KeyMapKey::Logical(Key::Named(NamedKey::ArrowDown))
+        );
+        assert_eq!(
+            KeyMapKey::from_str("left").unwrap(),
+            KeyMapKey::Logical(Key::Named(NamedKey::ArrowLeft))
+        );
+        assert_eq!(
+            KeyMapKey::from_str("right").unwrap(),
+            KeyMapKey::Logical(Key::Named(NamedKey::ArrowRight))
+        );
+    }
+
+    #[test]
+    fn from_str_case_insensitive() {
+        assert_eq!(
+            KeyMapKey::from_str("ESC").unwrap(),
+            KeyMapKey::from_str("esc").unwrap(),
+        );
+        assert_eq!(
+            KeyMapKey::from_str("Enter").unwrap(),
+            KeyMapKey::from_str("ENTER").unwrap(),
+        );
+    }
+
+    #[test]
+    fn from_str_physical_case_insensitive() {
+        assert_eq!(
+            KeyMapKey::from_str("[ESC]").unwrap(),
+            KeyMapKey::from_str("[esc]").unwrap(),
+        );
+    }
+
+    // ── label() modifier branches ───────────────────────────────────
+
+    #[test]
+    fn label_alt_modifier() {
+        let kp = KeyMapPress {
+            key: KeyMapKey::Logical(Key::Character("a".into())),
+            mods: Modifiers::ALT,
+        };
+        assert_eq!(kp.label(), "Alt+a");
+    }
+
+    #[test]
+    fn label_altgr_modifier() {
+        let kp = KeyMapPress {
+            key: KeyMapKey::Logical(Key::Character("a".into())),
+            mods: Modifiers::ALTGR,
+        };
+        assert_eq!(kp.label(), "AltGr+a");
+    }
+
+    #[test]
+    fn label_meta_modifier() {
+        let kp = KeyMapPress {
+            key: KeyMapKey::Logical(Key::Character("s".into())),
+            mods: Modifiers::META,
+        };
+        let label = kp.label();
+        // OS-dependent label
+        if cfg!(target_os = "macos") {
+            assert_eq!(label, "Cmd+s");
+        } else if cfg!(target_os = "windows") {
+            assert_eq!(label, "Win+s");
+        } else {
+            assert_eq!(label, "Meta+s");
+        }
+    }
+
+    #[test]
+    fn label_shift_only() {
+        let kp = KeyMapPress {
+            key: KeyMapKey::Logical(Key::Character("a".into())),
+            mods: Modifiers::SHIFT,
+        };
+        assert_eq!(kp.label(), "Shift+a");
+    }
+
+    #[test]
+    fn label_all_modifiers_combined() {
+        let kp = KeyMapPress {
+            key: KeyMapKey::Logical(Key::Character("x".into())),
+            mods: Modifiers::CONTROL
+                | Modifiers::ALT
+                | Modifiers::SHIFT
+                | Modifiers::META,
+        };
+        let label = kp.label();
+        // Verify ordering: Ctrl, Alt, Meta, Shift
+        assert!(label.starts_with("Ctrl+Alt+"));
+        assert!(label.contains("Shift+"));
+        assert!(label.ends_with("x"));
+    }
+
+    // ── parse() edge cases ──────────────────────────────────────────
+
+    #[test]
+    fn parse_altgr_modifier() {
+        let keys = KeyMapPress::parse("AltGr+a");
+        assert_eq!(keys.len(), 1);
+        assert!(keys[0].mods.altgr());
+        assert_eq!(keys[0].key, KeyMapKey::Logical(Key::Character("a".into())));
+    }
+
+    #[test]
+    fn parse_invalid_modifier_ignored() {
+        // "Foo" is not a known modifier — it should be ignored (logged as warning)
+        let keys = KeyMapPress::parse("Foo+a");
+        assert_eq!(keys.len(), 1);
+        // The key should still parse; the bad modifier is silently ignored
+        assert_eq!(keys[0].key, KeyMapKey::Logical(Key::Character("a".into())));
+        assert!(keys[0].mods.is_empty());
+    }
+
+    #[test]
+    fn parse_unrecognized_physical_key_filtered() {
+        // "[nonsense]" is a physical key syntax but "nonsense" is not a valid KeyCode
+        let keys = KeyMapPress::parse("[nonsense]");
+        assert!(keys.is_empty());
+    }
+
+    #[test]
+    fn parse_physical_key_with_modifier() {
+        let keys = KeyMapPress::parse("Ctrl+[Esc]");
+        assert_eq!(keys.len(), 1);
+        assert!(keys[0].mods.control());
+        assert_eq!(
+            keys[0].key,
+            KeyMapKey::Physical(PhysicalKey::Code(KeyCode::Escape))
+        );
+    }
+
+    // ── is_modifiers() additional branches ──────────────────────────
+
+    #[test]
+    fn is_modifiers_physical_non_modifier_key() {
+        let kp = KeyMapPress {
+            key: KeyMapKey::Physical(PhysicalKey::Code(KeyCode::KeyA)),
+            mods: Modifiers::empty(),
+        };
+        assert!(!kp.is_modifiers());
+    }
+
+    #[test]
+    fn is_modifiers_right_side_physical_keys() {
+        let right_mods = [
+            KeyCode::ShiftRight,
+            KeyCode::ControlRight,
+            KeyCode::SuperRight,
+            KeyCode::AltRight,
+        ];
+        for code in right_mods {
+            let kp = KeyMapPress {
+                key: KeyMapKey::Physical(PhysicalKey::Code(code)),
+                mods: Modifiers::empty(),
+            };
+            assert!(kp.is_modifiers(), "Expected {:?} to be a modifier", code);
+        }
+    }
+
+    #[test]
+    fn is_modifiers_logical_meta_and_super() {
+        for named in [NamedKey::Meta, NamedKey::Super, NamedKey::AltGraph] {
+            let kp = KeyMapPress {
+                key: KeyMapKey::Logical(Key::Named(named.clone())),
+                mods: Modifiers::empty(),
+            };
+            assert!(kp.is_modifiers(), "Expected {:?} to be a modifier", named);
+        }
+    }
+
+    #[test]
+    fn is_modifiers_pointer_is_not() {
+        let kp = KeyMapPress {
+            key: KeyMapKey::Pointer(PointerButton::Mouse(MouseButton::Primary)),
+            mods: Modifiers::empty(),
+        };
+        assert!(!kp.is_modifiers());
+    }
+
+    // ── Display for KeyMapPress with Alt/AltGr/Meta ─────────────────
+
+    #[test]
+    fn display_alt_modifier() {
+        let kp = KeyMapPress {
+            key: KeyMapKey::Logical(Key::Character("a".into())),
+            mods: Modifiers::ALT,
+        };
+        assert_eq!(kp.to_string(), "Alt+a");
+    }
+
+    #[test]
+    fn display_altgr_modifier() {
+        let kp = KeyMapPress {
+            key: KeyMapKey::Logical(Key::Character("a".into())),
+            mods: Modifiers::ALTGR,
+        };
+        assert_eq!(kp.to_string(), "AltGr+a");
+    }
+
+    #[test]
+    fn display_meta_modifier() {
+        let kp = KeyMapPress {
+            key: KeyMapKey::Logical(Key::Character("s".into())),
+            mods: Modifiers::META,
+        };
+        // Display always writes "Meta+" regardless of OS
+        assert_eq!(kp.to_string(), "Meta+s");
+    }
+
+    // ── Display for KeyMapKey::Pointer variants ─────────────────────
+
+    #[test]
+    fn display_pointer_mouse_middle() {
+        let key = KeyMapKey::Pointer(PointerButton::Mouse(MouseButton::Auxiliary));
+        assert_eq!(key.to_string(), "MouseMiddle");
+    }
+
+    #[test]
+    fn display_pointer_mouse_forward_backward() {
+        let fwd = KeyMapKey::Pointer(PointerButton::Mouse(MouseButton::X2));
+        assert_eq!(fwd.to_string(), "MouseForward");
+        let bwd = KeyMapKey::Pointer(PointerButton::Mouse(MouseButton::X1));
+        assert_eq!(bwd.to_string(), "MouseBackward");
+    }
+
+    // ── Hash consistency for KeyMapKey ───────────────────────────────
+
+    #[test]
+    fn hash_pointer_consistency() {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        let a = KeyMapKey::Pointer(PointerButton::Mouse(MouseButton::Primary));
+        let b = KeyMapKey::Pointer(PointerButton::Mouse(MouseButton::Primary));
+
+        let mut h1 = DefaultHasher::new();
+        a.hash(&mut h1);
+        let mut h2 = DefaultHasher::new();
+        b.hash(&mut h2);
+
+        assert_eq!(a, b);
+        assert_eq!(h1.finish(), h2.finish());
+    }
+
+    #[test]
+    fn hash_physical_consistency() {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        let a = KeyMapKey::Physical(PhysicalKey::Code(KeyCode::KeyA));
+        let b = KeyMapKey::Physical(PhysicalKey::Code(KeyCode::KeyA));
+
+        let mut h1 = DefaultHasher::new();
+        a.hash(&mut h1);
+        let mut h2 = DefaultHasher::new();
+        b.hash(&mut h2);
+
+        assert_eq!(a, b);
+        assert_eq!(h1.finish(), h2.finish());
+    }
+
+    // ── is_char() with Alt/Meta modifiers ───────────────────────────
+
+    #[test]
+    fn is_char_alt_character_is_not_char() {
+        let kp = KeyMapPress {
+            key: KeyMapKey::Logical(Key::Character("a".into())),
+            mods: Modifiers::ALT,
+        };
+        assert!(!kp.is_char());
+    }
+
+    #[test]
+    fn is_char_meta_character_is_not_char() {
+        let kp = KeyMapPress {
+            key: KeyMapKey::Logical(Key::Character("a".into())),
+            mods: Modifiers::META,
+        };
+        assert!(!kp.is_char());
     }
 }

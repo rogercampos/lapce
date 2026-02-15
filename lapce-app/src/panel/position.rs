@@ -83,3 +83,141 @@ impl PanelContainerPosition {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn is_bottom_true_for_bottom_positions() {
+        assert!(PanelPosition::BottomLeft.is_bottom());
+        assert!(PanelPosition::BottomRight.is_bottom());
+    }
+
+    #[test]
+    fn is_bottom_false_for_non_bottom_positions() {
+        assert!(!PanelPosition::LeftTop.is_bottom());
+        assert!(!PanelPosition::LeftBottom.is_bottom());
+        assert!(!PanelPosition::RightTop.is_bottom());
+        assert!(!PanelPosition::RightBottom.is_bottom());
+    }
+
+    #[test]
+    fn is_right_true_for_right_positions() {
+        assert!(PanelPosition::RightTop.is_right());
+        assert!(PanelPosition::RightBottom.is_right());
+    }
+
+    #[test]
+    fn is_right_false_for_non_right_positions() {
+        assert!(!PanelPosition::LeftTop.is_right());
+        assert!(!PanelPosition::LeftBottom.is_right());
+        assert!(!PanelPosition::BottomLeft.is_right());
+        assert!(!PanelPosition::BottomRight.is_right());
+    }
+
+    #[test]
+    fn is_left_true_for_left_positions() {
+        assert!(PanelPosition::LeftTop.is_left());
+        assert!(PanelPosition::LeftBottom.is_left());
+    }
+
+    #[test]
+    fn is_left_false_for_non_left_positions() {
+        assert!(!PanelPosition::RightTop.is_left());
+        assert!(!PanelPosition::RightBottom.is_left());
+        assert!(!PanelPosition::BottomLeft.is_left());
+        assert!(!PanelPosition::BottomRight.is_left());
+    }
+
+    #[test]
+    fn is_first_returns_true_for_first_halves() {
+        assert!(PanelPosition::LeftTop.is_first());
+        assert!(PanelPosition::BottomLeft.is_first());
+        assert!(PanelPosition::RightTop.is_first());
+    }
+
+    #[test]
+    fn is_first_returns_false_for_second_halves() {
+        assert!(!PanelPosition::LeftBottom.is_first());
+        assert!(!PanelPosition::BottomRight.is_first());
+        assert!(!PanelPosition::RightBottom.is_first());
+    }
+
+    #[test]
+    fn peer_returns_other_half_of_same_container() {
+        assert_eq!(PanelPosition::LeftTop.peer(), PanelPosition::LeftBottom);
+        assert_eq!(PanelPosition::LeftBottom.peer(), PanelPosition::LeftTop);
+        assert_eq!(PanelPosition::BottomLeft.peer(), PanelPosition::BottomRight);
+        assert_eq!(PanelPosition::BottomRight.peer(), PanelPosition::BottomLeft);
+        assert_eq!(PanelPosition::RightTop.peer(), PanelPosition::RightBottom);
+        assert_eq!(PanelPosition::RightBottom.peer(), PanelPosition::RightTop);
+    }
+
+    #[test]
+    fn peer_is_involution() {
+        let all = [
+            PanelPosition::LeftTop,
+            PanelPosition::LeftBottom,
+            PanelPosition::BottomLeft,
+            PanelPosition::BottomRight,
+            PanelPosition::RightTop,
+            PanelPosition::RightBottom,
+        ];
+        for pos in all {
+            assert_eq!(pos.peer().peer(), pos, "peer(peer({pos:?})) != {pos:?}");
+        }
+    }
+
+    #[test]
+    fn container_is_bottom() {
+        assert!(PanelContainerPosition::Bottom.is_bottom());
+        assert!(!PanelContainerPosition::Left.is_bottom());
+        assert!(!PanelContainerPosition::Right.is_bottom());
+    }
+
+    #[test]
+    fn container_first_returns_correct_position() {
+        assert_eq!(PanelContainerPosition::Left.first(), PanelPosition::LeftTop);
+        assert_eq!(
+            PanelContainerPosition::Bottom.first(),
+            PanelPosition::BottomLeft
+        );
+        assert_eq!(
+            PanelContainerPosition::Right.first(),
+            PanelPosition::RightTop
+        );
+    }
+
+    #[test]
+    fn container_second_returns_correct_position() {
+        assert_eq!(
+            PanelContainerPosition::Left.second(),
+            PanelPosition::LeftBottom
+        );
+        assert_eq!(
+            PanelContainerPosition::Bottom.second(),
+            PanelPosition::BottomRight
+        );
+        assert_eq!(
+            PanelContainerPosition::Right.second(),
+            PanelPosition::RightBottom
+        );
+    }
+
+    #[test]
+    fn first_peer_equals_second_for_each_container() {
+        let containers = [
+            PanelContainerPosition::Left,
+            PanelContainerPosition::Bottom,
+            PanelContainerPosition::Right,
+        ];
+        for container in containers {
+            assert_eq!(
+                container.first().peer(),
+                container.second(),
+                "first().peer() != second() for {container:?}"
+            );
+        }
+    }
+}

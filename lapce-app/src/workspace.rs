@@ -71,3 +71,88 @@ pub struct WorkspaceInfo {
     pub split: SplitInfo,
     pub panel: PanelInfo,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_workspace_is_local_with_no_path() {
+        let ws = LapceWorkspace::default();
+        assert_eq!(ws.kind, LapceWorkspaceType::Local);
+        assert_eq!(ws.path, None);
+        assert_eq!(ws.last_open, 0);
+    }
+
+    #[test]
+    fn display_returns_none_when_no_path() {
+        let ws = LapceWorkspace::default();
+        assert_eq!(ws.display(), None);
+    }
+
+    #[test]
+    fn display_returns_file_name_for_normal_path() {
+        let ws = LapceWorkspace {
+            kind: LapceWorkspaceType::Local,
+            path: Some(PathBuf::from("/home/user/my-project")),
+            last_open: 0,
+        };
+        assert_eq!(ws.display(), Some("my-project".to_string()));
+    }
+
+    #[test]
+    fn display_returns_full_path_for_root() {
+        let ws = LapceWorkspace {
+            kind: LapceWorkspaceType::Local,
+            path: Some(PathBuf::from("/")),
+            last_open: 0,
+        };
+        // "/" has no file_name, so it falls back to the full OsStr
+        assert_eq!(ws.display(), Some("/".to_string()));
+    }
+
+    #[test]
+    fn display_trait_with_path() {
+        let ws = LapceWorkspace {
+            kind: LapceWorkspaceType::Local,
+            path: Some(PathBuf::from("/home/user/project")),
+            last_open: 0,
+        };
+        assert_eq!(format!("{ws}"), "Local:/home/user/project");
+    }
+
+    #[test]
+    fn display_trait_without_path() {
+        let ws = LapceWorkspace::default();
+        assert_eq!(format!("{ws}"), "Local:");
+    }
+
+    #[test]
+    fn workspace_type_display() {
+        assert_eq!(format!("{}", LapceWorkspaceType::Local), "Local");
+    }
+
+    #[test]
+    fn serialization_roundtrip() {
+        let ws = LapceWorkspace {
+            kind: LapceWorkspaceType::Local,
+            path: Some(PathBuf::from("/home/user/project")),
+            last_open: 1234567890,
+        };
+        let json = serde_json::to_string(&ws).unwrap();
+        let deserialized: LapceWorkspace = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.kind, ws.kind);
+        assert_eq!(deserialized.path, ws.path);
+        assert_eq!(deserialized.last_open, ws.last_open);
+    }
+
+    #[test]
+    fn serialization_roundtrip_no_path() {
+        let ws = LapceWorkspace::default();
+        let json = serde_json::to_string(&ws).unwrap();
+        let deserialized: LapceWorkspace = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.kind, ws.kind);
+        assert_eq!(deserialized.path, ws.path);
+        assert_eq!(deserialized.last_open, ws.last_open);
+    }
+}

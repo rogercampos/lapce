@@ -280,3 +280,250 @@ fn mode_from_bool(is_recursive: bool) -> RecursiveMode {
         RecursiveMode::NonRecursive
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use notify::event::{CreateKind, ModifyKind, RemoveKind, RenameMode};
+
+    fn watchee(path: &str, recursive: bool) -> Watchee {
+        Watchee {
+            path: PathBuf::from(path),
+            recursive,
+            token: WatchToken(0),
+            filter: None,
+        }
+    }
+
+    fn watchee_filtered<F>(path: &str, recursive: bool, filter: F) -> Watchee
+    where
+        F: Fn(&Path) -> bool + Send + 'static,
+    {
+        Watchee {
+            path: PathBuf::from(path),
+            recursive,
+            token: WatchToken(0),
+            filter: Some(Box::new(filter)),
+        }
+    }
+
+    // --- applies_to_path tests ---
+
+    #[test]
+    fn applies_to_path_exact_match() {
+        let w = watchee("/home/user/file.txt", false);
+        assert!(w.applies_to_path(Path::new("/home/user/file.txt")));
+    }
+
+    #[test]
+    fn applies_to_path_direct_child_non_recursive() {
+        // Non-recursive watch on a directory matches immediate children
+        let w = watchee("/home/user/project", false);
+        assert!(w.applies_to_path(Path::new("/home/user/project/file.txt")));
+    }
+
+    #[test]
+    fn applies_to_path_grandchild_non_recursive_rejected() {
+        // Non-recursive watch should NOT match grandchildren
+        let w = watchee("/home/user/project", false);
+        assert!(!w.applies_to_path(Path::new("/home/user/project/src/main.rs")));
+    }
+
+    #[test]
+    fn applies_to_path_grandchild_recursive() {
+        // Recursive watch should match nested descendants
+        let w = watchee("/home/user/project", true);
+        assert!(w.applies_to_path(Path::new("/home/user/project/src/main.rs")));
+        assert!(w.applies_to_path(Path::new(
+            "/home/user/project/src/deep/nested/file.rs"
+        )));
+    }
+
+    #[test]
+    fn applies_to_path_unrelated_path() {
+        let w = watchee("/home/user/project", true);
+        assert!(!w.applies_to_path(Path::new("/home/other/file.txt")));
+    }
+
+    #[test]
+    fn applies_to_path_sibling_not_matched() {
+        let w = watchee("/home/user/project", false);
+        assert!(!w.applies_to_path(Path::new("/home/user/other_project/file.txt")));
+    }
+
+    #[test]
+    fn applies_to_path_with_filter_passing() {
+        let w = watchee_filtered("/home/user/project", true, |p: &Path| {
+            p.extension().and_then(|e| e.to_str()) == Some("rs")
+        });
+        assert!(w.applies_to_path(Path::new("/home/user/project/src/main.rs")));
+    }
+
+    #[test]
+    fn applies_to_path_with_filter_rejecting() {
+        let w = watchee_filtered("/home/user/project", true, |p: &Path| {
+            p.extension().and_then(|e| e.to_str()) == Some("rs")
+        });
+        assert!(!w.applies_to_path(Path::new("/home/user/project/src/main.js")));
+    }
+
+    #[test]
+    fn applies_to_path_filter_only_applied_when_general_passes() {
+        // Filter should not be reached for paths outside the watched scope
+        let w = watchee_filtered("/home/user/project", false, |_: &Path| true);
+        assert!(!w.applies_to_path(Path::new("/other/path/file.txt")));
+    }
+
+    // --- wants_event tests ---
+
+    fn create_event(kind: EventKind, paths: Vec<PathBuf>) -> Event {
+        Event {
+            kind,
+            paths,
+            attrs: Default::default(),
+        }
+    }
+
+    #[test]
+    fn wants_event_modify_single_path_match() {
+        let w = watchee("/home/user/project", true);
+        let event = create_event(
+            EventKind::Modify(ModifyKind::Data(notify::event::DataChange::Content)),
+            vec![PathBuf::from("/home/user/project/src/main.rs")],
+        );
+        assert!(w.wants_event(&event));
+    }
+
+    #[test]
+    fn wants_event_modify_single_path_no_match() {
+        let w = watchee("/home/user/project", true);
+        let event = create_event(
+            EventKind::Modify(ModifyKind::Data(notify::event::DataChange::Content)),
+            vec![PathBuf::from("/other/path/file.txt")],
+        );
+        assert!(!w.wants_event(&event));
+    }
+
+    #[test]
+    fn wants_event_create() {
+        let w = watchee("/home/user/project", true);
+        let event = create_event(
+            EventKind::Create(CreateKind::File),
+            vec![PathBuf::from("/home/user/project/new_file.rs")],
+        );
+        assert!(w.wants_event(&event));
+    }
+
+    #[test]
+    fn wants_event_remove() {
+        let w = watchee("/home/user/project", true);
+        let event = create_event(
+            EventKind::Remove(RemoveKind::File),
+            vec![PathBuf::from("/home/user/project/old_file.rs")],
+        );
+        assert!(w.wants_event(&event));
+    }
+
+    #[test]
+    fn wants_event_rename_both_matches_source() {
+        let w = watchee("/home/user/project", true);
+        let event = create_event(
+            EventKind::Modify(ModifyKind::Name(RenameMode::Both)),
+            vec![
+                PathBuf::from("/home/user/project/old_name.rs"),
+                PathBuf::from("/other/place/new_name.rs"),
+            ],
+        );
+        assert!(w.wants_event(&event));
+    }
+
+    #[test]
+    fn wants_event_rename_both_matches_destination() {
+        let w = watchee("/home/user/project", true);
+        let event = create_event(
+            EventKind::Modify(ModifyKind::Name(RenameMode::Both)),
+            vec![
+                PathBuf::from("/other/place/old_name.rs"),
+                PathBuf::from("/home/user/project/new_name.rs"),
+            ],
+        );
+        assert!(w.wants_event(&event));
+    }
+
+    #[test]
+    fn wants_event_rename_both_neither_matches() {
+        let w = watchee("/home/user/project", true);
+        let event = create_event(
+            EventKind::Modify(ModifyKind::Name(RenameMode::Both)),
+            vec![
+                PathBuf::from("/other/old.rs"),
+                PathBuf::from("/other/new.rs"),
+            ],
+        );
+        assert!(!w.wants_event(&event));
+    }
+
+    #[test]
+    fn wants_event_access_kind_ignored() {
+        let w = watchee("/home/user/project", true);
+        let event = create_event(
+            EventKind::Access(notify::event::AccessKind::Read),
+            vec![PathBuf::from("/home/user/project/file.rs")],
+        );
+        assert!(!w.wants_event(&event));
+    }
+
+    #[test]
+    fn wants_event_other_kind_ignored() {
+        let w = watchee("/home/user/project", true);
+        let event = create_event(
+            EventKind::Other,
+            vec![PathBuf::from("/home/user/project/file.rs")],
+        );
+        assert!(!w.wants_event(&event));
+    }
+
+    #[test]
+    fn wants_event_modify_wrong_path_count_ignored() {
+        let w = watchee("/home/user/project", true);
+        // A Modify event with 0 paths should not match
+        let event = create_event(
+            EventKind::Modify(ModifyKind::Data(notify::event::DataChange::Content)),
+            vec![],
+        );
+        assert!(!w.wants_event(&event));
+
+        // A non-rename Modify event with 2 paths should not match
+        let event = create_event(
+            EventKind::Modify(ModifyKind::Data(notify::event::DataChange::Content)),
+            vec![
+                PathBuf::from("/home/user/project/a.rs"),
+                PathBuf::from("/home/user/project/b.rs"),
+            ],
+        );
+        assert!(!w.wants_event(&event));
+    }
+
+    #[test]
+    fn wants_event_rename_both_wrong_path_count() {
+        let w = watchee("/home/user/project", true);
+        // Rename(Both) with only 1 path should not match
+        let event = create_event(
+            EventKind::Modify(ModifyKind::Name(RenameMode::Both)),
+            vec![PathBuf::from("/home/user/project/file.rs")],
+        );
+        assert!(!w.wants_event(&event));
+    }
+
+    // --- mode_from_bool tests ---
+
+    #[test]
+    fn mode_from_bool_recursive() {
+        assert_eq!(mode_from_bool(true), RecursiveMode::Recursive);
+    }
+
+    #[test]
+    fn mode_from_bool_non_recursive() {
+        assert_eq!(mode_from_bool(false), RecursiveMode::NonRecursive);
+    }
+}

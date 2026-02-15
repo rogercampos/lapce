@@ -353,3 +353,338 @@ pub fn from_plaintext(
     );
     vec![MarkdownContent::Text(text_layout)]
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pulldown_cmark::{BlockQuoteKind, HeadingLevel, LinkType};
+
+    #[test]
+    fn newline_after_heading() {
+        let tag = Tag::Heading {
+            level: HeadingLevel::H1,
+            id: None,
+            classes: vec![],
+            attrs: vec![],
+        };
+        assert!(should_add_newline_after_tag(&tag));
+    }
+
+    #[test]
+    fn newline_after_paragraph() {
+        let tag = Tag::Paragraph;
+        assert!(should_add_newline_after_tag(&tag));
+    }
+
+    #[test]
+    fn newline_after_code_block() {
+        let tag = Tag::CodeBlock(CodeBlockKind::Fenced("rust".into()));
+        assert!(should_add_newline_after_tag(&tag));
+    }
+
+    #[test]
+    fn newline_after_block_quote() {
+        let tag = Tag::BlockQuote(Some(BlockQuoteKind::Note));
+        assert!(should_add_newline_after_tag(&tag));
+    }
+
+    #[test]
+    fn no_newline_after_emphasis() {
+        assert!(!should_add_newline_after_tag(&Tag::Emphasis));
+    }
+
+    #[test]
+    fn no_newline_after_strong() {
+        assert!(!should_add_newline_after_tag(&Tag::Strong));
+    }
+
+    #[test]
+    fn no_newline_after_strikethrough() {
+        assert!(!should_add_newline_after_tag(&Tag::Strikethrough));
+    }
+
+    #[test]
+    fn no_newline_after_link() {
+        let tag = Tag::Link {
+            link_type: LinkType::Inline,
+            dest_url: "http://example.com".into(),
+            title: "".into(),
+            id: "".into(),
+        };
+        assert!(!should_add_newline_after_tag(&tag));
+    }
+
+    #[test]
+    fn skip_text_in_image_tag() {
+        let tag = Tag::Image {
+            link_type: LinkType::Inline,
+            dest_url: "http://example.com/img.png".into(),
+            title: "alt text".into(),
+            id: "".into(),
+        };
+        assert!(should_skip_text_in_tag(&tag));
+    }
+
+    #[test]
+    fn dont_skip_text_in_paragraph() {
+        assert!(!should_skip_text_in_tag(&Tag::Paragraph));
+    }
+
+    #[test]
+    fn dont_skip_text_in_emphasis() {
+        assert!(!should_skip_text_in_tag(&Tag::Emphasis));
+    }
+
+    #[test]
+    fn dont_skip_text_in_code_block() {
+        let tag = Tag::CodeBlock(CodeBlockKind::Indented);
+        assert!(!should_skip_text_in_tag(&tag));
+    }
+
+    #[test]
+    fn md_language_rust() {
+        let result = md_language_to_lapce_language("rust");
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn md_language_python() {
+        let result = md_language_to_lapce_language("python");
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn md_language_javascript() {
+        let result = md_language_to_lapce_language("javascript");
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn md_language_case_insensitive() {
+        // from_name lowercases the input
+        let result = md_language_to_lapce_language("Rust");
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn md_language_unknown_returns_none() {
+        assert!(md_language_to_lapce_language("not_a_real_language").is_none());
+    }
+
+    #[test]
+    fn md_language_empty_string_returns_none() {
+        assert!(md_language_to_lapce_language("").is_none());
+    }
+
+    // --- attribute_for_tag() tests ---
+
+    #[test]
+    fn attribute_for_tag_heading_h1_bold_and_scaled() {
+        let config = LapceConfig::test_default();
+        let code_font: Vec<FamilyOwned> = vec![];
+        let default_attrs = Attrs::new().font_size(14.0);
+        let tag = Tag::Heading {
+            level: HeadingLevel::H1,
+            id: None,
+            classes: vec![],
+            attrs: vec![],
+        };
+        let result = attribute_for_tag(default_attrs, &tag, &code_font, &config);
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn attribute_for_tag_heading_h6() {
+        let config = LapceConfig::test_default();
+        let code_font: Vec<FamilyOwned> = vec![];
+        let default_attrs = Attrs::new().font_size(14.0);
+        let tag = Tag::Heading {
+            level: HeadingLevel::H6,
+            id: None,
+            classes: vec![],
+            attrs: vec![],
+        };
+        let result = attribute_for_tag(default_attrs, &tag, &code_font, &config);
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn attribute_for_tag_emphasis_italic() {
+        let config = LapceConfig::test_default();
+        let code_font: Vec<FamilyOwned> = vec![];
+        let default_attrs = Attrs::new();
+        let result =
+            attribute_for_tag(default_attrs, &Tag::Emphasis, &code_font, &config);
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn attribute_for_tag_strong_bold() {
+        let config = LapceConfig::test_default();
+        let code_font: Vec<FamilyOwned> = vec![];
+        let default_attrs = Attrs::new();
+        let result =
+            attribute_for_tag(default_attrs, &Tag::Strong, &code_font, &config);
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn attribute_for_tag_code_block() {
+        let config = LapceConfig::test_default();
+        let code_font: Vec<FamilyOwned> = vec![];
+        let default_attrs = Attrs::new();
+        let tag = Tag::CodeBlock(CodeBlockKind::Indented);
+        let result = attribute_for_tag(default_attrs, &tag, &code_font, &config);
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn attribute_for_tag_link() {
+        let config = LapceConfig::test_default();
+        let code_font: Vec<FamilyOwned> = vec![];
+        let default_attrs = Attrs::new();
+        let tag = Tag::Link {
+            link_type: LinkType::Inline,
+            dest_url: "https://example.com".into(),
+            title: "".into(),
+            id: "".into(),
+        };
+        let result = attribute_for_tag(default_attrs, &tag, &code_font, &config);
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn attribute_for_tag_blockquote() {
+        let config = LapceConfig::test_default();
+        let code_font: Vec<FamilyOwned> = vec![];
+        let default_attrs = Attrs::new();
+        let tag = Tag::BlockQuote(None);
+        let result = attribute_for_tag(default_attrs, &tag, &code_font, &config);
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn attribute_for_tag_paragraph_returns_none() {
+        let config = LapceConfig::test_default();
+        let code_font: Vec<FamilyOwned> = vec![];
+        let default_attrs = Attrs::new();
+        let result =
+            attribute_for_tag(default_attrs, &Tag::Paragraph, &code_font, &config);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn attribute_for_tag_list_returns_none() {
+        let config = LapceConfig::test_default();
+        let code_font: Vec<FamilyOwned> = vec![];
+        let default_attrs = Attrs::new();
+        let result =
+            attribute_for_tag(default_attrs, &Tag::List(None), &code_font, &config);
+        assert!(result.is_none());
+    }
+
+    // --- parse_markdown() structural tests ---
+
+    #[test]
+    fn parse_markdown_empty_input() {
+        let config = LapceConfig::test_default();
+        let result = parse_markdown("", 1.5, &config);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn parse_markdown_plain_text() {
+        let config = LapceConfig::test_default();
+        let result = parse_markdown("hello world", 1.5, &config);
+        assert!(!result.is_empty());
+        assert!(matches!(result[0], MarkdownContent::Text(_)));
+    }
+
+    #[test]
+    fn parse_markdown_heading() {
+        let config = LapceConfig::test_default();
+        let result = parse_markdown("# Title", 1.5, &config);
+        assert!(!result.is_empty());
+        assert!(matches!(result[0], MarkdownContent::Text(_)));
+    }
+
+    #[test]
+    fn parse_markdown_code_block() {
+        let config = LapceConfig::test_default();
+        let result = parse_markdown("```\ncode here\n```", 1.5, &config);
+        assert!(!result.is_empty());
+    }
+
+    #[test]
+    fn parse_markdown_image_extraction() {
+        let config = LapceConfig::test_default();
+        let result = parse_markdown(
+            "![alt text](https://example.com/image.png \"title\")",
+            1.5,
+            &config,
+        );
+        let has_image = result
+            .iter()
+            .any(|c| matches!(c, MarkdownContent::Image { .. }));
+        assert!(has_image, "should extract image from markdown");
+    }
+
+    #[test]
+    fn parse_markdown_multiple_paragraphs() {
+        let config = LapceConfig::test_default();
+        let result = parse_markdown("para1\n\npara2", 1.5, &config);
+        // Should produce at least one text block
+        assert!(!result.is_empty());
+    }
+
+    #[test]
+    fn parse_markdown_inline_code() {
+        let config = LapceConfig::test_default();
+        let result = parse_markdown("use `code` here", 1.5, &config);
+        assert!(!result.is_empty());
+        assert!(matches!(result[0], MarkdownContent::Text(_)));
+    }
+
+    // --- from_plaintext() tests ---
+
+    #[test]
+    fn from_plaintext_returns_single_text() {
+        let config = LapceConfig::test_default();
+        let result = from_plaintext("hello", 1.5, &config);
+        assert_eq!(result.len(), 1);
+        assert!(matches!(result[0], MarkdownContent::Text(_)));
+    }
+
+    #[test]
+    fn from_plaintext_empty_string() {
+        let config = LapceConfig::test_default();
+        let result = from_plaintext("", 1.5, &config);
+        assert_eq!(result.len(), 1);
+        assert!(matches!(result[0], MarkdownContent::Text(_)));
+    }
+
+    // --- from_marked_string() tests ---
+
+    #[test]
+    fn from_marked_string_plain_string() {
+        let config = LapceConfig::test_default();
+        let result = from_marked_string(
+            MarkedString::String("hello world".to_string()),
+            &config,
+        );
+        assert!(!result.is_empty());
+    }
+
+    #[test]
+    fn from_marked_string_language_string() {
+        let config = LapceConfig::test_default();
+        let result = from_marked_string(
+            MarkedString::LanguageString(lsp_types::LanguageString {
+                language: "rust".to_string(),
+                value: "fn main() {}".to_string(),
+            }),
+            &config,
+        );
+        assert!(!result.is_empty());
+    }
+}

@@ -194,10 +194,190 @@ impl ColorThemeConfig {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use config::Config;
     use floem::{peniko::Color, prelude::palette::css};
 
     use crate::{config::LapceConfig, workspace::LapceWorkspace};
+
+    use super::*;
+
+    // --- resolve_variable() ---
+
+    fn make_base(entries: &[(&str, &str)]) -> ThemeBaseConfig {
+        ThemeBaseConfig(
+            entries
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect(),
+        )
+    }
+
+    #[test]
+    fn resolve_variable_literal_value() {
+        let theme = make_base(&[("red", "#FF0000")]);
+        let defaults = ThemeBaseConfig::default();
+        let result = theme.resolve_variable(&defaults, "red", "#FF0000", 0);
+        assert_eq!(result.unwrap(), Some("#FF0000"));
+    }
+
+    #[test]
+    fn resolve_variable_single_hop() {
+        let theme = make_base(&[("bg", "$red"), ("red", "#FF0000")]);
+        let defaults = ThemeBaseConfig::default();
+        let result = theme.resolve_variable(&defaults, "bg", "$red", 0);
+        assert_eq!(result.unwrap(), Some("#FF0000"));
+    }
+
+    #[test]
+    fn resolve_variable_chain_resolution() {
+        let theme = make_base(&[("a", "$b"), ("b", "$c"), ("c", "#123456")]);
+        let defaults = ThemeBaseConfig::default();
+        let result = theme.resolve_variable(&defaults, "a", "$b", 0);
+        assert_eq!(result.unwrap(), Some("#123456"));
+    }
+
+    #[test]
+    fn resolve_variable_falls_back_to_defaults() {
+        let theme = make_base(&[("bg", "$primary")]);
+        let defaults = make_base(&[("primary", "#AABBCC")]);
+        let result = theme.resolve_variable(&defaults, "bg", "$primary", 0);
+        assert_eq!(result.unwrap(), Some("#AABBCC"));
+    }
+
+    #[test]
+    fn resolve_variable_recursion_limit() {
+        // The check `i > THEME_RECURSION_LIMIT` fires after stripping '$',
+        // so we need enough '$' hops to reach i=7 (>6).
+        // a->b->c->d->e->f->g->h->z (8 variable hops)
+        let theme = make_base(&[
+            ("a", "$b"),
+            ("b", "$c"),
+            ("c", "$d"),
+            ("d", "$e"),
+            ("e", "$f"),
+            ("f", "$g"),
+            ("g", "$h"),
+            ("h", "$z"),
+            ("z", "#000000"),
+        ]);
+        let defaults = ThemeBaseConfig::default();
+        let result = theme.resolve_variable(&defaults, "a", "$b", 0);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(
+            err,
+            crate::config::color::LoadThemeError::RecursionLimitReached { .. }
+        ));
+    }
+
+    #[test]
+    fn resolve_variable_not_found() {
+        let theme = make_base(&[("bg", "$nonexistent")]);
+        let defaults = ThemeBaseConfig::default();
+        let result = theme.resolve_variable(&defaults, "bg", "$nonexistent", 0);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(
+            err,
+            crate::config::color::LoadThemeError::VariableNotFound { .. }
+        ));
+    }
+
+    // --- resolve_color() ---
+
+    #[test]
+    fn resolve_color_hex_literal() {
+        let mut colors = BTreeMap::new();
+        colors.insert("my.color".to_string(), "#FF0000".to_string());
+        let base = ThemeBaseColor::default();
+        let resolved = ColorThemeConfig::resolve_color(&colors, &base, None);
+        assert_eq!(
+            resolved.get("my.color").unwrap(),
+            &Color::from_rgb8(0xFF, 0, 0)
+        );
+    }
+
+    #[test]
+    fn resolve_color_variable_reference() {
+        let mut base_map = HashMap::new();
+        base_map.insert("red".to_string(), Color::from_rgb8(0xFF, 0, 0));
+        let base = ThemeBaseColor(base_map);
+
+        let mut colors = BTreeMap::new();
+        colors.insert("my.color".to_string(), "$red".to_string());
+
+        let resolved = ColorThemeConfig::resolve_color(&colors, &base, None);
+        assert_eq!(
+            resolved.get("my.color").unwrap(),
+            &Color::from_rgb8(0xFF, 0, 0)
+        );
+    }
+
+    #[test]
+    fn resolve_color_falls_back_to_default_map() {
+        let base = ThemeBaseColor::default();
+        let mut colors = BTreeMap::new();
+        // Reference a variable that doesn't exist in base
+        colors.insert("my.color".to_string(), "$nonexistent".to_string());
+
+        let mut default_map = HashMap::new();
+        default_map.insert("my.color".to_string(), Color::from_rgb8(0, 0xFF, 0));
+
+        let resolved =
+            ColorThemeConfig::resolve_color(&colors, &base, Some(&default_map));
+        assert_eq!(
+            resolved.get("my.color").unwrap(),
+            &Color::from_rgb8(0, 0xFF, 0)
+        );
+    }
+
+    #[test]
+    fn resolve_color_falls_back_to_black() {
+        let base = ThemeBaseColor::default();
+        let mut colors = BTreeMap::new();
+        colors.insert("my.color".to_string(), "$nonexistent".to_string());
+
+        let resolved = ColorThemeConfig::resolve_color(&colors, &base, None);
+        assert_eq!(
+            resolved.get("my.color").unwrap(),
+            &Color::from_rgb8(0, 0, 0)
+        );
+    }
+
+    #[test]
+    fn resolve_color_invalid_hex_falls_back_to_black() {
+        let base = ThemeBaseColor::default();
+        let mut colors = BTreeMap::new();
+        colors.insert("my.color".to_string(), "not-a-color".to_string());
+
+        let resolved = ColorThemeConfig::resolve_color(&colors, &base, None);
+        // Invalid hex literal with no default → black
+        assert_eq!(
+            resolved.get("my.color").unwrap(),
+            &Color::from_rgb8(0, 0, 0)
+        );
+    }
+
+    // --- resolve() integration ---
+
+    #[test]
+    fn resolve_produces_colors_from_literals() {
+        let theme = make_base(&[("red", "#FF0000"), ("blue", "#0000FF")]);
+        let base = theme.resolve(None);
+        assert_eq!(base.get("red").unwrap(), Color::from_rgb8(0xFF, 0, 0));
+        assert_eq!(base.get("blue").unwrap(), Color::from_rgb8(0, 0, 0xFF));
+    }
+
+    #[test]
+    fn resolve_follows_variable_references() {
+        let theme = make_base(&[("bg", "$red"), ("red", "#FF0000")]);
+        let base = theme.resolve(None);
+        assert_eq!(base.get("bg").unwrap(), Color::from_rgb8(0xFF, 0, 0));
+    }
+
+    // --- existing integration test ---
 
     #[test]
     fn test_resolve() {

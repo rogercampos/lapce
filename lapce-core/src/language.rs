@@ -1513,4 +1513,526 @@ mod tests {
         let l = LapceLanguage::from_path(&PathBuf::new().join("test.rs"));
         assert_eq!(l, LapceLanguage::Rust);
     }
+
+    // --- from_path with various extensions ---
+
+    #[test]
+    fn from_path_python() {
+        assert_eq!(
+            LapceLanguage::from_path(&PathBuf::from("script.py")),
+            LapceLanguage::Python,
+        );
+    }
+
+    #[test]
+    fn from_path_javascript_variants() {
+        assert_eq!(
+            LapceLanguage::from_path(&PathBuf::from("app.js")),
+            LapceLanguage::Javascript,
+        );
+        assert_eq!(
+            LapceLanguage::from_path(&PathBuf::from("app.mjs")),
+            LapceLanguage::Javascript,
+        );
+        assert_eq!(
+            LapceLanguage::from_path(&PathBuf::from("app.cjs")),
+            LapceLanguage::Javascript,
+        );
+    }
+
+    #[test]
+    fn from_path_typescript() {
+        assert_eq!(
+            LapceLanguage::from_path(&PathBuf::from("index.ts")),
+            LapceLanguage::Typescript,
+        );
+        assert_eq!(
+            LapceLanguage::from_path(&PathBuf::from("index.tsx")),
+            LapceLanguage::Tsx,
+        );
+    }
+
+    #[test]
+    fn from_path_go() {
+        assert_eq!(
+            LapceLanguage::from_path(&PathBuf::from("main.go")),
+            LapceLanguage::Go,
+        );
+    }
+
+    #[test]
+    fn from_path_cpp_variants() {
+        for ext in &["cpp", "cxx", "cc", "hpp", "hxx"] {
+            let path = PathBuf::from(format!("file.{ext}"));
+            assert_eq!(
+                LapceLanguage::from_path(&path),
+                LapceLanguage::Cpp,
+                "failed for extension: {ext}"
+            );
+        }
+    }
+
+    #[test]
+    fn from_path_case_insensitive_extension() {
+        // Extensions are lowercased before matching
+        assert_eq!(
+            LapceLanguage::from_path(&PathBuf::from("file.RS")),
+            LapceLanguage::Rust,
+        );
+        assert_eq!(
+            LapceLanguage::from_path(&PathBuf::from("file.Py")),
+            LapceLanguage::Python,
+        );
+    }
+
+    #[test]
+    fn from_path_by_filename() {
+        assert_eq!(
+            LapceLanguage::from_path(&PathBuf::from("Dockerfile")),
+            LapceLanguage::Dockerfile,
+        );
+        assert_eq!(
+            LapceLanguage::from_path(&PathBuf::from("Cargo.lock")),
+            LapceLanguage::Toml,
+        );
+    }
+
+    // --- from_path_raw returning None ---
+
+    #[test]
+    fn from_path_raw_unknown_extension() {
+        assert_eq!(
+            LapceLanguage::from_path_raw(&PathBuf::from("file.xyz")),
+            None
+        );
+    }
+
+    #[test]
+    fn from_path_raw_no_extension() {
+        // A file with no extension that isn't a known filename
+        assert_eq!(
+            LapceLanguage::from_path_raw(&PathBuf::from("randomfile")),
+            None
+        );
+    }
+
+    #[test]
+    fn from_path_raw_known_returns_some() {
+        assert_eq!(
+            LapceLanguage::from_path_raw(&PathBuf::from("main.rs")),
+            Some(LapceLanguage::Rust),
+        );
+    }
+
+    #[test]
+    fn from_path_unknown_defaults_to_plaintext() {
+        assert_eq!(
+            LapceLanguage::from_path(&PathBuf::from("file.xyz")),
+            LapceLanguage::PlainText,
+        );
+    }
+
+    // --- from_name ---
+
+    #[test]
+    fn from_name_exact_case() {
+        assert_eq!(LapceLanguage::from_name("Rust"), Some(LapceLanguage::Rust),);
+    }
+
+    #[test]
+    fn from_name_case_insensitive() {
+        assert_eq!(LapceLanguage::from_name("rust"), Some(LapceLanguage::Rust),);
+        assert_eq!(
+            LapceLanguage::from_name("PYTHON"),
+            Some(LapceLanguage::Python),
+        );
+        assert_eq!(
+            LapceLanguage::from_name("JavaScript"),
+            Some(LapceLanguage::Javascript),
+        );
+    }
+
+    #[test]
+    fn from_name_unknown() {
+        assert_eq!(LapceLanguage::from_name("nonexistent_lang"), None);
+    }
+
+    // --- languages() ---
+
+    #[test]
+    fn languages_is_not_empty() {
+        let langs = LapceLanguage::languages();
+        assert!(!langs.is_empty());
+    }
+
+    #[test]
+    fn languages_contains_well_known() {
+        let langs = LapceLanguage::languages();
+        assert!(langs.contains(&"Rust"), "missing Rust");
+        assert!(langs.contains(&"Python"), "missing Python");
+        assert!(langs.contains(&"JavaScript"), "missing JavaScript");
+    }
+
+    #[test]
+    fn languages_excludes_inline_grammars() {
+        // MarkdownInline has no message, so should not appear
+        let langs = LapceLanguage::languages();
+        for l in &langs {
+            assert!(
+                !l.contains("markdown.inline"),
+                "inline grammar should not appear"
+            );
+        }
+    }
+
+    // --- comment_token ---
+
+    #[test]
+    fn comment_token_rust() {
+        assert_eq!(LapceLanguage::Rust.comment_token(), "//");
+    }
+
+    #[test]
+    fn comment_token_python() {
+        assert_eq!(LapceLanguage::Python.comment_token(), "#");
+    }
+
+    #[test]
+    fn comment_token_css() {
+        assert_eq!(LapceLanguage::Css.comment_token(), "/*");
+    }
+
+    #[test]
+    fn comment_token_plaintext_empty() {
+        assert_eq!(LapceLanguage::PlainText.comment_token(), "");
+    }
+
+    // --- indent_unit ---
+
+    #[test]
+    fn indent_unit_rust_4spaces() {
+        assert_eq!(LapceLanguage::Rust.indent_unit(), "    ");
+    }
+
+    #[test]
+    fn indent_unit_bash_2spaces() {
+        assert_eq!(LapceLanguage::Bash.indent_unit(), "  ");
+    }
+
+    #[test]
+    fn indent_unit_go_tab() {
+        assert_eq!(LapceLanguage::Go.indent_unit(), "\t");
+    }
+
+    #[test]
+    fn indent_unit_hare_8spaces() {
+        assert_eq!(LapceLanguage::Hare.indent_unit(), "        ");
+        assert_eq!(LapceLanguage::Hare.indent_unit().len(), 8);
+    }
+
+    // --- name() tests ---
+
+    #[test]
+    fn name_rust() {
+        assert_eq!(LapceLanguage::Rust.name(), "Rust");
+    }
+
+    #[test]
+    fn name_cpp_uses_strum_message() {
+        // Cpp has message "C++", so name() returns "C++" not "Cpp"
+        assert_eq!(LapceLanguage::Cpp.name(), "C++");
+    }
+
+    #[test]
+    fn name_csharp() {
+        assert_eq!(LapceLanguage::Csharp.name(), "C#");
+    }
+
+    #[test]
+    fn name_plain_text() {
+        assert_eq!(LapceLanguage::PlainText.name(), "Plain Text");
+    }
+
+    #[test]
+    fn name_javascript() {
+        assert_eq!(LapceLanguage::Javascript.name(), "JavaScript");
+    }
+
+    #[test]
+    fn name_markdown_inline_falls_back_to_variant() {
+        // MarkdownInline has no #[strum(message)], so get_message returns None
+        // and name() falls back to the variant ref string "markdown.inline"
+        let name = LapceLanguage::MarkdownInline.name();
+        assert_eq!(name, "markdown.inline");
+    }
+
+    #[test]
+    fn name_ocaml_interface_falls_back() {
+        // OcamlInterface has serialize="ocaml.interface" but no message
+        let name = LapceLanguage::OcamlInterface.name();
+        assert_eq!(name, "ocaml.interface");
+    }
+
+    // --- sticky_header_tags() tests ---
+
+    #[test]
+    fn sticky_header_tags_rust_non_empty() {
+        let tags = LapceLanguage::Rust.sticky_header_tags();
+        assert!(!tags.is_empty());
+        assert!(tags.contains(&"function_item"));
+        assert!(tags.contains(&"impl_item"));
+    }
+
+    #[test]
+    fn sticky_header_tags_plaintext_empty() {
+        let tags = LapceLanguage::PlainText.sticky_header_tags();
+        assert!(tags.is_empty());
+    }
+
+    #[test]
+    fn sticky_header_tags_ruby() {
+        let tags = LapceLanguage::Ruby.sticky_header_tags();
+        assert!(tags.contains(&"class"));
+        assert!(tags.contains(&"method"));
+        assert!(tags.contains(&"do_block"));
+    }
+
+    #[test]
+    fn sticky_header_tags_c() {
+        let tags = LapceLanguage::C.sticky_header_tags();
+        assert!(tags.contains(&"function_definition"));
+        assert!(tags.contains(&"struct_specifier"));
+    }
+
+    // --- query_name() tests ---
+
+    #[test]
+    fn query_name_default_uses_variant() {
+        // Rust has no query override, so uses variant name lowercased
+        assert_eq!(LapceLanguage::Rust.query_name(), "rust");
+    }
+
+    #[test]
+    fn query_name_jsx_override() {
+        // Jsx has query: Some("jsx")
+        assert_eq!(LapceLanguage::Jsx.query_name(), "jsx");
+    }
+
+    #[test]
+    fn query_name_tsx_override() {
+        assert_eq!(LapceLanguage::Tsx.query_name(), "tsx");
+    }
+
+    #[test]
+    fn query_name_typescript_override() {
+        assert_eq!(LapceLanguage::Typescript.query_name(), "typescript");
+    }
+
+    #[test]
+    fn query_name_markdown_inline_override() {
+        assert_eq!(
+            LapceLanguage::MarkdownInline.query_name(),
+            "markdown.inline"
+        );
+    }
+
+    // --- grammar_name() tests ---
+
+    #[test]
+    fn grammar_name_default() {
+        assert_eq!(LapceLanguage::Rust.grammar_name(), "rust");
+        assert_eq!(LapceLanguage::Python.grammar_name(), "python");
+    }
+
+    #[test]
+    fn grammar_name_jsx_overrides_to_javascript() {
+        // Jsx has grammar: Some("javascript")
+        assert_eq!(LapceLanguage::Jsx.grammar_name(), "javascript");
+    }
+
+    #[test]
+    fn grammar_name_tsx_override() {
+        assert_eq!(LapceLanguage::Tsx.grammar_name(), "tsx");
+    }
+
+    #[test]
+    fn grammar_name_markdown_inline() {
+        assert_eq!(
+            LapceLanguage::MarkdownInline.grammar_name(),
+            "markdown_inline"
+        );
+    }
+
+    // --- grammar_fn_name() tests ---
+
+    #[test]
+    fn grammar_fn_name_default() {
+        assert_eq!(LapceLanguage::Rust.grammar_fn_name(), "rust");
+    }
+
+    #[test]
+    fn grammar_fn_name_jsx_overrides_to_javascript() {
+        assert_eq!(LapceLanguage::Jsx.grammar_fn_name(), "javascript");
+    }
+
+    #[test]
+    fn grammar_fn_name_markdown_inline() {
+        assert_eq!(
+            LapceLanguage::MarkdownInline.grammar_fn_name(),
+            "markdown_inline"
+        );
+    }
+
+    // --- Indent tests ---
+
+    #[test]
+    fn indent_tab_is_tab_char() {
+        assert_eq!(super::Indent::Tab.as_str(), "\t");
+    }
+
+    #[test]
+    fn indent_space_2() {
+        assert_eq!(super::Indent::Space(2).as_str(), "  ");
+        assert_eq!(super::Indent::Space(2).as_str().len(), 2);
+    }
+
+    #[test]
+    fn indent_space_4() {
+        assert_eq!(super::Indent::Space(4).as_str(), "    ");
+        assert_eq!(super::Indent::Space(4).as_str().len(), 4);
+    }
+
+    #[test]
+    fn indent_space_8() {
+        assert_eq!(super::Indent::Space(8).as_str(), "        ");
+        assert_eq!(super::Indent::Space(8).as_str().len(), 8);
+    }
+
+    #[test]
+    fn indent_space_unsupported_falls_to_8() {
+        // Any unsupported count (e.g. 3) falls through to 8 spaces
+        assert_eq!(super::Indent::Space(3).as_str().len(), 8);
+        assert_eq!(super::Indent::Space(1).as_str().len(), 8);
+        assert_eq!(super::Indent::Space(6).as_str().len(), 8);
+    }
+
+    // --- read_grammar_query() tests ---
+
+    #[test]
+    fn read_grammar_query_missing_file_returns_empty() {
+        let dir = std::env::temp_dir().join("lapce_test_grammar_query_missing");
+        let _ = std::fs::create_dir_all(&dir);
+        let result =
+            super::read_grammar_query(&dir, "nonexistent", "highlights.scm");
+        assert!(result.is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn read_grammar_query_simple_file() {
+        let dir = std::env::temp_dir().join("lapce_test_grammar_query_simple");
+        let lang_dir = dir.join("testlang");
+        let _ = std::fs::create_dir_all(&lang_dir);
+        std::fs::write(lang_dir.join("highlights.scm"), "(identifier) @variable")
+            .unwrap();
+        let result = super::read_grammar_query(&dir, "testlang", "highlights.scm");
+        assert_eq!(result, "(identifier) @variable");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn read_grammar_query_inherits_directive() {
+        let dir = std::env::temp_dir().join("lapce_test_grammar_query_inherits");
+        let base_dir = dir.join("base");
+        let child_dir = dir.join("child");
+        let _ = std::fs::create_dir_all(&base_dir);
+        let _ = std::fs::create_dir_all(&child_dir);
+
+        std::fs::write(base_dir.join("highlights.scm"), "(number) @number").unwrap();
+        std::fs::write(
+            child_dir.join("highlights.scm"),
+            ";; inherits: base\n(string) @string",
+        )
+        .unwrap();
+
+        let result = super::read_grammar_query(&dir, "child", "highlights.scm");
+        assert!(result.contains("(number) @number"));
+        assert!(result.contains("(string) @string"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // --- properties() integrity test ---
+
+    #[test]
+    fn properties_array_integrity() {
+        // Verify every variant's properties().id matches the variant
+        // This catches any accidental mis-ordering in the LANGUAGES array
+
+        // We verify known variants (no IntoEnumIterator available)
+        let variants = [
+            LapceLanguage::PlainText,
+            LapceLanguage::Rust,
+            LapceLanguage::Python,
+            LapceLanguage::Javascript,
+            LapceLanguage::Typescript,
+            LapceLanguage::Go,
+            LapceLanguage::C,
+            LapceLanguage::Cpp,
+            LapceLanguage::Java,
+            LapceLanguage::Ruby,
+            LapceLanguage::Bash,
+            LapceLanguage::Jsx,
+            LapceLanguage::Tsx,
+            LapceLanguage::Markdown,
+            LapceLanguage::MarkdownInline,
+            LapceLanguage::Json,
+            LapceLanguage::Html,
+            LapceLanguage::Css,
+            LapceLanguage::Toml,
+            LapceLanguage::Yaml,
+        ];
+        for variant in &variants {
+            let props = variant.properties();
+            assert_eq!(
+                props.id, *variant,
+                "LANGUAGES array mismatch for {:?}",
+                variant
+            );
+        }
+    }
+
+    // --- add_bracket_pos tests ---
+
+    #[test]
+    fn add_bracket_pos_creates_entry() {
+        use std::collections::HashMap;
+        use tree_sitter::Point;
+
+        let mut bracket_pos = HashMap::new();
+        super::add_bracket_pos(
+            &mut bracket_pos,
+            Point::new(5, 10),
+            "bracket.color1",
+        );
+        assert!(bracket_pos.contains_key(&5));
+        let styles = &bracket_pos[&5];
+        assert_eq!(styles.len(), 1);
+        assert_eq!(styles[0].start, 10);
+        assert_eq!(styles[0].end, 11);
+        assert_eq!(styles[0].style.fg_color.as_deref(), Some("bracket.color1"));
+    }
+
+    #[test]
+    fn add_bracket_pos_appends_to_existing() {
+        use std::collections::HashMap;
+        use tree_sitter::Point;
+
+        let mut bracket_pos = HashMap::new();
+        super::add_bracket_pos(&mut bracket_pos, Point::new(3, 0), "red");
+        super::add_bracket_pos(&mut bracket_pos, Point::new(3, 5), "blue");
+        let styles = &bracket_pos[&3];
+        assert_eq!(styles.len(), 2);
+        assert_eq!(styles[0].start, 0);
+        assert_eq!(styles[1].start, 5);
+    }
 }
