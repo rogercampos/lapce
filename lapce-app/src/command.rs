@@ -9,7 +9,7 @@ use lapce_core::command::{
     EditCommand, FocusCommand, MotionModeCommand, MoveCommand,
     MultiSelectionCommand, ScrollCommand,
 };
-use lapce_rpc::plugin::{PluginId, VoltID};
+use lapce_rpc::plugin::PluginId;
 use lsp_types::{CodeActionOrCommand, Position, WorkspaceEdit};
 use serde_json::Value;
 use strum::{EnumMessage, IntoEnumIterator};
@@ -231,10 +231,6 @@ pub enum LapceWorkbenchCommand {
     #[strum(message = "Open Themes Directory")]
     OpenThemesDirectory,
 
-    #[strum(serialize = "open_plugins_directory")]
-    #[strum(message = "Open Plugins Directory")]
-    OpenPluginsDirectory,
-
     #[strum(serialize = "open_grammars_directory")]
     #[strum(message = "Open Grammars Directory")]
     OpenGrammarsDirectory,
@@ -356,10 +352,6 @@ pub enum LapceWorkbenchCommand {
     #[strum(serialize = "show_about")]
     #[strum(message = "About Lapce")]
     ShowAbout,
-
-    #[strum(serialize = "show_plugins")]
-    #[strum(message = "Plugins")]
-    ShowPlugins,
 
     #[cfg(target_os = "macos")]
     #[strum(message = "Install Lapce to PATH")]
@@ -522,9 +514,6 @@ pub enum InternalCommand {
     HideAlert,
     SaveScratchDoc {
         doc: Rc<Doc>,
-    },
-    OpenVoltView {
-        volt_id: VoltID,
     },
     ResetBlinkCursor,
     ExecuteProcess {

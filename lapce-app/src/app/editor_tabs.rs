@@ -34,7 +34,6 @@ use crate::{
     keymap::keymap_view,
     main_split::{SplitContent, SplitData, SplitDirection, SplitMoveDirection},
     panel::position::PanelContainerPosition,
-    plugin::{PluginData, plugin_info_view},
     settings::{settings_view, theme_color_settings_view},
     workspace_data::{Focus, WorkspaceData},
 };
@@ -48,7 +47,6 @@ pub(super) fn editor_tab_header(
     dragging: RwSignal<Option<(RwSignal<usize>, EditorTabId)>>,
 ) -> impl View {
     let main_split = workspace_data.main_split.clone();
-    let plugin = workspace_data.plugin.clone();
     let editors = workspace_data.main_split.editors;
     let focus = workspace_data.common.focus;
     let config = workspace_data.common.config;
@@ -88,9 +86,8 @@ pub(super) fn editor_tab_header(
         let child_for_mouse_close = child.clone();
         let child_for_mouse_close_2 = child.clone();
         let main_split = main_split.clone();
-        let plugin = plugin.clone();
         let child_view = {
-            let info = child.view_info(editors, plugin, config);
+            let info = child.view_info(editors, config);
             let hovered = create_rw_signal(false);
 
             use crate::config::ui::TabCloseButton;
@@ -498,7 +495,6 @@ pub(super) fn editor_tab_header(
 
 pub(super) fn editor_tab_content(
     workspace_data: Rc<WorkspaceData>,
-    plugin: PluginData,
     active_editor_tab: ReadSignal<Option<EditorTabId>>,
     editor_tab: RwSignal<EditorTabData>,
 ) -> impl View {
@@ -557,16 +553,11 @@ pub(super) fn editor_tab_content(
                     text("empty editor").into_any()
                 }
             }
-            EditorTabChild::Settings(_) => {
-                settings_view(plugin.installed, editors, common).into_any()
-            }
+            EditorTabChild::Settings(_) => settings_view(editors, common).into_any(),
             EditorTabChild::ThemeColorSettings(_) => {
                 theme_color_settings_view(editors, common).into_any()
             }
             EditorTabChild::Keymap(_) => keymap_view(editors, common).into_any(),
-            EditorTabChild::Volt(_, id) => {
-                plugin_info_view(plugin.clone(), id).into_any()
-            }
         };
         child.style(|s| s.size_full())
     };
@@ -591,7 +582,6 @@ enum DragOverPosition {
 
 pub(super) fn editor_tab(
     workspace_data: Rc<WorkspaceData>,
-    plugin: PluginData,
     active_editor_tab: ReadSignal<Option<EditorTabId>>,
     editor_tab: RwSignal<EditorTabData>,
     dragging: RwSignal<Option<(RwSignal<usize>, EditorTabId)>>,
@@ -616,7 +606,6 @@ pub(super) fn editor_tab(
         stack((
             editor_tab_content(
                 workspace_data.clone(),
-                plugin.clone(),
                 active_editor_tab,
                 editor_tab,
             ),
@@ -1065,7 +1054,6 @@ pub(super) fn split_border(
 pub(super) fn split_list(
     split: ReadSignal<SplitData>,
     workspace_data: Rc<WorkspaceData>,
-    plugin: PluginData,
     dragging: RwSignal<Option<(RwSignal<usize>, EditorTabId)>>,
 ) -> impl View {
     let main_split = workspace_data.main_split.clone();
@@ -1087,7 +1075,6 @@ pub(super) fn split_list(
             usize,
             (RwSignal<f64>, SplitContent),
         )| {
-            let plugin = plugin.clone();
             let child = match &content {
                 SplitContent::EditorTab(editor_tab_id) => {
                     let editor_tab_data = editor_tabs
@@ -1095,7 +1082,6 @@ pub(super) fn split_list(
                     if let Some(editor_tab_data) = editor_tab_data {
                         editor_tab(
                             workspace_data.clone(),
-                            plugin.clone(),
                             active_editor_tab,
                             editor_tab_data,
                             dragging,
@@ -1112,7 +1098,6 @@ pub(super) fn split_list(
                         split_list(
                             split.read_only(),
                             workspace_data.clone(),
-                            plugin.clone(),
                             dragging,
                         )
                         .into_any()
@@ -1199,10 +1184,9 @@ pub(super) fn main_split(workspace_data: Rc<WorkspaceData>) -> impl View {
         .read_only();
     let config = workspace_data.main_split.common.config;
     let panel = workspace_data.panel.clone();
-    let plugin = workspace_data.plugin.clone();
     let dragging: RwSignal<Option<(RwSignal<usize>, EditorTabId)>> =
         create_rw_signal(None);
-    split_list(root_split, workspace_data.clone(), plugin.clone(), dragging)
+    split_list(root_split, workspace_data.clone(), dragging)
         .style(move |s| {
             let config = config.get();
             let is_hidden = panel.panel_bottom_maximized(true)

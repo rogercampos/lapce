@@ -1,5 +1,4 @@
 use std::{
-    collections::HashSet,
     env,
     path::{Path, PathBuf},
     rc::Rc,
@@ -22,7 +21,6 @@ use floem::{
     text::{Attrs, AttrsList, FamilyOwned, LineHeightValue, TextLayout},
     views::editor::text::SystemClipboard,
 };
-use im::HashMap;
 use indexmap::IndexMap;
 use itertools::Itertools;
 use lapce_core::{
@@ -75,7 +73,6 @@ use crate::{
         kind::PanelKind,
         position::PanelContainerPosition,
     },
-    plugin::{PluginData, PluginPopupData},
     proxy::{ProxyData, new_proxy},
     recent_files::RecentFilesData,
     rename::RenameData,
@@ -99,7 +96,6 @@ pub enum Focus {
     AboutPopup,
     RecentFiles,
     SearchModal,
-    PluginPopup,
     Panel(PanelKind),
 }
 
@@ -162,14 +158,12 @@ pub struct WorkspaceData {
     pub main_split: MainSplitData,
     pub file_explorer: FileExplorerData,
     pub panel: PanelData,
-    pub plugin: PluginData,
     pub code_action: RwSignal<CodeActionData>,
     pub code_lens: RwSignal<Option<ViewId>>,
     pub rename: RenameData,
     pub global_search: GlobalSearchData,
     pub search_modal_data: SearchModalData,
     pub about_data: AboutData,
-    pub plugin_popup_data: PluginPopupData,
     pub recent_files: RwSignal<Vec<PathBuf>>,
     pub recent_files_data: RecentFilesData,
     pub alert_data: AlertBoxData,
@@ -275,13 +269,6 @@ impl WorkspaceData {
         let cx = cx.create_child();
         let db: Arc<LapceDb> = use_context().unwrap();
 
-        let disabled_volts = db.get_disabled_volts().unwrap_or_default();
-        let workspace_disabled_volts = db
-            .get_workspace_disabled_volts(&workspace)
-            .unwrap_or_default();
-        let mut all_disabled_volts = disabled_volts.clone();
-        all_disabled_volts.extend(workspace_disabled_volts.clone());
-
         // Load persisted workspace layout. For workspaces without a folder path
         // (bare windows), we clear the split children to avoid restoring stale
         // file editors that would fail to load.
@@ -295,11 +282,7 @@ impl WorkspaceData {
             info
         };
 
-        let config = LapceConfig::load(
-            &workspace,
-            &all_disabled_volts,
-            &window_common.extra_plugin_paths,
-        );
+        let config = LapceConfig::load(&workspace);
         let lapce_command = Listener::new_empty(cx);
         let workbench_command = Listener::new_empty(cx);
         let internal_command = Listener::new_empty(cx);
@@ -307,12 +290,7 @@ impl WorkspaceData {
 
         // Start the proxy backend (runs as a thread in-process for local workspaces).
         // The proxy handles LSP, plugins, file watching, and global search.
-        let proxy = new_proxy(
-            workspace.clone(),
-            all_disabled_volts,
-            window_common.extra_plugin_paths.as_ref().clone(),
-            config.plugins.clone(),
-        );
+        let proxy = new_proxy(workspace.clone());
         // Split config into read and write signals so that components only get
         // read access (via common.config) while only WorkspaceData can update it.
         let (config, set_config) = cx.create_signal(Arc::new(config));
@@ -449,18 +427,7 @@ impl WorkspaceData {
             common.clone(),
         );
 
-        let plugin = PluginData::new(
-            cx,
-            HashSet::from_iter(disabled_volts),
-            HashSet::from_iter(workspace_disabled_volts),
-            main_split.editors,
-            common.clone(),
-            proxy.core_rpc.clone(),
-        );
-
         let about_data = AboutData::new(cx, common.focus);
-        let plugin_popup_data =
-            PluginPopupData::new(cx, common.focus, plugin.clone());
         let recent_files = cx.create_rw_signal(Vec::<PathBuf>::new());
         let recent_files_data = RecentFilesData::new(
             cx,
@@ -480,12 +447,10 @@ impl WorkspaceData {
             file_explorer,
             code_action,
             code_lens: cx.create_rw_signal(None),
-            plugin,
             rename,
             global_search,
             search_modal_data,
             about_data,
-            plugin_popup_data,
             recent_files,
             recent_files_data,
             alert_data,
@@ -561,63 +526,11 @@ impl WorkspaceData {
     }
 
     pub fn reload_config(&self) {
-        let db: Arc<LapceDb> = use_context().unwrap();
-
-        let disabled_volts = db.get_disabled_volts().unwrap_or_default();
-        let workspace_disabled_volts = db
-            .get_workspace_disabled_volts(&self.workspace)
-            .unwrap_or_default();
-        let mut all_disabled_volts = disabled_volts;
-        all_disabled_volts.extend(workspace_disabled_volts);
-
-        let config = LapceConfig::load(
-            &self.workspace,
-            &all_disabled_volts,
-            &self.common.window_common.extra_plugin_paths,
-        );
+        let config = LapceConfig::load(&self.workspace);
         self.common.keypress.update(|keypress| {
             keypress.update_keymaps(&config);
         });
-
-        let mut change_plugins = Vec::new();
-        for (key, configs) in self.common.config.get_untracked().plugins.iter() {
-            if config
-                .plugins
-                .get(key)
-                .map(|x| x != configs)
-                .unwrap_or_default()
-            {
-                change_plugins.push(key.clone());
-            }
-        }
-        self.set_config.set(Arc::new(config.clone()));
-        if !change_plugins.is_empty() {
-            self.common
-                .proxy
-                .update_plugin_configs(config.plugins.clone());
-            if config.core.auto_reload_plugin {
-                let mut plugin_metas: HashMap<
-                    String,
-                    lapce_rpc::plugin::VoltMetadata,
-                > = self
-                    .plugin
-                    .installed
-                    .get_untracked()
-                    .values()
-                    .map(|x| {
-                        let meta = x.meta.get_untracked();
-                        (meta.name.clone(), meta)
-                    })
-                    .collect();
-                for name in change_plugins {
-                    if let Some(meta) = plugin_metas.remove(&name) {
-                        self.common.proxy.reload_volt(meta);
-                    } else {
-                        tracing::error!("not found volt metadata of {}", name);
-                    }
-                }
-            }
-        }
+        self.set_config.set(Arc::new(config));
     }
 
     pub fn track_recent_file(&self, path: PathBuf) {
@@ -782,11 +695,6 @@ impl WorkspaceData {
             }
             OpenThemesDirectory => {
                 if let Some(dir) = Directory::themes_directory() {
-                    open_uri(&dir);
-                }
-            }
-            OpenPluginsDirectory => {
-                if let Some(dir) = Directory::plugins_directory() {
                     open_uri(&dir);
                 }
             }
@@ -1013,10 +921,6 @@ impl WorkspaceData {
             ShowAbout => {
                 self.about_data.open();
             }
-            ShowPlugins => {
-                self.plugin_popup_data.open();
-            }
-
             // ==== Updating ====
             RestartToUpdate => {
                 if let Some(release) = self
@@ -1503,9 +1407,6 @@ impl WorkspaceData {
             InternalCommand::SaveScratchDoc { doc } => {
                 self.main_split.save_scratch_doc(doc);
             }
-            InternalCommand::OpenVoltView { volt_id } => {
-                self.main_split.open_volt_view(volt_id);
-            }
             InternalCommand::ResetBlinkCursor => {
                 // All the editors share the blinking information and logic, so we can just reset
                 // one of them.
@@ -1603,12 +1504,6 @@ impl WorkspaceData {
             CoreNotification::OpenFileChanged { path, content } => {
                 self.main_split.open_file_changed(path, content);
             }
-            CoreNotification::VoltInstalled { volt, icon } => {
-                self.plugin.volt_installed(volt, icon);
-            }
-            CoreNotification::VoltRemoved { volt, .. } => {
-                self.plugin.volt_removed(volt);
-            }
             CoreNotification::WorkDoneProgress { progress } => {
                 self.update_progress(progress);
             }
@@ -1700,9 +1595,6 @@ impl WorkspaceData {
             }
             Focus::Panel(PanelKind::Search) => {
                 Some(keypress.key_down(event, &self.global_search))
-            }
-            Focus::PluginPopup => {
-                Some(keypress.key_down(event, &self.plugin_popup_data))
             }
             _ => None,
         };

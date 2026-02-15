@@ -26,7 +26,6 @@ pub mod main_split;
 pub mod markdown;
 pub mod palette;
 pub mod panel;
-pub mod plugin;
 pub mod proxy;
 pub mod recent_files;
 pub mod rename;

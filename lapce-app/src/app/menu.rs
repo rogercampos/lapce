@@ -122,10 +122,6 @@ pub fn window_menu(
         }))
         .entry(MenuItem::new("Install Theme").action(move || {
             workbench_command.send(LapceWorkbenchCommand::InstallTheme);
-        }))
-        .separator()
-        .entry(MenuItem::new("Plugins").action(move || {
-            workbench_command.send(LapceWorkbenchCommand::ShowPlugins);
         }));
 
     let help_menu = {
@@ -150,9 +146,6 @@ pub fn window_menu(
                 }),
             )
             .separator()
-            .entry(MenuItem::new("Open Plugins Directory").action(move || {
-                workbench_command.send(LapceWorkbenchCommand::OpenPluginsDirectory);
-            }))
             .entry(MenuItem::new("Open Themes Directory").action(move || {
                 workbench_command.send(LapceWorkbenchCommand::OpenThemesDirectory);
             }))

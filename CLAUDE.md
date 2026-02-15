@@ -43,7 +43,7 @@ Coverage uses `cargo-llvm-cov` (install: `cargo install cargo-llvm-cov`). Note: 
 ```
 lapce/
 ├── lapce-app/     UI application (Floem framework, all views and state)
-├── lapce-proxy/   Separate process for LSP, plugins, file I/O
+├── lapce-proxy/   Separate process for LSP, file I/O
 ├── lapce-rpc/     RPC message types shared between app and proxy
 └── lapce-core/    Re-exports floem_editor_core (rope, commands, cursor, syntax)
 ```
@@ -62,7 +62,7 @@ The app runs two processes communicating via channels:
 ```
 
 - **App process**: UI rendering, editor state, user input (Floem reactive framework)
-- **Proxy process**: LSP clients, WASI plugin runtime, file watching, global search
+- **Proxy process**: LSP clients, file watching, global search
 
 Messages defined in `lapce-rpc/src/proxy.rs` (ProxyRequest, ProxyNotification, ProxyResponse) and `lapce-rpc/src/core.rs` (CoreNotification). Communication uses `crossbeam_channel::unbounded()`.
 
@@ -81,7 +81,6 @@ AppData
         │   └── EditorTabData → EditorData → Doc
         ├── PanelData (file explorer, search, problems, etc.)
         ├── PaletteData (command palette)
-        ├── PluginData
         └── CommonData (config, proxy handle, diagnostics, shared signals)
 ```
 
@@ -117,12 +116,12 @@ All state uses **Floem reactive signals** (`RwSignal<T>`, `ReadSignal<T>`, `Memo
 
 Startup sequence from `main()`:
 
-1. **CLI parsing** (Clap): `--new`, `--wait`, `--plugin-path`, positional path args
+1. **CLI parsing** (Clap): `--new`, `--wait`, positional path args
 2. **Panic hook + logging**: Custom panic handler. Dual-output tracing: daily-rotated file logger + console
 3. **Shell environment capture**: When launched from GUI (not terminal), spawns a login shell to capture `printenv` for PATH
 4. **Process re-spawn**: Without `--wait`, re-spawns with `--wait` and exits immediately to unblock terminal
 5. **Single-instance check**: Tries to connect to existing Lapce instance via local socket. If found, sends paths to open and exits
-6. **Core init**: DB, file watchers, bundled plugin install, config load
+6. **Core init**: DB, file watchers, config load
 7. **Window creation**: Restores from DB or creates new windows from CLI args
 8. **Background threads**: Config watcher, grammar updater (checks GitHub for tree-sitter releases), update checker, local socket listener
 9. **Event loop**: `app.run()` enters Floem event loop
@@ -182,28 +181,17 @@ Edit/Move/Scroll/Focus/MotionMode/MultiSelection commands come from `floem_edito
 - `workbench_command`: UI-level actions (palette, panels, file operations)
 - `internal_command`: Implementation-detail actions (~40 variants with rich data payloads)
 
-## Plugin System (lapce-proxy/src/plugin/)
+## LSP Module (lapce-proxy/src/lsp/)
 
-Plugins are called **Volts** (`VoltID` = author/name, `PluginId` = runtime instance).
+Direct LSP integration without a plugin runtime. Language servers are defined as entries in a built-in Rust `const` array (`LSP_SERVERS` in `manager.rs`).
 
-- `catalog.rs` — Plugin lifecycle: install, activate, deactivate, config updates
-- `psp.rs` — Plugin Server Protocol (Lapce's custom RPC for plugins)
-- `lsp.rs` — LSP client: spawns language server process, stdin/stdout communication
-- `wasi.rs` — WASM plugin runtime via wasmtime with WASI interface
+- `mod.rs` — `LspRpcHandler`: crossbeam channel-based RPC interface (same method signatures as old plugin catalog handler). Also contains `client_capabilities()`.
+- `manager.rs` — `LspManager`: manages multiple LSP server instances. Language-based routing (one server per language). Lazy activation on first `didOpen` for a matching language. Tracks open files for replay on late server start.
+- `client.rs` — `LspClient`: spawns LSP subprocess, 3 I/O threads (stdin writer, stdout reader, stderr logger), Content-Length framed JSON-RPC, request/response correlation, server capability tracking.
 
-Plugins can provide: LSP servers, syntax grammars, themes, custom commands.
+**Adding a new language server** = adding one `LspServerConfig` entry to the `LSP_SERVERS` array. No other code changes needed. Server commands resolved via PATH using the captured shell environment (supporting mise/asdf/rbenv/rvm).
 
-**Broadcasting**: When a request is made (e.g., hover, completion), the catalog sends to ALL active plugins. "First success wins" — the first successful result triggers the callback; subsequent ones are ignored.
-
-**Lazy activation**: Plugins declare activation conditions (language, workspace_contains). The catalog activates them on demand.
-
-### Bundled Plugins
-
-Plugins can be bundled into the binary at compile time via the `defaults/plugins/` directory. Each subdirectory represents a plugin and should contain a `volt.toml` plus any associated files (theme TOMLs, WASM binaries, etc.).
-
-On every app launch, `install_bundled_plugins()` (in `app.rs`) checks each bundled plugin against the user's plugins directory (`Directory::plugins_directory()`). If a plugin directory doesn't already exist at the destination, it is extracted. Existing plugins are not overwritten, preserving user customizations.
-
-The embedding uses `include_dir!` (same mechanism as SVG icons in `config/svg.rs`), so adding a new default plugin is as simple as placing its directory under `defaults/plugins/` — no code changes needed.
+`PluginId` is kept as an internal type for LSP server instance routing (used in completion/code action resolve).
 
 ## Floating Popups / Modal System
 
@@ -260,7 +248,7 @@ Panel containers hide automatically when empty. Layout defined in `workbench()` 
 **Floating overlay z-order** (workspace view layers on top of workbench):
 ```
 completion → hover → code_action → rename → palette
-→ search_modal → recent_files → about → plugin → alert
+→ search_modal → recent_files → about → alert
 ```
 
 If no folder is open, shows `empty_workspace_view()` — a centered "Open Folder" button.
@@ -283,8 +271,8 @@ Keybindings in `defaults/keymaps-{common,macos,nonmacos}.toml`. Each binding has
 
 1. **Embedded defaults** (`defaults/settings.toml`) — compiled into binary
 2. **Default dark theme base** — color palette foundation
-3. **Active color theme** — from plugins, local files, or embedded themes
-4. **Active icon theme** — from plugins or embedded "Lapce Codicons"
+3. **Active color theme** — from local files or embedded themes
+4. **Active icon theme** — embedded "Lapce Codicons"
 5. **User global settings** (`~/Library/Application Support/dev.lapce.*/settings.toml`)
 6. **Workspace-local settings** (`.lapce/settings.toml` in workspace root)
 
@@ -302,7 +290,6 @@ The app name includes the build type — debug builds use `Lapce-Debug`, release
 - `window` — window layout (for single-window restore)
 - `workspaces/<name>/workspace_info` — per-workspace: full split tree + panel config
 - `workspaces/<name>/workspace_files/<sha256>` — per-file cursor/scroll position
-- `disabled_volts` — disabled plugins
 - `recent_workspaces` — recent workspace list
 
 **Important:** When changing panel style defaults, you must delete `db/workspaces/` to see changes, because the app loads persisted state over defaults.
@@ -409,7 +396,7 @@ Navigation through hierarchical results requires building a flat list of visible
 
 - **Adding new UI icons:** Requires two steps: (1) add a constant to `lapce-app/src/config/icon.rs` (e.g. `pub const FOO: &'static str = "foo";`), (2) map it in `defaults/icon-theme.toml` under `[icon-theme.ui]` (e.g. `"foo" = "some-codicon.svg"`). Available SVGs are in `icons/codicons/` (~158 files) and `icons/lapce/`.
 
-- **Adding new file type icons:** Add colored SVG to `icons/filetypes/`, map the extension in `defaults/icon-theme.toml` under `[icon-theme.extension]` (e.g. `"rb" = "ruby.svg"`). For filename matches (e.g. `Dockerfile`), use `[icon-theme.filename]`. The SVGs are embedded at compile time via `FILETYPES_ICONS_DIR` in `config/svg.rs`. The fallback chain in `files_svg()` is: plugin icon theme on-disk → default theme embedded filetypes → generic file.svg.
+- **Adding new file type icons:** Add colored SVG to `icons/filetypes/`, map the extension in `defaults/icon-theme.toml` under `[icon-theme.extension]` (e.g. `"rb" = "ruby.svg"`). For filename matches (e.g. `Dockerfile`), use `[icon-theme.filename]`. The SVGs are embedded at compile time via `FILETYPES_ICONS_DIR` in `config/svg.rs`. The fallback chain in `files_svg()` is: default theme embedded filetypes → generic file.svg.
 
 - **PanelBuilder custom headers:** `PanelBuilder` in `panel/view.rs` has `add()` (string header) and `add_with_header()` (custom View header). Both delegate to `add_general_with_header()` → `foldable_panel_section()`. Buttons inside the header using `clickable_icon()` won't trigger fold because `on_click_stop` stops propagation.
 
@@ -441,9 +428,9 @@ Key implementation details:
 
 1. **UI thread** (single): Floem event loop, rendering, reactive signal processing
 2. **Dispatcher thread** (single): Owns all mutable proxy state. Sequential processing prevents data races
-3. **Catalog thread** (single): Owns plugin registry. All plugin lifecycle serialized
-4. **Per-plugin threads**: LSP gets 3 (stdin writer, stdout reader, stderr logger). WASI gets 2 (I/O, mainloop). Plus `PluginServerRpcHandler.mainloop` per plugin
-5. **Work threads** (transient): Global search, file listing, plugin install, grammar download (rayon)
+3. **LSP manager thread** (single): Owns `LspManager`. All LSP lifecycle operations serialized
+4. **Per-LSP-server threads** (3 per server): stdin writer, stdout reader, stderr logger
+5. **Work threads** (transient): Global search, file listing, grammar download, syntax parsing (rayon)
 6. **File watcher thread**: `notify` event processing loop
 7. **DB save thread**: Processes async write operations
 
@@ -485,12 +472,10 @@ Three embedded icon directories in `config/svg.rs`:
 - `icons/filetypes/` — ~24 colored SVGs for file type differentiation (devicon, MIT licensed)
 
 Icon resolution for files (`config.rs` → `files_svg()`):
-1. Active icon theme's `extension`/`filename` mappings → loads SVG from plugin directory on disk
-2. Default theme's `extension`/`filename` mappings → loads SVG from embedded `FILETYPES_ICONS_DIR`
-3. Falls back to generic `file.svg` with editor icon color
+1. Default theme's `extension`/`filename` mappings → loads SVG from embedded `FILETYPES_ICONS_DIR`
+2. Falls back to generic `file.svg` with editor icon color
 
 Icon resolution for UI elements (`config.rs` → `ui_svg()`):
-1. Active icon theme's `ui` map → loads from plugin directory on disk
-2. Default theme's `ui` map → loads from embedded `CODICONS_ICONS_DIR`
+1. Default theme's `ui` map → loads from embedded `CODICONS_ICONS_DIR`
 
 When `use_editor_color` is `None` or `false` in the icon theme, colored SVGs retain their original colors. This is important for file type icons.

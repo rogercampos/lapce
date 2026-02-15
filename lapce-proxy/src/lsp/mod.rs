@@ -1,30 +1,21 @@
-pub mod catalog;
-pub mod lsp;
-pub mod psp;
-pub mod wasi;
+pub mod client;
+pub mod manager;
 
 use std::{
     borrow::Cow,
     collections::HashMap,
-    fs,
     path::{Path, PathBuf},
     sync::{
         Arc,
-        atomic::{AtomicBool, AtomicUsize, Ordering},
+        atomic::{AtomicBool, Ordering},
     },
-    time::Duration,
 };
 
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use crossbeam_channel::{Receiver, Sender};
 use dyn_clone::DynClone;
-use flate2::read::GzDecoder;
-use lapce_core::directory::Directory;
 use lapce_rpc::{
-    RpcError,
-    core::CoreRpcHandler,
-    plugin::{PluginId, VoltInfo, VoltMetadata},
-    proxy::ProxyRpcHandler,
+    RpcError, core::CoreRpcHandler, plugin::PluginId, proxy::ProxyRpcHandler,
     style::LineStyle,
 };
 use lapce_xi_rope::{Rope, RopeDelta};
@@ -70,34 +61,46 @@ use lsp_types::{
     },
 };
 use parking_lot::Mutex;
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use serde::{Serialize, de::DeserializeOwned};
 use serde_json::{Map, Value};
-use tar::Archive;
-use tracing::error;
 
-use self::{
-    catalog::PluginCatalog,
-    psp::{ClonableCallback, PluginServerRpcHandler, RpcCallback},
-    wasi::{load_volt, start_volt},
-};
+use self::manager::LspManager;
 use crate::buffer::language_id_from_path;
 
-pub type PluginName = String;
+/// Callback trait that is both FnOnce and Clone-able. The DynClone requirement
+/// exists because when broadcasting a request to all plugins, the callback must
+/// be cloned once per plugin.
+pub trait ClonableCallback<Resp, Error>:
+    FnOnce(PluginId, Result<Resp, Error>) + Send + DynClone
+{
+}
 
-/// Messages sent from any thread to the PluginCatalog's dedicated mainloop thread.
-/// This is the single-writer bottleneck that serializes all plugin state mutations.
-/// Large variants (like ServerRequest with boxed callbacks) are acceptable because
-/// these are sent through an unbounded channel, not stored in arrays.
+impl<Resp, Error, F: Send + FnOnce(PluginId, Result<Resp, Error>) + DynClone>
+    ClonableCallback<Resp, Error> for F
+{
+}
+
+pub trait RpcCallback<Resp, Error>: Send {
+    fn call(self: Box<Self>, result: Result<Resp, Error>);
+}
+
+impl<Resp, Error, F: Send + FnOnce(Result<Resp, Error>)> RpcCallback<Resp, Error>
+    for F
+{
+    fn call(self: Box<F>, result: Result<Resp, Error>) {
+        (*self)(result)
+    }
+}
+
+/// Messages sent to the LspManager's dedicated mainloop thread.
 #[allow(clippy::large_enum_variant)]
-pub enum PluginCatalogRpc {
+pub enum LspRpc {
     ServerRequest {
         plugin_id: Option<PluginId>,
-        request_sent: Option<Arc<AtomicUsize>>,
         method: Cow<'static, str>,
         params: Value,
         language_id: Option<String>,
         path: Option<PathBuf>,
-        check: bool,
         f: Box<dyn ClonableCallback<Value, RpcError>>,
     },
     ServerNotification {
@@ -106,7 +109,6 @@ pub enum PluginCatalogRpc {
         params: Value,
         language_id: Option<String>,
         path: Option<PathBuf>,
-        check: bool,
     },
     FormatSemanticTokens {
         plugin_id: PluginId,
@@ -130,43 +132,26 @@ pub enum PluginCatalogRpc {
         text_document: TextDocumentIdentifier,
         text: Rope,
     },
-    Handler(PluginCatalogNotification),
-    RemoveVolt {
-        volt: VoltInfo,
-        f: Box<dyn ClonableCallback<Value, RpcError>>,
-    },
-    Shutdown,
-}
-
-#[allow(clippy::large_enum_variant)]
-pub enum PluginCatalogNotification {
-    UpdatePluginConfigs(HashMap<String, HashMap<String, serde_json::Value>>),
-    UnactivatedVolts(Vec<VoltMetadata>),
-    PluginServerLoaded(PluginServerRpcHandler),
-    InstallVolt(VoltInfo),
-    StopVolt(VoltInfo),
-    EnableVolt(VoltInfo),
-    ReloadVolt(VoltMetadata),
     Shutdown,
 }
 
 #[derive(Clone)]
-pub struct PluginCatalogRpcHandler {
+pub struct LspRpcHandler {
     core_rpc: CoreRpcHandler,
     proxy_rpc: ProxyRpcHandler,
-    plugin_tx: Sender<PluginCatalogRpc>,
-    plugin_rx: Arc<Mutex<Option<Receiver<PluginCatalogRpc>>>>,
+    lsp_tx: Sender<LspRpc>,
+    lsp_rx: Arc<Mutex<Option<Receiver<LspRpc>>>>,
     pub shell_env: Arc<HashMap<String, String>>,
 }
 
-impl PluginCatalogRpcHandler {
+impl LspRpcHandler {
     pub fn new(core_rpc: CoreRpcHandler, proxy_rpc: ProxyRpcHandler) -> Self {
-        let (plugin_tx, plugin_rx) = crossbeam_channel::unbounded();
+        let (lsp_tx, lsp_rx) = crossbeam_channel::unbounded();
         Self {
             core_rpc,
             proxy_rpc,
-            plugin_tx,
-            plugin_rx: Arc::new(Mutex::new(Some(plugin_rx))),
+            lsp_tx,
+            lsp_rx: Arc::new(Mutex::new(Some(lsp_rx))),
             shell_env: Arc::new(HashMap::new()),
         }
     }
@@ -175,83 +160,74 @@ impl PluginCatalogRpcHandler {
         self.shell_env = Arc::new(env);
     }
 
-    pub fn mainloop(&self, plugin: &mut PluginCatalog) {
-        let plugin_rx = self.plugin_rx.lock().take().unwrap();
-        for msg in plugin_rx {
+    pub fn mainloop(&self, manager: &mut LspManager) {
+        let lsp_rx = self.lsp_rx.lock().take().unwrap();
+        for msg in lsp_rx {
             match msg {
-                PluginCatalogRpc::ServerRequest {
+                LspRpc::ServerRequest {
                     plugin_id,
-                    request_sent,
                     method,
                     params,
                     language_id,
                     path,
-                    check,
                     f,
                 } => {
-                    plugin.handle_server_request(
+                    manager.handle_server_request(
                         plugin_id,
-                        request_sent,
                         method,
                         params,
                         language_id,
                         path,
-                        check,
                         f,
                     );
                 }
-                PluginCatalogRpc::ServerNotification {
+                LspRpc::ServerNotification {
                     plugin_id,
                     method,
                     params,
                     language_id,
                     path,
-                    check,
                 } => {
-                    plugin.handle_server_notification(
+                    manager.handle_server_notification(
                         plugin_id,
                         method,
                         params,
                         language_id,
                         path,
-                        check,
                     );
                 }
-                PluginCatalogRpc::Handler(notification) => {
-                    plugin.handle_notification(notification);
-                }
-                PluginCatalogRpc::FormatSemanticTokens {
+                LspRpc::FormatSemanticTokens {
                     plugin_id,
                     tokens,
                     text,
                     f,
                 } => {
-                    plugin.format_semantic_tokens(plugin_id, tokens, text, f);
+                    manager.format_semantic_tokens(plugin_id, tokens, text, f);
                 }
-                PluginCatalogRpc::DidOpenTextDocument { document } => {
-                    plugin.handle_did_open_text_document(document);
+                LspRpc::DidOpenTextDocument { document } => {
+                    manager.handle_did_open_text_document(document);
                 }
-                PluginCatalogRpc::DidSaveTextDocument {
+                LspRpc::DidSaveTextDocument {
                     language_id,
                     path,
                     text_document,
                     text,
                 } => {
-                    plugin.handle_did_save_text_document(
+                    manager.handle_did_save_text_document(
                         language_id,
                         path,
                         text_document,
                         text,
                     );
                 }
-                PluginCatalogRpc::DidChangeTextDocument {
+                LspRpc::DidChangeTextDocument {
                     language_id,
                     document,
                     delta,
                     text,
                     new_text,
                 } => {
-                    plugin.handle_did_change_text_document(
+                    manager.handle_did_change_text_document(
                         language_id,
                         document,
                         delta,
@@ -259,68 +235,83 @@ impl PluginCatalogRpcHandler {
                         new_text,
                     );
                 }
-                PluginCatalogRpc::Shutdown => {
+                LspRpc::Shutdown => {
+                    manager.shutdown();
                     return;
-                }
-                PluginCatalogRpc::RemoveVolt { volt, f } => {
-                    plugin.shutdown_volt(volt, f);
                 }
             }
         }
     }
 
     pub fn shutdown(&self) {
-        if let Err(err) =
-            self.catalog_notification(PluginCatalogNotification::Shutdown)
-        {
-            tracing::error!("{:?}", err);
-        }
-        if let Err(err) = self.plugin_tx.send(PluginCatalogRpc::Shutdown) {
+        if let Err(err) = self.lsp_tx.send(LspRpc::Shutdown) {
             tracing::error!("{:?}", err);
         }
     }
 
-    fn catalog_notification(
+    pub(crate) fn send_request<P: Serialize>(
         &self,
-        notification: PluginCatalogNotification,
-    ) -> Result<()> {
-        self.plugin_tx
-            .send(PluginCatalogRpc::Handler(notification))
-            .map_err(|e| anyhow!(e.to_string()))?;
-        Ok(())
-    }
-
-    /// Broadcasts a request to ALL registered plugins and uses "first success wins"
-    /// semantics. This is crucial because multiple language servers may be running
-    /// (e.g., rust-analyzer and a general-purpose LSP), but only one will actually
-    /// handle a given file. We fire the request at all of them and take the first
-    /// successful response.
-    ///
-    /// The callback is only invoked once: either on first success, or on final error
-    /// (when all plugins have responded with errors). The `got_success` atomic
-    /// prevents duplicate callback invocations across threads.
-    fn send_request_to_all_plugins<P, Resp>(
-        &self,
-        method: &'static str,
+        plugin_id: Option<PluginId>,
+        method: impl Into<Cow<'static, str>>,
         params: P,
         language_id: Option<String>,
         path: Option<PathBuf>,
+        f: impl FnOnce(PluginId, Result<Value, RpcError>) + Send + DynClone + 'static,
+    ) {
+        let params = serde_json::to_value(params).unwrap();
+        let rpc = LspRpc::ServerRequest {
+            plugin_id,
+            method: method.into(),
+            params,
+            language_id,
+            path,
+            f: Box::new(f),
+        };
+        if let Err(err) = self.lsp_tx.send(rpc) {
+            tracing::error!("{:?}", err);
+        }
+    }
+
+    pub(crate) fn send_notification<P: Serialize>(
+        &self,
+        plugin_id: Option<PluginId>,
+        method: impl Into<Cow<'static, str>>,
+        params: P,
+        language_id: Option<String>,
+        path: Option<PathBuf>,
+    ) {
+        let params = serde_json::to_value(params).unwrap();
+        let rpc = LspRpc::ServerNotification {
+            plugin_id,
+            method: method.into(),
+            params,
+            language_id,
+            path,
+        };
+        if let Err(err) = self.lsp_tx.send(rpc) {
+            tracing::error!("{:?}", err);
+        }
+    }
+
+    fn send_lsp_request<P, Resp>(
+        &self,
+        path: &Path,
+        method: &'static str,
+        params: P,
         cb: impl FnOnce(PluginId, Result<Resp, RpcError>) + Clone + Send + 'static,
     ) where
         P: Serialize,
         Resp: DeserializeOwned,
     {
+        let language_id =
+            Some(language_id_from_path(path).unwrap_or("").to_string());
         let got_success = Arc::new(AtomicBool::new(false));
-        let request_sent = Arc::new(AtomicUsize::new(0));
-        let err_received = Arc::new(AtomicUsize::new(0));
         self.send_request(
             None,
-            Some(request_sent.clone()),
             method,
             params,
             language_id,
-            path,
-            true,
+            Some(path.to_path_buf()),
             move |plugin_id, result| {
                 if got_success.load(Ordering::Acquire) {
                     return;
@@ -336,68 +327,9 @@ impl PluginCatalogRpcHandler {
                     }
                     Err(e) => Err(e),
                 };
-                if result.is_ok() {
-                    cb(plugin_id, result)
-                } else {
-                    let rx = err_received.fetch_add(1, Ordering::Relaxed) + 1;
-                    if request_sent.load(Ordering::Acquire) == rx {
-                        cb(plugin_id, result)
-                    }
-                }
+                cb(plugin_id, result)
             },
         );
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn send_request<P: Serialize>(
-        &self,
-        plugin_id: Option<PluginId>,
-        request_sent: Option<Arc<AtomicUsize>>,
-        method: impl Into<Cow<'static, str>>,
-        params: P,
-        language_id: Option<String>,
-        path: Option<PathBuf>,
-        check: bool,
-        f: impl FnOnce(PluginId, Result<Value, RpcError>) + Send + DynClone + 'static,
-    ) {
-        let params = serde_json::to_value(params).unwrap();
-        let rpc = PluginCatalogRpc::ServerRequest {
-            plugin_id,
-            request_sent,
-            method: method.into(),
-            params,
-            language_id,
-            path,
-            check,
-            f: Box::new(f),
-        };
-        if let Err(err) = self.plugin_tx.send(rpc) {
-            tracing::error!("{:?}", err);
-        }
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn send_notification<P: Serialize>(
-        &self,
-        plugin_id: Option<PluginId>,
-        method: impl Into<Cow<'static, str>>,
-        params: P,
-        language_id: Option<String>,
-        path: Option<PathBuf>,
-        check: bool,
-    ) {
-        let params = serde_json::to_value(params).unwrap();
-        let rpc = PluginCatalogRpc::ServerNotification {
-            plugin_id,
-            method: method.into(),
-            params,
-            language_id,
-            path,
-            check,
-        };
-        if let Err(err) = self.plugin_tx.send(rpc) {
-            tracing::error!("{:?}", err);
-        }
     }
 
     pub fn format_semantic_tokens(
@@ -407,14 +339,12 @@ impl PluginCatalogRpcHandler {
         text: Rope,
         f: Box<dyn RpcCallback<Vec<LineStyle>, RpcError>>,
     ) {
-        if let Err(err) =
-            self.plugin_tx.send(PluginCatalogRpc::FormatSemanticTokens {
-                plugin_id,
-                tokens,
-                text,
-                f,
-            })
-        {
+        if let Err(err) = self.lsp_tx.send(LspRpc::FormatSemanticTokens {
+            plugin_id,
+            tokens,
+            text,
+            f,
+        }) {
             tracing::error!("{:?}", err);
         }
     }
@@ -423,14 +353,12 @@ impl PluginCatalogRpcHandler {
         let text_document =
             TextDocumentIdentifier::new(Url::from_file_path(path).unwrap());
         let language_id = language_id_from_path(path).unwrap_or("").to_string();
-        if let Err(err) =
-            self.plugin_tx.send(PluginCatalogRpc::DidSaveTextDocument {
-                language_id,
-                text_document,
-                path: path.into(),
-                text,
-            })
-        {
+        if let Err(err) = self.lsp_tx.send(LspRpc::DidSaveTextDocument {
+            language_id,
+            text_document,
+            path: path.into(),
+            text,
+        }) {
             tracing::error!("{:?}", err);
         }
     }
@@ -448,41 +376,41 @@ impl PluginCatalogRpcHandler {
             rev as i32,
         );
         let language_id = language_id_from_path(path).unwrap_or("").to_string();
-        if let Err(err) =
-            self.plugin_tx
-                .send(PluginCatalogRpc::DidChangeTextDocument {
-                    language_id,
-                    document,
-                    delta,
-                    text,
-                    new_text,
-                })
-        {
+        if let Err(err) = self.lsp_tx.send(LspRpc::DidChangeTextDocument {
+            language_id,
+            document,
+            delta,
+            text,
+            new_text,
+        }) {
             tracing::error!("{:?}", err);
         }
     }
 
-    /// Helper for LSP request methods: extracts language_id from path and
-    /// dispatches to all matching plugins.
-    fn send_lsp_request<P, Resp>(
+    pub fn did_open_document(
         &self,
         path: &Path,
-        method: &'static str,
-        params: P,
-        cb: impl FnOnce(PluginId, Result<Resp, RpcError>) + Clone + Send + 'static,
-    ) where
-        P: Serialize,
-        Resp: DeserializeOwned,
-    {
-        let language_id =
-            Some(language_id_from_path(path).unwrap_or("").to_string());
-        self.send_request_to_all_plugins(
-            method,
-            params,
-            language_id,
-            Some(path.to_path_buf()),
-            cb,
-        );
+        language_id: String,
+        version: i32,
+        text: String,
+    ) {
+        match Url::from_file_path(path) {
+            Ok(path) => {
+                if let Err(err) = self.lsp_tx.send(LspRpc::DidOpenTextDocument {
+                    document: TextDocumentItem::new(
+                        path,
+                        language_id,
+                        version,
+                        text,
+                    ),
+                }) {
+                    tracing::error!("{:?}", err);
+                }
+            }
+            Err(_) => {
+                tracing::error!("Failed to parse URL from file path: {path:?}");
+            }
+        }
     }
 
     pub fn get_definition(
@@ -504,7 +432,6 @@ impl PluginCatalogRpcHandler {
             work_done_progress_params: WorkDoneProgressParams::default(),
             partial_result_params: PartialResultParams::default(),
         };
-
         self.send_lsp_request(path, method, params, cb);
     }
 
@@ -527,7 +454,6 @@ impl PluginCatalogRpcHandler {
             work_done_progress_params: WorkDoneProgressParams::default(),
             partial_result_params: PartialResultParams::default(),
         };
-
         self.send_lsp_request(path, method, params, cb);
     }
 
@@ -548,7 +474,6 @@ impl PluginCatalogRpcHandler {
             work_done_progress_params: WorkDoneProgressParams::default(),
             partial_result_params: Default::default(),
         };
-
         self.send_lsp_request(path, method, params, cb);
     }
 
@@ -570,7 +495,6 @@ impl PluginCatalogRpcHandler {
             },
             work_done_progress_params: WorkDoneProgressParams::default(),
         };
-
         self.send_lsp_request(path, method, params, cb);
     }
 
@@ -596,7 +520,6 @@ impl PluginCatalogRpcHandler {
                 include_declaration: false,
             },
         };
-
         self.send_lsp_request(path, method, params, cb);
     }
 
@@ -617,7 +540,6 @@ impl PluginCatalogRpcHandler {
             work_done_progress_params: WorkDoneProgressParams::default(),
             partial_result_params: PartialResultParams::default(),
         };
-
         self.send_lsp_request(path, method, params, cb);
     }
 
@@ -640,7 +562,6 @@ impl PluginCatalogRpcHandler {
             work_done_progress_params: WorkDoneProgressParams::default(),
             partial_result_params: PartialResultParams::default(),
         };
-
         self.send_lsp_request(path, method, params, cb);
     }
 
@@ -688,7 +609,6 @@ impl PluginCatalogRpcHandler {
             work_done_progress_params: Default::default(),
             partial_result_params: Default::default(),
         };
-
         self.send_lsp_request(path, method, params, cb);
     }
 
@@ -909,22 +829,31 @@ impl PluginCatalogRpcHandler {
         let language_id =
             Some(language_id_from_path(path).unwrap_or("").to_string());
 
-        self.send_request_to_all_plugins(
+        let got_success = Arc::new(AtomicBool::new(false));
+        self.send_request(
+            None,
             method,
             params,
             language_id,
             Some(path.to_path_buf()),
-            move |plugin_id, result| match result {
-                Ok(value) => {
-                    if let Ok(resp) =
-                        serde_json::from_value::<CompletionResponse>(value)
-                    {
-                        core_rpc
-                            .completion_response(request_id, input, resp, plugin_id);
-                    }
+            move |plugin_id, result| {
+                if got_success.load(Ordering::Acquire) {
+                    return;
                 }
-                Err(err) => {
-                    tracing::error!("{:?}", err);
+                match result {
+                    Ok(value) => {
+                        if let Ok(resp) =
+                            serde_json::from_value::<CompletionResponse>(value)
+                        {
+                            got_success.store(true, Ordering::Release);
+                            core_rpc.completion_response(
+                                request_id, input, resp, plugin_id,
+                            );
+                        }
+                    }
+                    Err(err) => {
+                        tracing::error!("{:?}", err);
+                    }
                 }
             },
         );
@@ -939,12 +868,10 @@ impl PluginCatalogRpcHandler {
         let method = ResolveCompletionItem::METHOD;
         self.send_request(
             Some(plugin_id),
-            None,
             method,
             item,
             None,
             None,
-            true,
             move |_, result| {
                 let result = match result {
                     Ok(value) => {
@@ -972,7 +899,6 @@ impl PluginCatalogRpcHandler {
         let uri = Url::from_file_path(path).unwrap();
         let method = SignatureHelpRequest::METHOD;
         let params = SignatureHelpParams {
-            // TODO: We could provide more information about the signature for the LSP to work with
             context: None,
             text_document_position_params: TextDocumentPositionParams {
                 text_document: TextDocumentIdentifier { uri },
@@ -986,12 +912,10 @@ impl PluginCatalogRpcHandler {
             Some(language_id_from_path(path).unwrap_or("").to_string());
         self.send_request(
             None,
-            None,
             method,
             params,
             language_id,
             Some(path.to_path_buf()),
-            true,
             move |plugin_id, result| match result {
                 Ok(value) => {
                     if let Ok(resp) = serde_json::from_value::<SignatureHelp>(value)
@@ -1016,12 +940,10 @@ impl PluginCatalogRpcHandler {
         let method = CodeActionResolveRequest::METHOD;
         self.send_request(
             Some(plugin_id),
-            None,
             method,
             item,
             None,
             None,
-            true,
             move |_, result| {
                 let result = match result {
                     Ok(value) => {
@@ -1038,253 +960,10 @@ impl PluginCatalogRpcHandler {
             },
         );
     }
-
-    pub fn did_open_document(
-        &self,
-        path: &Path,
-        language_id: String,
-        version: i32,
-        text: String,
-    ) {
-        match Url::from_file_path(path) {
-            Ok(path) => {
-                if let Err(err) =
-                    self.plugin_tx.send(PluginCatalogRpc::DidOpenTextDocument {
-                        document: TextDocumentItem::new(
-                            path,
-                            language_id,
-                            version,
-                            text,
-                        ),
-                    })
-                {
-                    tracing::error!("{:?}", err);
-                }
-            }
-            Err(_) => {
-                tracing::error!("Failed to parse URL from file path: {path:?}");
-            }
-        }
-    }
-
-    pub fn unactivated_volts(&self, volts: Vec<VoltMetadata>) -> Result<()> {
-        self.catalog_notification(PluginCatalogNotification::UnactivatedVolts(volts))
-    }
-
-    pub fn plugin_server_loaded(
-        &self,
-        plugin: PluginServerRpcHandler,
-    ) -> Result<()> {
-        self.catalog_notification(PluginCatalogNotification::PluginServerLoaded(
-            plugin,
-        ))
-    }
-
-    pub fn update_plugin_configs(
-        &self,
-        configs: HashMap<String, HashMap<String, serde_json::Value>>,
-    ) -> Result<()> {
-        self.catalog_notification(PluginCatalogNotification::UpdatePluginConfigs(
-            configs,
-        ))
-    }
-
-    pub fn install_volt(&self, volt: VoltInfo) -> Result<()> {
-        self.catalog_notification(PluginCatalogNotification::InstallVolt(volt))
-    }
-
-    pub fn stop_volt(&self, volt: VoltInfo) {
-        let rpc = PluginCatalogRpc::RemoveVolt {
-            volt,
-            f: Box::new(|_id: PluginId, rs: Result<Value, RpcError>| {
-                if let Err(e) = rs {
-                    // maybe should send notification
-                    error!("{:?}", e);
-                }
-            }),
-        };
-        if let Err(err) = self.plugin_tx.send(rpc) {
-            tracing::error!("{:?}", err);
-        }
-    }
-
-    pub fn remove_volt(&self, volt: VoltMetadata) {
-        let catalog_rpc = self.clone();
-        let volt_clone = volt.clone();
-        let rpc = PluginCatalogRpc::RemoveVolt {
-            volt: volt.info(),
-            f: Box::new(|_id: PluginId, rs: Result<Value, RpcError>| {
-                if let Err(e) = rs {
-                    // maybe should send notification
-                    error!("{:?}", e);
-                } else if let Err(e) = remove_volt(catalog_rpc, volt_clone) {
-                    error!("{:?}", e);
-                }
-            }),
-        };
-        if let Err(err) = self.plugin_tx.send(rpc) {
-            tracing::error!("{:?}", err);
-        }
-    }
-
-    pub fn reload_volt(&self, volt: VoltMetadata) -> Result<()> {
-        self.catalog_notification(PluginCatalogNotification::ReloadVolt(volt))
-    }
-
-    pub fn enable_volt(&self, volt: VoltInfo) -> Result<()> {
-        self.catalog_notification(PluginCatalogNotification::EnableVolt(volt))
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-#[serde(rename_all = "snake_case")]
-#[serde(tag = "method", content = "params")]
-pub enum PluginNotification {
-    StartLspServer {
-        exec_path: String,
-        language_id: String,
-        options: Option<Value>,
-        system_lsp: Option<bool>,
-    },
-    DownloadFile {
-        url: String,
-        path: PathBuf,
-    },
-    LockFile {
-        path: PathBuf,
-    },
-    MakeFileExecutable {
-        path: PathBuf,
-    },
-}
-
-pub fn volt_icon(volt: &VoltMetadata) -> Option<Vec<u8>> {
-    let dir = volt.dir.as_ref()?;
-    let icon = dir.join(volt.icon.as_ref()?);
-    std::fs::read(icon).ok()
-}
-
-/// Downloads a plugin (volt) from the Lapce plugin registry. The registry API
-/// returns an S3 redirect URL rather than the actual tarball, so we do two HTTP
-/// fetches: one for the redirect URL, one for the actual archive.
-/// Supports both zstd (preferred, smaller) and gzip compressed tarballs,
-/// determined by the Content-Type header.
-pub fn download_volt(volt: &VoltInfo) -> Result<VoltMetadata> {
-    let url = format!(
-        "https://plugins.lapce.dev/api/v1/plugins/{}/{}/{}/download",
-        volt.author, volt.name, volt.version
-    );
-
-    let resp = crate::get_url(url, None)?;
-    if !resp.status().is_success() {
-        return Err(anyhow!("can't download plugin"));
-    }
-
-    let url = resp.text()?;
-
-    let mut resp = crate::get_url(url, None)?;
-    if !resp.status().is_success() {
-        return Err(anyhow!("can't download plugin"));
-    }
-
-    let is_zstd = resp
-        .headers()
-        .get("content-type")
-        .and_then(|v| v.to_str().ok())
-        == Some("application/zstd");
-
-    let id = volt.id();
-    let plugin_dir = Directory::plugins_directory()
-        .ok_or_else(|| anyhow!("can't get plugin directory"))?
-        .join(id.to_string());
-    if let Err(err) = fs::remove_dir_all(&plugin_dir) {
-        tracing::error!("{:?}", err);
-    }
-    fs::create_dir_all(&plugin_dir)?;
-
-    if is_zstd {
-        let tar = zstd::Decoder::new(&mut resp).unwrap();
-        let mut archive = Archive::new(tar);
-        archive.unpack(&plugin_dir)?;
-    } else {
-        let tar = GzDecoder::new(&mut resp);
-        let mut archive = Archive::new(tar);
-        archive.unpack(&plugin_dir)?;
-    }
-
-    let meta = load_volt(&plugin_dir)?;
-    Ok(meta)
-}
-
-pub fn install_volt(
-    catalog_rpc: PluginCatalogRpcHandler,
-    workspace: Option<PathBuf>,
-    configurations: Option<HashMap<String, serde_json::Value>>,
-    volt: VoltInfo,
-) -> Result<()> {
-    let download_volt_result = download_volt(&volt);
-    if download_volt_result.is_err() {
-        catalog_rpc
-            .core_rpc
-            .volt_installing(volt, "Could not download Plugin".to_string());
-    }
-    let meta = download_volt_result?;
-    let local_catalog_rpc = catalog_rpc.clone();
-    let local_meta = meta.clone();
-
-    if let Err(err) =
-        start_volt(workspace, configurations, local_catalog_rpc, local_meta)
-    {
-        tracing::error!("{:?}", err);
-    }
-    let icon = volt_icon(&meta);
-    catalog_rpc.core_rpc.volt_installed(meta, icon);
-    Ok(())
-}
-
-pub fn remove_volt(
-    catalog_rpc: PluginCatalogRpcHandler,
-    volt: VoltMetadata,
-) -> Result<()> {
-    std::thread::spawn(move || -> Result<()> {
-        let path = volt.dir.as_ref().ok_or_else(|| {
-            catalog_rpc
-                .core_rpc
-                .volt_removing(volt.clone(), "Plugin Directory not set".to_string());
-            anyhow::anyhow!("don't have dir")
-        })?;
-        // Retry removal a few times — on some OSes (Windows) file locks
-        // aren't released immediately after plugin deactivation.
-        let mut last_err = None;
-        for _ in 0..5 {
-            match std::fs::remove_dir_all(path) {
-                Ok(()) => {
-                    catalog_rpc.core_rpc.volt_removed(volt.info(), false);
-                    return Ok(());
-                }
-                Err(e) => {
-                    last_err = Some(e);
-                    std::thread::sleep(Duration::from_millis(500));
-                }
-            }
-        }
-        let e = last_err.unwrap();
-        error!("remove_dir_all {:?}", e);
-        catalog_rpc.core_rpc.volt_removing(
-            volt.clone(),
-            format!("Could not remove plugin directory: {e}"),
-        );
-        Ok(())
-    });
-    Ok(())
 }
 
 /// Constructs the LSP ClientCapabilities that Lapce advertises to language servers.
-/// This determines what features the server can use -- for example, snippet support
-/// in completions, markdown in hover docs, incremental text sync, etc.
-/// Must be kept in sync with what the editor actually handles.
-fn client_capabilities() -> ClientCapabilities {
-    // https://github.com/rust-lang/rust-analyzer/blob/master/docs/dev/lsp-extensions.md#server-status
+pub(crate) fn client_capabilities() -> ClientCapabilities {
     let mut experimental = Map::new();
     experimental.insert("serverStatusNotification".into(), true.into());
     let command_vec = ["rust-analyzer.runSingle", "rust-analyzer.debugSingle"]
@@ -1364,8 +1043,6 @@ fn client_capabilities() -> ClientCapabilities {
                 ..Default::default()
             }),
             type_definition: Some(GotoCapability {
-                // Note: This is explicitly specified rather than left to the Default because
-                // of a bug in lsp-types https://github.com/gluon-lang/lsp-types/pull/244
                 link_support: Some(false),
                 ..Default::default()
             }),
@@ -1524,7 +1201,6 @@ mod tests {
         let caps = client_capabilities();
         let td = caps.text_document.unwrap();
         let typedef = td.type_definition.unwrap();
-        // Explicitly false due to lsp-types bug workaround
         assert_eq!(typedef.link_support, Some(false));
     }
 

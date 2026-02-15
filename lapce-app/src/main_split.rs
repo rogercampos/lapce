@@ -19,10 +19,7 @@ use lapce_core::{
     selection::Selection, syntax::Syntax,
 };
 use lapce_rpc::{
-    buffer::BufferId,
-    core::FileChanged,
-    plugin::{PluginId, VoltID},
-    proxy::ProxyResponse,
+    buffer::BufferId, core::FileChanged, plugin::PluginId, proxy::ProxyResponse,
 };
 use lapce_xi_rope::{Rope, spans::SpansBuilder};
 use lsp_types::{
@@ -45,9 +42,7 @@ use crate::{
     editor_tab::{
         EditorTabChild, EditorTabChildSource, EditorTabData, EditorTabInfo,
     },
-    id::{
-        EditorTabId, KeymapId, SettingsId, SplitId, ThemeColorSettingsId, VoltViewId,
-    },
+    id::{EditorTabId, KeymapId, SettingsId, SplitId, ThemeColorSettingsId},
     keypress::{EventRef, KeyPressData, KeyPressHandle},
     workspace_data::{CommonData, Focus, WorkspaceData},
 };
@@ -528,7 +523,6 @@ impl MainSplitData {
             EditorTabChild::Settings(_) => None,
             EditorTabChild::ThemeColorSettings(_) => None,
             EditorTabChild::Keymap(_) => None,
-            EditorTabChild::Volt(_, _) => None,
         }
     }
 
@@ -841,9 +835,6 @@ impl MainSplitData {
                 EditorTabChild::ThemeColorSettings(ThemeColorSettingsId::next())
             }
             EditorTabChildSource::Keymap => EditorTabChild::Keymap(KeymapId::next()),
-            EditorTabChildSource::Volt(id) => {
-                EditorTabChild::Volt(VoltViewId::next(), id.to_owned())
-            }
         }
     }
 
@@ -1233,9 +1224,6 @@ impl MainSplitData {
                 EditorTabChild::ThemeColorSettings(ThemeColorSettingsId::next())
             }
             EditorTabChild::Keymap(_) => EditorTabChild::Keymap(KeymapId::next()),
-            EditorTabChild::Volt(_, id) => {
-                EditorTabChild::Volt(VoltViewId::next(), id.to_owned())
-            }
         };
 
         let editor_tab = {
@@ -1588,7 +1576,6 @@ impl MainSplitData {
             EditorTabChild::Settings(_) => None,
             EditorTabChild::ThemeColorSettings(_) => None,
             EditorTabChild::Keymap(_) => None,
-            EditorTabChild::Volt(_, _) => None,
         }
     }
 
@@ -1820,7 +1807,6 @@ impl MainSplitData {
             EditorTabChild::Settings(_) => {}
             EditorTabChild::ThemeColorSettings(_) => {}
             EditorTabChild::Keymap(_) => {}
-            EditorTabChild::Volt(_, _) => {}
         }
 
         if editor_tab_children_len == 0 {
@@ -2003,10 +1989,6 @@ impl MainSplitData {
         self.find_editor
             .cursor()
             .update(|cursor| cursor.set_insert(Selection::region(0, pattern_len)));
-    }
-
-    pub fn open_volt_view(&self, id: VoltID) {
-        self.get_editor_tab_child(EditorTabChildSource::Volt(id), false);
     }
 
     pub fn open_settings(&self) {
@@ -2250,7 +2232,6 @@ impl MainSplitData {
             EditorTabChild::Settings(_) => {}
             EditorTabChild::ThemeColorSettings(_) => {}
             EditorTabChild::Keymap(_) => {}
-            EditorTabChild::Volt(_, _) => {}
         }
         Some(())
     }

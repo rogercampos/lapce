@@ -1,15 +1,9 @@
-use std::{
-    collections::HashMap,
-    path::PathBuf,
-    process::Command,
-    sync::{Arc, mpsc::Sender},
-};
+use std::{process::Command, sync::Arc};
 
 use floem::{ext_event::create_signal_from_channel, reactive::ReadSignal};
 use lapce_proxy::dispatch::Dispatcher;
 use lapce_rpc::{
     core::{CoreHandler, CoreNotification, CoreRpcHandler},
-    plugin::VoltID,
     proxy::ProxyRpcHandler,
 };
 
@@ -19,7 +13,7 @@ use crate::workspace::LapceWorkspace;
 /// Simply forwards notifications through the mpsc channel to be picked up
 /// by `create_signal_from_channel` and processed in the reactive system.
 pub struct Proxy {
-    pub tx: Sender<CoreNotification>,
+    pub tx: std::sync::mpsc::Sender<CoreNotification>,
 }
 
 /// Holds both ends of the proxy communication bridge:
@@ -49,31 +43,19 @@ impl ProxyData {
 ///    an mpsc channel that gets bridged to a Floem reactive signal.
 ///
 /// For local workspaces, the proxy runs in-process (as threads, not a separate process).
-/// The `proxy_rpc.initialize()` call triggers plugin discovery and LSP server startup.
-pub fn new_proxy(
-    workspace: Arc<LapceWorkspace>,
-    disabled_volts: Vec<VoltID>,
-    extra_plugin_paths: Vec<PathBuf>,
-    plugin_configurations: HashMap<String, HashMap<String, serde_json::Value>>,
-) -> ProxyData {
+/// The `proxy_rpc.initialize()` call triggers LSP server startup.
+pub fn new_proxy(workspace: Arc<LapceWorkspace>) -> ProxyData {
     let proxy_rpc = ProxyRpcHandler::new();
     let core_rpc = CoreRpcHandler::new();
 
-    // Thread 1: Proxy dispatcher - processes app requests and runs plugin/LSP logic
+    // Thread 1: Proxy dispatcher - processes app requests and runs LSP logic
     {
         let core_rpc = core_rpc.clone();
         let proxy_rpc = proxy_rpc.clone();
         std::thread::Builder::new()
             .name("ProxyRpcHandler".to_owned())
             .spawn(move || {
-                proxy_rpc.initialize(
-                    workspace.path.clone(),
-                    disabled_volts,
-                    extra_plugin_paths,
-                    plugin_configurations,
-                    1,
-                    1,
-                );
+                proxy_rpc.initialize(workspace.path.clone(), 1, 1);
 
                 let core_rpc = core_rpc.clone();
                 let proxy_rpc = proxy_rpc.clone();

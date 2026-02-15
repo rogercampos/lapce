@@ -15,11 +15,7 @@ use lsp_types::{
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    RequestId, RpcError, RpcMessage,
-    file::PathObject,
-    plugin::{PluginId, VoltInfo, VoltMetadata},
-};
+use crate::{RequestId, RpcError, RpcMessage, file::PathObject, plugin::PluginId};
 
 /// Internal channel message type for proxy-to-UI communication.
 /// CoreNotification is boxed because some variants (like CompletionResponse)
@@ -83,22 +79,6 @@ pub enum CoreNotification {
     },
     LspCancel {
         params: CancelParams,
-    },
-    VoltInstalled {
-        volt: VoltMetadata,
-        icon: Option<Vec<u8>>,
-    },
-    VoltInstalling {
-        volt: VoltInfo,
-        error: String,
-    },
-    VoltRemoving {
-        volt: VoltMetadata,
-        error: String,
-    },
-    VoltRemoved {
-        volt: VoltInfo,
-        only_installing: bool,
     },
     Log {
         level: LogLevel,
@@ -239,25 +219,6 @@ impl CoreRpcHandler {
             request_id,
             resp,
             plugin_id,
-        });
-    }
-
-    pub fn volt_installed(&self, volt: VoltMetadata, icon: Option<Vec<u8>>) {
-        self.notification(CoreNotification::VoltInstalled { volt, icon });
-    }
-
-    pub fn volt_installing(&self, volt: VoltInfo, error: String) {
-        self.notification(CoreNotification::VoltInstalling { volt, error });
-    }
-
-    pub fn volt_removing(&self, volt: VoltMetadata, error: String) {
-        self.notification(CoreNotification::VoltRemoving { volt, error });
-    }
-
-    pub fn volt_removed(&self, volt: VoltInfo, only_installing: bool) {
-        self.notification(CoreNotification::VoltRemoved {
-            volt,
-            only_installing,
         });
     }
 

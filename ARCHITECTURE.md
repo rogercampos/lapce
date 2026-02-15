@@ -20,7 +20,7 @@ This document describes the architecture, design decisions, and organization of 
 - [Theme System](#theme-system)
 - [Panel System](#panel-system)
 - [Search System](#search-system)
-- [Plugin System](#plugin-system)
+- [LSP Module](#lsp-module)
 - [Language Support and Syntax Highlighting](#language-support-and-syntax-highlighting)
 - [Persistence Layer](#persistence-layer)
 - [RPC Protocol](#rpc-protocol)
@@ -34,9 +34,9 @@ Lapce is a modal code editor built in Rust using the [Floem](https://github.com/
 
 **Key design principles:**
 - **Reactive UI**: All state uses Floem reactive signals (`RwSignal<T>`, `ReadSignal<T>`, `Memo<T>`). UI re-renders automatically when signals change.
-- **Two-process separation**: UI and backend work (LSP, plugins, file I/O, search) run on separate threads communicating via channels.
+- **Two-process separation**: UI and backend work (LSP, file I/O, search) run on separate threads communicating via channels.
 - **Immutable data structures**: Uses the `im` crate's persistent data structures for efficient structural sharing in the reactive signal system.
-- **Plugin extensibility**: Language support, themes, and commands can be extended through WASI-based plugins.
+- **Direct LSP integration**: Language servers are configured as built-in entries in a Rust registry. No plugin runtime overhead.
 
 ---
 
@@ -47,8 +47,8 @@ lapce/
 ├── lapce-app/     # UI application (~37,000 lines)
 │                  # Floem framework, all views and state management
 │
-├── lapce-proxy/   # Backend process (~7,000 lines)
-│                  # LSP clients, WASI plugin runtime, file I/O, search
+├── lapce-proxy/   # Backend process
+│                  # LSP clients, file I/O, search
 │
 ├── lapce-rpc/     # RPC message types (~2,400 lines)
 │                  # Shared between app and proxy, defines the protocol
@@ -77,7 +77,7 @@ Contains non-UI editor logic shared by both the app and proxy:
 - **Syntax highlighting** (`syntax/`): Full tree-sitter integration with multi-layer injection support (e.g., JS inside HTML), incremental parsing, bracket colorization, and highlight iteration.
 - **Code lens** (`lens.rs`): A balanced tree data structure (built on xi-rope's tree infrastructure) mapping line numbers to variable pixel heights for O(log n) height-to-line lookups.
 - **Encoding** (`encoding.rs`): UTF-8 ↔ UTF-16 offset conversion for LSP interop.
-- **Directory management** (`directory.rs`): Filesystem paths for configs, plugins, grammars, themes, logs.
+- **Directory management** (`directory.rs`): Filesystem paths for configs, grammars, themes, logs.
 - **Build metadata** (`build.rs` + `meta.rs`): Version, release type, and app name generated at compile time.
 - **Re-exports** (`lib.rs`): Everything from `floem_editor_core` (rope, buffer, commands, cursor).
 
@@ -87,7 +87,7 @@ Defines the communication protocol between UI and proxy. Deliberately kept light
 
 - **Message types**: `ProxyRequest`/`ProxyNotification`/`ProxyResponse` (UI → Proxy) and `CoreNotification` (Proxy → UI).
 - **Transport**: JSON-over-newline-delimited stdio (`stdio.rs`) for potential future separate-process mode.
-- **Shared data structures**: `FileNodeItem` (file tree), `BufferId`, `VoltID`/`VoltInfo`/`VoltMetadata` (plugins), `Style`/`LineStyle`/`SemanticStyles` (highlighting).
+- **Shared data structures**: `FileNodeItem` (file tree), `BufferId`, `PluginId` (LSP server instance ID), `Style`/`LineStyle`/`SemanticStyles` (highlighting).
 - **RPC handler infrastructure**: `ProxyRpcHandler` and `CoreRpcHandler` provide typed channels with request/response correlation via pending maps.
 
 ### lapce-proxy
@@ -95,7 +95,7 @@ Defines the communication protocol between UI and proxy. Deliberately kept light
 The backend "process" (currently runs as in-process threads for local workspaces):
 
 - **Dispatcher** (`dispatch.rs`): Central message router implementing `ProxyHandler`. Sequential processing prevents data races on buffer state.
-- **Plugin system** (`plugin/`): Three-layer architecture — catalog (lifecycle), PSP (per-plugin RPC), and implementations (LSP process, WASI runtime).
+- **LSP module** (`lsp/`): Direct LSP integration — registry of built-in servers (`manager.rs`), JSON-RPC client per server (`client.rs`), and RPC handler (`mod.rs`).
 - **Buffer management** (`buffer.rs`): Rope-based document storage with revision tracking and UTF-8/UTF-16 conversion.
 - **File watching** (`watcher.rs`): Token-based routing with deduplication and debouncing via the `notify` crate.
 
@@ -126,7 +126,7 @@ The app runs two sets of threads communicating via channels:
 
 **App threads**: UI rendering, editor state, user input (Floem reactive framework).
 
-**Proxy threads**: LSP clients, WASI plugin runtime, file watching, global search, buffer management.
+**Proxy threads**: LSP clients, file watching, global search, buffer management.
 
 Despite the architecture name, local workspaces run the proxy as threads within the same process (the separate-process mode was for remote development, now removed). The `bin/lapce-proxy.rs` entry point is only used for the CLI "open file in existing instance" workflow.
 
@@ -145,7 +145,6 @@ AppData
         │   └── EditorTabData → EditorData → Doc
         ├── PanelData (file explorer, search, problems, etc.)
         ├── PaletteData (command palette)
-        ├── PluginData
         ├── GlobalSearchData
         ├── SearchModalData
         ├── RecentFilesData
@@ -166,13 +165,13 @@ All state uses Floem reactive signals. Key pattern: `signal.get()` (tracked, tri
 
 The startup sequence (from `main()` through event loop):
 
-1. **CLI parsing**: Clap-based parser handles `--new`, `--wait`, `--plugin-path`, and positional path arguments.
+1. **CLI parsing**: Clap-based parser handles `--new`, `--wait`, and positional path arguments.
 2. **Panic hook + logging**: Custom panic handler with tracing. Dual-output subscriber: file logger (daily-rotated) + console logger.
 3. **Vendored fonts**: Loads DejaVu Sans and DejaVu Sans Mono from embedded byte arrays.
 4. **Shell environment**: When not launched from terminal (GUI launch), spawns a login shell to capture `printenv` output for PATH.
 5. **Process re-spawn**: When `--wait` is NOT set, re-spawns with `--wait` and exits immediately, unblocking the terminal.
 6. **Single-instance check**: Attempts to connect to an existing Lapce instance via local socket. If successful, sends paths to open and exits.
-7. **Core initialization**: Cleans up old updates, creates DB, sets up file watchers, installs bundled plugins, loads config.
+7. **Core initialization**: Cleans up old updates, creates DB, sets up file watchers, loads config.
 8. **Window creation**: Restores from DB or creates new windows based on CLI arguments.
 9. **Background threads**: Config watcher, grammar updater (checks GitHub for tree-sitter releases), update checker, local socket listener.
 10. **Event loop**: `app.run()` enters the Floem event loop.
@@ -205,7 +204,7 @@ workspace_view (layered stack):
 
   Floating overlays (z-order):
     completion → hover → code_action → rename → palette
-    → search_modal → recent_files → about → plugin → alert
+    → search_modal → recent_files → about → alert
 ```
 
 If no folder is open, shows `empty_workspace_view()` — a centered "Open Folder" button.
@@ -431,8 +430,8 @@ The config system uses the `config` crate for layered merging (lowest to highest
 
 1. **Embedded defaults** (`defaults/settings.toml`) — compiled into binary
 2. **Default dark theme base** — color palette foundation
-3. **Active color theme** — from plugins, local files, or embedded themes
-4. **Active icon theme** — from plugins or embedded "Lapce Codicons"
+3. **Active color theme** — from local files or embedded themes
+4. **Active icon theme** — embedded "Lapce Codicons"
 5. **User global settings** (`~/Library/Application Support/dev.lapce.*/settings.toml`)
 6. **Workspace-local settings** (`.lapce/settings.toml`)
 
@@ -474,7 +473,7 @@ Resolution chain for file icons: exact filename match → extension match. Three
 - `icons/lapce/` — Lapce logo
 - `icons/filetypes/` — Colored file-type icons
 
-`SvgStore` provides two-tier caching: embedded SVGs (by name) and on-disk plugin SVGs (by path).
+`SvgStore` provides caching for embedded SVGs by name.
 
 ---
 
@@ -516,29 +515,70 @@ Bottom panel with hierarchical results (file groups → matches). 50/50 horizont
 
 ---
 
-## Plugin System
+## LSP Module
 
-### Architecture (Three Layers)
+The LSP module (`lapce-proxy/src/lsp/`) provides direct language server integration without a plugin runtime. Language servers are defined as entries in a built-in Rust registry.
 
-**Layer 1 — Plugin Catalog** (`plugin/catalog.rs`): Owns the registry of all plugins. Runs on a dedicated thread. Handles lazy activation (language, workspace_contains conditions).
+### Architecture
 
-**Layer 2 — Plugin Server Protocol (PSP)** (`plugin/psp.rs`): Per-plugin RPC handler managing bidirectional JSON-RPC. Handles capability checking, document selector matching, and host-side requests.
+```
+LspRpcHandler (mod.rs)           LspManager (manager.rs)          LspClient (client.rs)
+    │                                │                                │
+    │  crossbeam channel             │  HashMap<PluginId, LspClient>  │  spawns LSP subprocess
+    │  (same API as old plugin       │  language → server routing     │  3 I/O threads per server
+    │   catalog handler)             │  lazy activation on didOpen    │  JSON-RPC over stdio
+    └────────────────────────────────┴────────────────────────────────┘
+```
 
-**Layer 3 — Plugin Implementations**:
-- **LSP** (`plugin/lsp.rs`): Spawns language server process. Three threads: stdin writer, stdout reader, stderr logger. Content-Length framed JSON-RPC over stdio.
-- **WASI** (`plugin/wasi.rs`): Compiles WASM modules via wasmtime. In-memory pipes. HTTP capability for network access. Can spawn child LSP servers.
+### `lsp/mod.rs` — RPC Handler
 
-### Broadcasting
+`LspRpcHandler` provides the same method signatures as the old `PluginCatalogRpcHandler`: `hover()`, `completion()`, `get_definition()`, `get_references()`, `get_code_actions()`, `get_semantic_tokens()`, `get_inlay_hints()`, `rename()`, etc. Messages are sent via `crossbeam_channel` to the manager thread.
 
-When a request is made, the catalog sends to ALL active plugins. "First success wins" — the first successful result triggers the callback; subsequent ones are ignored.
+Also contains `client_capabilities()` — advertises supported LSP features to servers.
 
-### Plugin Management UI
+### `lsp/manager.rs` — Lifecycle Manager
 
-`PluginData` (`plugin.rs`) manages installed (from filesystem) and available (from `plugins.lapce.dev` API) plugins. Supports install, enable/disable (global and per-workspace), update detection, and icon caching.
+`LspManager` runs on a dedicated thread, processing `LspRpc` messages:
 
-### Bundled Plugins
+- **Multi-server support**: Stores active servers in `HashMap<PluginId, LspClient>` with a `language_to_server: HashMap<String, PluginId>` routing table.
+- **Language-based routing**: Each LSP request includes a language ID. The manager routes to the single server registered for that language. No broadcasting.
+- **Lazy activation**: Servers start on the first `did_open_document()` matching their language. Does not start at editor launch.
+- **Open file replay**: Tracks open documents. When a server starts after files are already open, replays `didOpen` for matching files.
 
-Plugins in `defaults/plugins/` are embedded at compile time via `include_dir!`. Extracted to user's plugins directory on first launch.
+### `lsp/client.rs` — LSP Process Client
+
+`LspClient` spawns a language server subprocess and manages JSON-RPC communication:
+
+- Three I/O threads: **writer** (Content-Length framed JSON-RPC to stdin), **reader** (parse stdout responses/notifications), **stderr logger**.
+- Request/response correlation via `server_pending` HashMap.
+- Server capability tracking (`ServerCapabilities`) — used for feature detection.
+- LSP initialization handshake (Initialize → Initialized).
+
+### Built-in Server Registry
+
+Language servers are defined as a `const` array of `LspServerConfig`:
+
+```rust
+pub const LSP_SERVERS: &[LspServerConfig] = &[
+    LspServerConfig {
+        command: "ruby-lsp",
+        args: &[],
+        languages: &["ruby"],
+        extensions: &["rb"],
+        init_options_json: Some(r#"{"enabledFeatures":{"semanticHighlighting":false}}"#),
+    },
+    // Adding a new language server = adding one entry here
+];
+```
+
+Adding a new language server requires only adding one entry to this array. Server commands are resolved via PATH using the captured shell environment (supporting mise/asdf/rbenv/rvm).
+
+### Design Decisions
+
+1. **No plugin runtime**: Direct subprocess spawning instead of WASI/WASM. Eliminates wasmtime dependency chain.
+2. **Language-based routing, not broadcasting**: Exactly one server per language. Requests route to the registered server, no "first success wins" logic.
+3. **`PluginId` kept as internal type**: Used in ~10 request/response types for completion/code action resolve routing. Renaming would touch many files for no user-visible benefit.
+4. **`init_options_json` as static string**: `serde_json::Value` can't be used in `const` context (requires heap allocation). JSON is stored as `&'static str` and parsed at server startup.
 
 ---
 
@@ -546,10 +586,29 @@ Plugins in `defaults/plugins/` are embedded at compile time via `include_dir!`. 
 
 ### Language Detection
 
-`LapceLanguage` enum (~65 variants) maps to `SyntaxProperties` via array indexing:
+`LapceLanguage` enum (~65 variants in `lapce-core/src/language.rs`) maps to `SyntaxProperties` via array indexing:
 - `TreeSitterProperties`: Grammar name, query files, code glance configuration
 - `CommentProperties`: Single-line and multi-line comment tokens
 - File extensions and names for detection
+
+### Grammar and Query Loading
+
+Tree-sitter grammars and queries are stored on disk:
+- **Grammars**: `Directory::grammars_directory()` — compiled `.dylib`/`.so` files (one per language)
+- **Queries**: `Directory::queries_directory()` — `highlights.scm` and `injections.scm` files
+
+Loading pipeline (`language.rs`):
+1. `get_grammar(lang)` → `load_grammar()` → `libloading::Library::new(path)` → extracts `tree_sitter_<lang>` symbol
+2. `get_grammar_query(lang)` → reads `highlights.scm` + `injections.scm` from queries directory
+3. `new_highlight_config(lang)` → creates `HighlightConfiguration` from grammar + queries + `SCOPES` array
+
+**Grammar download**: A background thread ("FindGrammar") in `app.rs` checks `https://api.github.com/repos/lapce/tree-sitter-grammars/releases` for updates. Downloads `.dylib` and `.scm` files to the appropriate directories. On completion, calls `reset_highlight_configs()` and re-triggers syntax parsing on all open documents.
+
+### Highlight Configuration Caching
+
+`get_highlight_config()` in `syntax/highlight.rs` uses a **thread-local cache** (`HIGHLIGHT_CONFIGS`) keyed by language. Each entry is an `Arc<HighlightConfiguration>` shared across all documents of that language on the same thread.
+
+`reset_highlight_configs()` clears the thread-local cache, forcing re-creation from disk on next access. Called after grammar downloads complete.
 
 ### Syntax Pipeline
 
@@ -565,12 +624,51 @@ Syntax
 └── BracketParser (rainbow bracket colorization)
 ```
 
+Syntax parsing runs on **rayon threads** with cancellation via `AtomicUsize` (the `rev` counter). `Doc::trigger_syntax_change()` spawns the parsing task; on completion, the result is sent back to the UI thread via `create_ext_action`.
+
+### Styling Priority: Semantic Tokens vs Tree-Sitter
+
+`Doc::styles()` determines which highlight spans to use:
+
+```
+if semantic_styles is Some → use semantic styles (from LSP)
+else → use tree-sitter styles (from Syntax.styles)
+```
+
+**Semantic tokens completely override tree-sitter** when present. This has important implications:
+
+- If an LSP server sends semantic tokens, tree-sitter highlighting is entirely replaced, not merged.
+- If semantic token type names (e.g., "class", "decorator") don't map to keys in the theme's `[color-theme.syntax]` section, those ranges lose color.
+- The `initializationOptions` sent to LSP servers can control whether semantic highlighting is enabled. For example, ruby-lsp's `{"enabledFeatures":{"semanticHighlighting":false}}` disables semantic tokens, letting tree-sitter handle all highlighting.
+
+### Color Resolution
+
+The rendering pipeline maps style names to colors:
+
+1. `Doc::line_style()` → `Doc::styles()` → returns `Spans<Style>` (semantic or tree-sitter)
+2. `apply_attr_styles()` → iterates spans, calls `config.style_color(fg_color)` for each
+3. `style_color()` → looks up `self.color.syntax.get(name)` from the theme
+
+Theme syntax colors are defined in `defaults/dark-theme.toml` under `[color-theme.syntax]`:
+```toml
+"keyword" = "$purple"
+"string" = "$green"
+"comment" = "$grey"
+"function" = "$blue"
+# ... ~25 entries mapping scope names to color variables
+```
+
+### SCOPES Array
+
+The `SCOPES` array in `lapce-core/src/style.rs` defines the recognized highlight scope names (~30+ entries: "keyword", "string", "comment", "function", "type", "variable", etc.). Tree-sitter capture names from `highlights.scm` files are matched against these scopes. Only captures matching a scope in this array produce styled spans.
+
 ### Key Design Decisions
 
 - **Thread-local parser caching**: Tree-sitter parsers/cursors in thread-local storage for reuse without cross-thread sharing.
-- **Library leaking**: `std::mem::forget(library)` after loading grammar .so files — function pointers must remain valid.
+- **Library leaking**: `std::mem::forget(library)` after loading grammar `.dylib` files — function pointers must remain valid for the process lifetime.
 - **Dual bracket parsers**: Tree-sitter-aware `walk_tree_bracket_ast` for supported languages, fallback naive text-based `BracketParser` for others.
 - **Injection reuse via hashing**: Existing injection layers identified by hashing language + ranges + depth to avoid re-parsing.
+- **Semantic token priority**: When an LSP server provides semantic tokens, they fully replace tree-sitter highlighting. This is by design — LSP servers have deeper language understanding. Use `initializationOptions` to control this per-server.
 
 ---
 
@@ -582,7 +680,6 @@ Syntax
 - **Window layout** (`db/window`): For single-window restore
 - **Workspace layout** (`db/workspaces/<name>/workspace_info`): Full split tree + panel config
 - **Document positions** (`db/workspaces/<name>/workspace_files/<sha256>`): Per-file cursor/scroll
-- **Disabled plugins** (`db/disabled_volts`)
 - **Recent workspaces** (`db/recent_workspaces`)
 
 **Async saves**: All writes go through a `crossbeam_channel` to a dedicated thread. Reads are synchronous (startup only).
@@ -595,7 +692,7 @@ Syntax
 
 **UI → Proxy:**
 - `ProxyRequest`: Request-response pairs (get hover, search, LSP operations)
-- `ProxyNotification`: Fire-and-forget (text edits, completion triggers, plugin management)
+- `ProxyNotification`: Fire-and-forget (text edits, completion triggers, LSP lifecycle)
 
 **Proxy → UI:**
 - `CoreNotification`: Almost entirely notification-based (completions, diagnostics, file changes, progress)
@@ -614,11 +711,11 @@ Single-line JSON with newline delimiters. Serde tag format: `{"method": "...", "
 
 ### Thread Taxonomy
 
-1. **UI thread** (single): Floem event loop, rendering, reactive signal processing
+1. **UI thread** (single): Floem event loop, rendering, reactive signal processing.
 2. **Dispatcher thread** (single): Owns all mutable proxy state. Sequential processing prevents data races.
-3. **Catalog thread** (single): Owns plugin registry. All plugin lifecycle serialized.
-4. **Per-plugin threads**: LSP gets 3 (reader, writer, stderr). WASI gets 2 (I/O, mainloop). Plus `PluginServerRpcHandler.mainloop` per plugin.
-5. **Work threads** (transient): Global search, file listing, plugin install, grammar download.
+3. **LSP manager thread** (single): Owns the `LspManager`. All LSP lifecycle operations serialized.
+4. **Per-LSP-server threads** (3 per server): stdin writer, stdout reader, stderr logger.
+5. **Work threads** (transient): Global search, file listing, grammar download, syntax parsing (rayon).
 6. **File watcher thread**: `notify` event processing loop.
 7. **DB save thread**: Processes async write operations.
 

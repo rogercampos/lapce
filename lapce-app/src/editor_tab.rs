@@ -15,18 +15,14 @@ use floem::{
     },
     views::editor::id::EditorId,
 };
-use lapce_rpc::plugin::VoltID;
 use serde::{Deserialize, Serialize};
 
 use crate::{
     config::{LapceConfig, color::LapceColor, icon::LapceIcons},
     doc::{Doc, DocContent},
     editor::{EditorData, EditorInfo, location::EditorLocation},
-    id::{
-        EditorTabId, KeymapId, SettingsId, SplitId, ThemeColorSettingsId, VoltViewId,
-    },
+    id::{EditorTabId, KeymapId, SettingsId, SplitId, ThemeColorSettingsId},
     main_split::{Editors, MainSplitData},
-    plugin::PluginData,
     workspace_data::WorkspaceData,
 };
 
@@ -38,7 +34,6 @@ pub enum EditorTabChildInfo {
     Settings,
     ThemeColorSettings,
     Keymap,
-    Volt(VoltID),
 }
 
 impl EditorTabChildInfo {
@@ -59,9 +54,6 @@ impl EditorTabChildInfo {
                 EditorTabChild::ThemeColorSettings(ThemeColorSettingsId::next())
             }
             EditorTabChildInfo::Keymap => EditorTabChild::Keymap(KeymapId::next()),
-            EditorTabChildInfo::Volt(id) => {
-                EditorTabChild::Volt(VoltViewId::next(), id.to_owned())
-            }
         }
     }
 }
@@ -127,7 +119,6 @@ pub enum EditorTabChildSource {
     Settings,
     ThemeColorSettings,
     Keymap,
-    Volt(VoltID),
 }
 
 /// A live child within an editor tab pane. Each variant holds an ID for its specific
@@ -140,7 +131,6 @@ pub enum EditorTabChild {
     Settings(SettingsId),
     ThemeColorSettings(ThemeColorSettingsId),
     Keymap(KeymapId),
-    Volt(VoltViewId, VoltID),
 }
 
 #[derive(PartialEq)]
@@ -159,7 +149,6 @@ impl EditorTabChild {
             EditorTabChild::Settings(id) => id.to_raw(),
             EditorTabChild::ThemeColorSettings(id) => id.to_raw(),
             EditorTabChild::Keymap(id) => id.to_raw(),
-            EditorTabChild::Volt(id, _) => id.to_raw(),
         }
     }
 
@@ -182,7 +171,6 @@ impl EditorTabChild {
                 EditorTabChildInfo::ThemeColorSettings
             }
             EditorTabChild::Keymap(_) => EditorTabChildInfo::Keymap,
-            EditorTabChild::Volt(_, id) => EditorTabChildInfo::Volt(id.to_owned()),
         }
     }
 
@@ -193,7 +181,6 @@ impl EditorTabChild {
     pub fn view_info(
         &self,
         editors: Editors,
-        plugin: PluginData,
         config: ReadSignal<Arc<LapceConfig>>,
     ) -> Memo<EditorTabChildViewInfo> {
         match self.clone() {
@@ -276,30 +263,6 @@ impl EditorTabChild {
                     is_pristine: true,
                 }
             }),
-            EditorTabChild::Volt(_, id) => create_memo(move |_| {
-                let config = config.get();
-                let display_name = plugin
-                    .installed
-                    .with(|volts| volts.get(&id).cloned())
-                    .map(|volt| volt.meta.with(|m| m.display_name.clone()))
-                    .or_else(|| {
-                        plugin.available.volts.with(|volts| {
-                            let volt = volts.get(&id);
-                            volt.map(|volt| {
-                                volt.info.with(|m| m.display_name.clone())
-                            })
-                        })
-                    })
-                    .unwrap_or_else(|| id.name.clone());
-                EditorTabChildViewInfo {
-                    icon: config.ui_svg(LapceIcons::EXTENSIONS),
-                    color: Some(config.color(LapceColor::LAPCE_ICON_ACTIVE)),
-                    name: display_name,
-                    path: None,
-
-                    is_pristine: true,
-                }
-            }),
         }
     }
 }
@@ -366,22 +329,19 @@ impl EditorTabData {
                 self.get_editor(editors, path).map(|(i, _)| i)
             }
             EditorTabChildSource::NewFileEditor => None,
-            EditorTabChildSource::Settings => self
-                .children
-                .iter()
-                .position(|(_, _, child)| matches!(child, EditorTabChild::Settings(_))),
+            EditorTabChildSource::Settings => {
+                self.children.iter().position(|(_, _, child)| {
+                    matches!(child, EditorTabChild::Settings(_))
+                })
+            }
             EditorTabChildSource::ThemeColorSettings => {
                 self.children.iter().position(|(_, _, child)| {
                     matches!(child, EditorTabChild::ThemeColorSettings(_))
                 })
             }
-            EditorTabChildSource::Keymap => self
-                .children
-                .iter()
-                .position(|(_, _, child)| matches!(child, EditorTabChild::Keymap(_))),
-            EditorTabChildSource::Volt(id) => {
+            EditorTabChildSource::Keymap => {
                 self.children.iter().position(|(_, _, child)| {
-                    matches!(child, EditorTabChild::Volt(_, current_id) if current_id == id)
+                    matches!(child, EditorTabChild::Keymap(_))
                 })
             }
         }

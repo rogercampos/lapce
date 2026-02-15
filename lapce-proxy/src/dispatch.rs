@@ -38,30 +38,18 @@ use parking_lot::Mutex;
 
 use crate::{
     buffer::{Buffer, get_mod_time, load_file},
-    plugin::{PluginCatalogRpcHandler, catalog::PluginCatalog},
+    lsp::{LspRpcHandler, manager::LspManager},
     watcher::{FileWatcher, Notify, WatchToken},
 };
 
-/// Token for file-level watches (individual open files). Events with this token
-/// trigger content-reload checks for buffers the user has open.
 const OPEN_FILE_EVENT_TOKEN: WatchToken = WatchToken(1);
-/// Token for workspace-level watches (recursive directory watching). Events with
-/// this token trigger file explorer refresh after a debounce period.
 const WORKSPACE_EVENT_TOKEN: WatchToken = WatchToken(2);
 
-/// Central dispatch hub for the proxy process. Owns all proxy-side state:
-/// open buffers, file watcher, and the plugin catalog RPC handle. Receives
-/// `ProxyRequest` and `ProxyNotification` messages from the app process and
-/// routes them to the appropriate subsystem (buffers, plugins, filesystem).
-///
-/// Runs on a single thread -- all mutable state access is sequential. Heavy
-/// operations (search, file listing, directory reads) are spawned onto separate
-/// threads to avoid blocking the dispatch loop.
 pub struct Dispatcher {
     workspace: Option<PathBuf>,
     pub proxy_rpc: ProxyRpcHandler,
     core_rpc: CoreRpcHandler,
-    catalog_rpc: PluginCatalogRpcHandler,
+    lsp_rpc: LspRpcHandler,
     buffers: HashMap<PathBuf, Buffer>,
     file_watcher: FileWatcher,
 }
@@ -72,9 +60,6 @@ impl ProxyHandler for Dispatcher {
         match rpc {
             Initialize {
                 workspace,
-                disabled_volts,
-                extra_plugin_paths,
-                plugin_configurations,
                 window_id: _,
                 tab_id: _,
             } => {
@@ -90,19 +75,13 @@ impl ProxyHandler for Dispatcher {
 
                 let env =
                     crate::shell_env::resolve_shell_env(self.workspace.as_deref());
-                self.catalog_rpc.set_shell_env(env);
+                self.lsp_rpc.set_shell_env(env);
 
-                let plugin_rpc = self.catalog_rpc.clone();
+                let lsp_rpc = self.lsp_rpc.clone();
                 let workspace = self.workspace.clone();
                 thread::spawn(move || {
-                    let mut plugin = PluginCatalog::new(
-                        workspace,
-                        disabled_volts,
-                        extra_plugin_paths,
-                        plugin_configurations,
-                        plugin_rpc.clone(),
-                    );
-                    plugin_rpc.mainloop(&mut plugin);
+                    let mut manager = LspManager::new(workspace, lsp_rpc.clone());
+                    lsp_rpc.mainloop(&mut manager);
                 });
             }
             OpenPaths { paths } => {
@@ -112,8 +91,6 @@ impl ProxyHandler for Dispatcher {
             OpenFileChanged { path } => {
                 if path.exists() {
                     if let Some(buffer) = self.buffers.get(&path) {
-                        // Compare modification timestamps to avoid reloading when
-                        // we ourselves just saved the file (our save updates mod_time).
                         if get_mod_time(&buffer.path) == buffer.mod_time {
                             return;
                         }
@@ -143,18 +120,17 @@ impl ProxyHandler for Dispatcher {
                 input,
                 position,
             } => {
-                self.catalog_rpc
-                    .completion(request_id, &path, input, position);
+                self.lsp_rpc.completion(request_id, &path, input, position);
             }
             SignatureHelp {
                 request_id,
                 path,
                 position,
             } => {
-                self.catalog_rpc.signature_help(request_id, &path, position);
+                self.lsp_rpc.signature_help(request_id, &path, position);
             }
             Shutdown {} => {
-                self.catalog_rpc.shutdown();
+                self.lsp_rpc.shutdown();
                 self.proxy_rpc.shutdown();
             }
             Update { path, delta, rev } => {
@@ -162,11 +138,9 @@ impl ProxyHandler for Dispatcher {
                     tracing::error!("Update for unknown buffer: {path:?}");
                     return;
                 };
-                // Clone the old text before applying the delta because the LSP
-                // needs both old and new text to compute incremental changes.
                 let old_text = buffer.rope.clone();
                 buffer.update(&delta, rev);
-                self.catalog_rpc.did_change_text_document(
+                self.lsp_rpc.did_change_text_document(
                     &path,
                     rev,
                     delta,
@@ -174,35 +148,8 @@ impl ProxyHandler for Dispatcher {
                     buffer.rope.clone(),
                 );
             }
-            UpdatePluginConfigs { configs } => {
-                if let Err(err) = self.catalog_rpc.update_plugin_configs(configs) {
-                    tracing::error!("{:?}", err);
-                }
-            }
-            InstallVolt { volt } => {
-                let catalog_rpc = self.catalog_rpc.clone();
-                if let Err(err) = catalog_rpc.install_volt(volt) {
-                    tracing::error!("{:?}", err);
-                }
-            }
-            ReloadVolt { volt } => {
-                if let Err(err) = self.catalog_rpc.reload_volt(volt) {
-                    tracing::error!("{:?}", err);
-                }
-            }
-            RemoveVolt { volt } => {
-                self.catalog_rpc.remove_volt(volt);
-            }
-            DisableVolt { volt } => {
-                self.catalog_rpc.stop_volt(volt);
-            }
-            EnableVolt { volt } => {
-                if let Err(err) = self.catalog_rpc.enable_volt(volt) {
-                    tracing::error!("{:?}", err);
-                }
-            }
             LspCancel { id } => {
-                self.catalog_rpc.send_notification(
+                self.lsp_rpc.send_notification(
                     None,
                     Cancel::METHOD,
                     CancelParams {
@@ -210,7 +157,6 @@ impl ProxyHandler for Dispatcher {
                     },
                     None,
                     None,
-                    false,
                 );
             }
         }
@@ -223,7 +169,7 @@ impl ProxyHandler for Dispatcher {
                 let buffer = Buffer::new(buffer_id, path.clone());
                 let content = buffer.rope.to_string();
                 let read_only = buffer.read_only;
-                self.catalog_rpc.did_open_document(
+                self.lsp_rpc.did_open_document(
                     &path,
                     buffer.language_id.to_string(),
                     buffer.rev as i32,
@@ -245,16 +191,10 @@ impl ProxyHandler for Dispatcher {
                 whole_word,
                 is_regex,
             } => {
-                // WORKER_ID is a monotonically increasing counter used for search
-                // cancellation. Each new search bumps the counter; the search loop
-                // checks if WORKER_ID has moved past its own ID, meaning a newer
-                // search has started and this one should abort early.
                 static WORKER_ID: AtomicU64 = AtomicU64::new(0);
                 let our_id = WORKER_ID.fetch_add(1, Ordering::SeqCst) + 1;
 
                 let workspace = self.workspace.clone();
-                // Include both workspace files and any open buffers (which may be
-                // outside the workspace) in the search.
                 let buffers = self
                     .buffers
                     .iter()
@@ -263,7 +203,6 @@ impl ProxyHandler for Dispatcher {
                     .collect::<Vec<PathBuf>>();
                 let proxy_rpc = self.proxy_rpc.clone();
 
-                // Perform the search on another thread to avoid blocking the proxy thread
                 thread::spawn(move || {
                     proxy_rpc.handle_response(
                         id,
@@ -292,7 +231,7 @@ impl ProxyHandler for Dispatcher {
                 completion_item,
             } => {
                 let proxy_rpc = self.proxy_rpc.clone();
-                self.catalog_rpc.completion_resolve(
+                self.lsp_rpc.completion_resolve(
                     plugin_id,
                     *completion_item,
                     move |result| {
@@ -311,7 +250,7 @@ impl ProxyHandler for Dispatcher {
                 position,
             } => {
                 let proxy_rpc = self.proxy_rpc.clone();
-                self.catalog_rpc.hover(&path, position, move |_, result| {
+                self.lsp_rpc.hover(&path, position, move |_, result| {
                     let result = result.map(|hover| ProxyResponse::HoverResponse {
                         request_id,
                         hover,
@@ -322,16 +261,13 @@ impl ProxyHandler for Dispatcher {
             GetSignature { .. } => {}
             GetReferences { path, position } => {
                 let proxy_rpc = self.proxy_rpc.clone();
-                self.catalog_rpc.get_references(
-                    &path,
-                    position,
-                    move |_, result| {
+                self.lsp_rpc
+                    .get_references(&path, position, move |_, result| {
                         let result = result.map(|references| {
                             ProxyResponse::GetReferencesResponse { references }
                         });
                         proxy_rpc.handle_response(id, result);
-                    },
-                );
+                    });
             }
             GetDefinition {
                 request_id,
@@ -339,10 +275,8 @@ impl ProxyHandler for Dispatcher {
                 position,
             } => {
                 let proxy_rpc = self.proxy_rpc.clone();
-                self.catalog_rpc.get_definition(
-                    &path,
-                    position,
-                    move |_, result| {
+                self.lsp_rpc
+                    .get_definition(&path, position, move |_, result| {
                         let result = result.map(|definition| {
                             ProxyResponse::GetDefinitionResponse {
                                 request_id,
@@ -350,8 +284,7 @@ impl ProxyHandler for Dispatcher {
                             }
                         });
                         proxy_rpc.handle_response(id, result);
-                    },
-                );
+                    });
             }
             GetTypeDefinition {
                 request_id,
@@ -359,7 +292,7 @@ impl ProxyHandler for Dispatcher {
                 position,
             } => {
                 let proxy_rpc = self.proxy_rpc.clone();
-                self.catalog_rpc.get_type_definition(
+                self.lsp_rpc.get_type_definition(
                     &path,
                     position,
                     move |_, result| {
@@ -375,7 +308,7 @@ impl ProxyHandler for Dispatcher {
             }
             ShowCallHierarchy { path, position } => {
                 let proxy_rpc = self.proxy_rpc.clone();
-                self.catalog_rpc.show_call_hierarchy(
+                self.lsp_rpc.show_call_hierarchy(
                     &path,
                     position,
                     move |_, result| {
@@ -391,7 +324,7 @@ impl ProxyHandler for Dispatcher {
                 call_hierarchy_item,
             } => {
                 let proxy_rpc = self.proxy_rpc.clone();
-                self.catalog_rpc.call_hierarchy_incoming(
+                self.lsp_rpc.call_hierarchy_incoming(
                     &path,
                     call_hierarchy_item,
                     move |_, result| {
@@ -409,7 +342,7 @@ impl ProxyHandler for Dispatcher {
                     start: Position::new(0, 0),
                     end: buffer.offset_to_position(buffer.len()),
                 };
-                self.catalog_rpc
+                self.lsp_rpc
                     .get_inlay_hints(&path, range, move |_, result| {
                         let result = result
                             .map(|hints| ProxyResponse::GetInlayHints { hints });
@@ -418,9 +351,8 @@ impl ProxyHandler for Dispatcher {
             }
             GetDocumentDiagnostics { path } => {
                 let proxy_rpc = self.proxy_rpc.clone();
-                self.catalog_rpc.get_document_diagnostics(
-                    &path,
-                    move |_, result| {
+                self.lsp_rpc
+                    .get_document_diagnostics(&path, move |_, result| {
                         let result = result.and_then(|report| match report {
                             DocumentDiagnosticReportResult::Report(
                                 DocumentDiagnosticReport::Full(report),
@@ -437,8 +369,7 @@ impl ProxyHandler for Dispatcher {
                             }
                         });
                         proxy_rpc.handle_response(id, result);
-                    },
-                );
+                    });
             }
             GetInlineCompletions {
                 path,
@@ -446,7 +377,7 @@ impl ProxyHandler for Dispatcher {
                 trigger_kind,
             } => {
                 let proxy_rpc = self.proxy_rpc.clone();
-                self.catalog_rpc.get_inline_completions(
+                self.lsp_rpc.get_inline_completions(
                     &path,
                     position,
                     trigger_kind,
@@ -465,7 +396,7 @@ impl ProxyHandler for Dispatcher {
                 let len = buffer.len();
                 let local_path = path.clone();
                 let proxy_rpc = self.proxy_rpc.clone();
-                let catalog_rpc = self.catalog_rpc.clone();
+                let lsp_rpc = self.lsp_rpc.clone();
 
                 let handle_tokens =
                     move |result: Result<Vec<LineStyle>, RpcError>| match result {
@@ -488,22 +419,23 @@ impl ProxyHandler for Dispatcher {
                     };
 
                 let proxy_rpc = self.proxy_rpc.clone();
-                self.catalog_rpc.get_semantic_tokens(
-                    &path,
-                    move |plugin_id, result| match result {
-                        Ok(result) => {
-                            catalog_rpc.format_semantic_tokens(
-                                plugin_id,
-                                result,
-                                text,
-                                Box::new(handle_tokens),
-                            );
-                        }
-                        Err(e) => {
-                            proxy_rpc.handle_response(id, Err(e));
-                        }
-                    },
-                );
+                self.lsp_rpc
+                    .get_semantic_tokens(
+                        &path,
+                        move |plugin_id, result| match result {
+                            Ok(result) => {
+                                lsp_rpc.format_semantic_tokens(
+                                    plugin_id,
+                                    result,
+                                    text,
+                                    Box::new(handle_tokens),
+                                );
+                            }
+                            Err(e) => {
+                                proxy_rpc.handle_response(id, Err(e));
+                            }
+                        },
+                    );
             }
             GetCodeActions {
                 path,
@@ -511,7 +443,7 @@ impl ProxyHandler for Dispatcher {
                 diagnostics,
             } => {
                 let proxy_rpc = self.proxy_rpc.clone();
-                self.catalog_rpc.get_code_actions(
+                self.lsp_rpc.get_code_actions(
                     &path,
                     position,
                     diagnostics,
@@ -525,7 +457,7 @@ impl ProxyHandler for Dispatcher {
             }
             GetDocumentFormatting { path } => {
                 let proxy_rpc = self.proxy_rpc.clone();
-                self.catalog_rpc
+                self.lsp_rpc
                     .get_document_formatting(&path, move |_, result| {
                         let result = result.map(|edits| {
                             ProxyResponse::GetDocumentFormatting { edits }
@@ -535,15 +467,12 @@ impl ProxyHandler for Dispatcher {
             }
             PrepareRename { path, position } => {
                 let proxy_rpc = self.proxy_rpc.clone();
-                self.catalog_rpc.prepare_rename(
-                    &path,
-                    position,
-                    move |_, result| {
+                self.lsp_rpc
+                    .prepare_rename(&path, position, move |_, result| {
                         let result =
                             result.map(|resp| ProxyResponse::PrepareRename { resp });
                         proxy_rpc.handle_response(id, result);
-                    },
-                );
+                    });
             }
             Rename {
                 path,
@@ -551,27 +480,18 @@ impl ProxyHandler for Dispatcher {
                 new_name,
             } => {
                 let proxy_rpc = self.proxy_rpc.clone();
-                self.catalog_rpc.rename(
-                    &path,
-                    position,
-                    new_name,
-                    move |_, result| {
+                self.lsp_rpc
+                    .rename(&path, position, new_name, move |_, result| {
                         let result =
                             result.map(|edit| ProxyResponse::Rename { edit });
                         proxy_rpc.handle_response(id, result);
-                    },
-                );
+                    });
             }
             GetFiles { .. } => {
                 let workspace = self.workspace.clone();
                 let proxy_rpc = self.proxy_rpc.clone();
-                // File listing is done on a background thread since large
-                // workspaces can take significant time to walk.
                 thread::spawn(move || {
                     let result = if let Some(workspace) = workspace {
-                        // Exclude the .git directory from file listings. We use
-                        // hidden(false) to show dotfiles but override .git/ specifically,
-                        // because .git can be enormous and is never user-editable.
                         let git_folder =
                             ignore::overrides::OverrideBuilder::new(&workspace)
                                 .add("!.git/")
@@ -659,7 +579,7 @@ impl ProxyHandler for Dispatcher {
                     Some(buffer) => buffer
                         .save(rev, create_parents)
                         .map(|_r| {
-                            self.catalog_rpc
+                            self.lsp_rpc
                                 .did_save_text_document(&path, buffer.rope.clone());
                             ProxyResponse::SaveResponse {}
                         })
@@ -717,8 +637,6 @@ impl ProxyHandler for Dispatcher {
                 existing_path,
                 new_path,
             } => {
-                // We first check if the destination already exists, because copy can overwrite it
-                // and that's not the default behavior we want for when a user duplicates a document.
                 let result = if new_path.exists() {
                     Err(RpcError::new(format!("{new_path:?} already exists")))
                 } else {
@@ -736,8 +654,6 @@ impl ProxyHandler for Dispatcher {
                 self.respond_rpc(id, result);
             }
             RenamePath { from, to } => {
-                // We first check if the destination already exists, because rename can overwrite it
-                // and that's not the default behavior we want for when a user renames a document.
                 let result = if to.exists() {
                     Err(format!("{} already exists", to.display()))
                 } else {
@@ -774,10 +690,6 @@ impl ProxyHandler for Dispatcher {
                             .unwrap_or((false, false));
 
                         if is_dir {
-                            // Update all buffers in which a file the renamed directory is an
-                            // ancestor of is open to use the file's new path.
-                            // This could be written more nicely if `HashMap::extract_if` were
-                            // stable.
                             let child_buffers: Vec<_> = self
                                 .buffers
                                 .keys()
@@ -798,8 +710,6 @@ impl ProxyHandler for Dispatcher {
                                 }
                             }
                         } else if is_file {
-                            // If the renamed file is open in a buffer, update it to use the new
-                            // path.
                             let buffer = self.buffers.remove(&from);
 
                             if let Some(mut buffer) = buffer {
@@ -815,10 +725,6 @@ impl ProxyHandler for Dispatcher {
                 self.respond_rpc(id, result);
             }
             TestCreateAtPath { path } => {
-                // This performs a best effort test to see if an attempt to create an item at
-                // `path` or rename an item to `path` will succeed.
-                // Currently the only conditions that are tested are that `path` doesn't already
-                // exist and that `path` doesn't have a parent that exists and is not a directory.
                 let result = if path.exists() {
                     Err(format!("{} already exists", path.display()))
                 } else {
@@ -848,7 +754,7 @@ impl ProxyHandler for Dispatcher {
             }
             GetSelectionRange { positions, path } => {
                 let proxy_rpc = self.proxy_rpc.clone();
-                self.catalog_rpc.get_selection_range(
+                self.lsp_rpc.get_selection_range(
                     path.as_path(),
                     positions,
                     move |_, result| {
@@ -864,7 +770,7 @@ impl ProxyHandler for Dispatcher {
                 plugin_id,
             } => {
                 let proxy_rpc = self.proxy_rpc.clone();
-                self.catalog_rpc.action_resolve(
+                self.lsp_rpc.action_resolve(
                     *action_item,
                     plugin_id,
                     move |result| {
@@ -879,17 +785,16 @@ impl ProxyHandler for Dispatcher {
             }
             GetCodeLens { path } => {
                 let proxy_rpc = self.proxy_rpc.clone();
-                self.catalog_rpc
-                    .get_code_lens(&path, move |plugin_id, result| {
-                        let result = result.map(|resp| {
-                            ProxyResponse::GetCodeLensResponse { plugin_id, resp }
-                        });
-                        proxy_rpc.handle_response(id, result);
+                self.lsp_rpc.get_code_lens(&path, move |plugin_id, result| {
+                    let result = result.map(|resp| {
+                        ProxyResponse::GetCodeLensResponse { plugin_id, resp }
                     });
+                    proxy_rpc.handle_response(id, result);
+                });
             }
             LspFoldingRange { path } => {
                 let proxy_rpc = self.proxy_rpc.clone();
-                self.catalog_rpc.get_lsp_folding_range(
+                self.lsp_rpc.get_lsp_folding_range(
                     &path,
                     move |plugin_id, result| {
                         let result = result.map(|resp| {
@@ -904,7 +809,7 @@ impl ProxyHandler for Dispatcher {
             }
             GetCodeLensResolve { code_lens, path } => {
                 let proxy_rpc = self.proxy_rpc.clone();
-                self.catalog_rpc.get_code_lens_resolve(
+                self.lsp_rpc.get_code_lens_resolve(
                     &path,
                     &code_lens,
                     move |plugin_id, result| {
@@ -920,7 +825,7 @@ impl ProxyHandler for Dispatcher {
             }
             GotoImplementation { path, position } => {
                 let proxy_rpc = self.proxy_rpc.clone();
-                self.catalog_rpc.go_to_implementation(
+                self.lsp_rpc.go_to_implementation(
                     &path,
                     position,
                     move |plugin_id, result| {
@@ -964,8 +869,7 @@ impl ProxyHandler for Dispatcher {
 
 impl Dispatcher {
     pub fn new(core_rpc: CoreRpcHandler, proxy_rpc: ProxyRpcHandler) -> Self {
-        let plugin_rpc =
-            PluginCatalogRpcHandler::new(core_rpc.clone(), proxy_rpc.clone());
+        let lsp_rpc = LspRpcHandler::new(core_rpc.clone(), proxy_rpc.clone());
 
         let file_watcher = FileWatcher::new();
 
@@ -973,7 +877,7 @@ impl Dispatcher {
             workspace: None,
             proxy_rpc,
             core_rpc,
-            catalog_rpc: plugin_rpc,
+            lsp_rpc,
             buffers: HashMap::new(),
             file_watcher,
         }
@@ -1041,17 +945,6 @@ impl FileWatchNotifier {
         }
     }
 
-    /// Debounces workspace filesystem events to avoid flooding the UI with
-    /// file-explorer refresh requests. Only structural changes (create, remove,
-    /// rename) trigger an explorer refresh; content modifications are ignored
-    /// here since they're handled by OPEN_FILE_EVENT_TOKEN for open files.
-    ///
-    /// The debounce mechanism works as follows:
-    /// 1. First event in a quiet period creates a channel and spawns a timer thread.
-    /// 2. Subsequent events within 500ms are funneled into the existing channel.
-    /// 3. After 500ms, the timer thread clears the handler (allowing new debounce
-    ///    cycles), drains the channel, and sends a single refresh notification if
-    ///    any structural changes were observed.
     fn handle_workspace_fs_event(&self, event: notify::Event) {
         let explorer_change = match &event.kind {
             notify::EventKind::Create(_)
@@ -1082,12 +975,10 @@ impl FileWatchNotifier {
         thread::spawn(move || {
             thread::sleep(Duration::from_millis(500));
 
-            // Clear the handler so new events start a fresh debounce cycle
             {
                 local_handler.lock().take();
             }
 
-            // Drain the channel -- the sender is dropped so this terminates
             let mut explorer_change = false;
             for e in receiver {
                 if e {
@@ -1140,10 +1031,6 @@ fn search_in_path(
 
                     let mymatch = matcher.find(line.as_bytes())?.unwrap();
                     let (line, start, end) = if line.len() > 200 {
-                        // Truncate extremely long lines (e.g. minified JS) to ~200
-                        // chars around the match. We keep 100 chars on each side of
-                        // the match, counting by UTF-8 code points to avoid splitting
-                        // multi-byte characters.
                         let left_keep = line[..mymatch.start()]
                             .chars()
                             .rev()
@@ -1157,7 +1044,6 @@ fn search_in_path(
                             .sum::<usize>();
                         let display_range =
                             mymatch.start() - left_keep..mymatch.end() + right_keep;
-                        // Offsets must be relative to the truncated snippet
                         (
                             line[display_range].to_string(),
                             left_keep,
@@ -1197,7 +1083,6 @@ mod tests {
 
     use super::search_in_path;
 
-    /// Create a temp directory with files containing known content.
     fn setup_search_dir() -> (tempfile::TempDir, Vec<PathBuf>) {
         let dir = tempfile::tempdir().unwrap();
 
@@ -1238,10 +1123,9 @@ mod tests {
             false,
         ));
 
-        // Only hello.txt should match (case-sensitive "Hello")
         assert_eq!(matches.len(), 1);
         let file_matches = matches.values().next().unwrap();
-        assert_eq!(file_matches.len(), 2); // "Hello World" and "Hello Again"
+        assert_eq!(file_matches.len(), 2);
         assert_eq!(file_matches[0].line, 1);
         assert_eq!(file_matches[1].line, 3);
     }
@@ -1256,12 +1140,11 @@ mod tests {
             &id,
             files.into_iter(),
             "hello",
-            false, // case insensitive
+            false,
             false,
             false,
         ));
 
-        // Both hello.txt and test.rs have "hello" (case insensitive)
         assert_eq!(matches.len(), 2);
     }
 
@@ -1276,7 +1159,7 @@ mod tests {
             files.into_iter(),
             "foo",
             true,
-            true, // whole word
+            true,
             false,
         ));
 
@@ -1299,10 +1182,9 @@ mod tests {
             r"fn\s+\w+",
             true,
             false,
-            true, // regex
+            true,
         ));
 
-        // test.rs has "fn main"
         assert_eq!(matches.len(), 1);
         let file_matches = matches.values().next().unwrap();
         assert_eq!(file_matches.len(), 1);
@@ -1339,7 +1221,7 @@ mod tests {
             "[invalid regex",
             true,
             false,
-            true, // regex mode
+            true,
         );
 
         assert!(result.is_err());
@@ -1348,18 +1230,10 @@ mod tests {
     #[test]
     fn cancelled_search_returns_error() {
         let (_dir, files) = setup_search_dir();
-        // Set current_id to a different value than the search id
         let id = AtomicU64::new(999);
 
-        let result = search_in_path(
-            1, // id != current_id
-            &id,
-            files.into_iter(),
-            "Hello",
-            true,
-            false,
-            false,
-        );
+        let result =
+            search_in_path(1, &id, files.into_iter(), "Hello", true, false, false);
 
         assert!(result.is_err());
     }
@@ -1385,7 +1259,6 @@ mod tests {
             false,
         ));
 
-        // Only the file should match, not the directory
         assert_eq!(matches.len(), 1);
         assert!(matches.contains_key(&file));
     }
@@ -1417,7 +1290,6 @@ mod tests {
     fn long_line_truncation() {
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join("long.txt");
-        // Create a line > 200 chars with a match in the middle
         let prefix = "a".repeat(150);
         let suffix = "b".repeat(150);
         let line = format!("{prefix}MATCH{suffix}\n");
@@ -1436,9 +1308,7 @@ mod tests {
         ));
 
         let file_matches = matches.values().next().unwrap();
-        // The line_content should be truncated (shorter than the original line)
         assert!(file_matches[0].line_content.len() < line.len());
-        // But should still contain the match
         assert!(file_matches[0].line_content.contains("MATCH"));
     }
 

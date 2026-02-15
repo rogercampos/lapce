@@ -21,13 +21,12 @@ use lsp_types::{
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 
-use super::plugin::VoltID;
 use crate::{
     RequestId, RpcError, RpcMessage,
     buffer::BufferId,
     file::{FileNodeItem, PathObject},
     file_line::FileLine,
-    plugin::{PluginId, VoltInfo, VoltMetadata},
+    plugin::PluginId,
     style::SemanticStyles,
 };
 
@@ -213,10 +212,6 @@ pub enum ProxyRequest {
 pub enum ProxyNotification {
     Initialize {
         workspace: Option<PathBuf>,
-        disabled_volts: Vec<VoltID>,
-        /// Paths to extra plugins that should be loaded
-        extra_plugin_paths: Vec<PathBuf>,
-        plugin_configurations: HashMap<String, HashMap<String, serde_json::Value>>,
         window_id: usize,
         tab_id: usize,
     },
@@ -242,24 +237,6 @@ pub enum ProxyNotification {
         path: PathBuf,
         delta: RopeDelta,
         rev: u64,
-    },
-    UpdatePluginConfigs {
-        configs: HashMap<String, HashMap<String, serde_json::Value>>,
-    },
-    InstallVolt {
-        volt: VoltInfo,
-    },
-    RemoveVolt {
-        volt: VoltMetadata,
-    },
-    ReloadVolt {
-        volt: VoltMetadata,
-    },
-    DisableVolt {
-        volt: VoltInfo,
-    },
-    EnableVolt {
-        volt: VoltInfo,
     },
     LspCancel {
         id: i32,
@@ -497,26 +474,6 @@ impl ProxyRpcHandler {
         self.notification(ProxyNotification::LspCancel { id });
     }
 
-    pub fn install_volt(&self, volt: VoltInfo) {
-        self.notification(ProxyNotification::InstallVolt { volt });
-    }
-
-    pub fn reload_volt(&self, volt: VoltMetadata) {
-        self.notification(ProxyNotification::ReloadVolt { volt });
-    }
-
-    pub fn remove_volt(&self, volt: VoltMetadata) {
-        self.notification(ProxyNotification::RemoveVolt { volt });
-    }
-
-    pub fn disable_volt(&self, volt: VoltInfo) {
-        self.notification(ProxyNotification::DisableVolt { volt });
-    }
-
-    pub fn enable_volt(&self, volt: VoltInfo) {
-        self.notification(ProxyNotification::EnableVolt { volt });
-    }
-
     pub fn shutdown(&self) {
         self.notification(ProxyNotification::Shutdown {});
         if let Err(err) = self.tx.send(ProxyRpc::Shutdown) {
@@ -527,17 +484,11 @@ impl ProxyRpcHandler {
     pub fn initialize(
         &self,
         workspace: Option<PathBuf>,
-        disabled_volts: Vec<VoltID>,
-        extra_plugin_paths: Vec<PathBuf>,
-        plugin_configurations: HashMap<String, HashMap<String, serde_json::Value>>,
         window_id: usize,
         tab_id: usize,
     ) {
         self.notification(ProxyNotification::Initialize {
             workspace,
-            disabled_volts,
-            extra_plugin_paths,
-            plugin_configurations,
             window_id,
             tab_id,
         });
@@ -939,13 +890,6 @@ impl ProxyRpcHandler {
 
     pub fn update(&self, path: PathBuf, delta: RopeDelta, rev: u64) {
         self.notification(ProxyNotification::Update { path, delta, rev });
-    }
-
-    pub fn update_plugin_configs(
-        &self,
-        configs: HashMap<String, HashMap<String, serde_json::Value>>,
-    ) {
-        self.notification(ProxyNotification::UpdatePluginConfigs { configs });
     }
 
     pub fn get_selection_range(

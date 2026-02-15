@@ -2066,10 +2066,7 @@ fn should_blink(
         };
         if matches!(
             focus,
-            Focus::Workbench
-                | Focus::Palette
-                | Focus::PluginPopup
-                | Focus::Panel(PanelKind::Search)
+            Focus::Workbench | Focus::Palette | Focus::Panel(PanelKind::Search)
         ) {
             return true;
         }

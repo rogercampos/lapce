@@ -30,7 +30,6 @@ use floem::{
     },
     window::{ResizeDirection, WindowConfig, WindowId},
 };
-use include_dir::{Dir, include_dir};
 use lapce_core::{
     directory::Directory,
     meta,
@@ -74,51 +73,6 @@ pub use ui_components::{
     clickable_icon, clickable_icon_base, not_clickable_icon, tooltip_label,
 };
 
-// Embed the defaults/plugins directory into the binary at compile time.
-// This allows shipping bundled plugins without requiring a separate download step.
-const BUNDLED_PLUGINS_DIR: Dir =
-    include_dir!("$CARGO_MANIFEST_DIR/../defaults/plugins");
-
-/// Extract bundled plugins to the user's plugins directory on first run.
-/// Existing plugins are not overwritten, preserving any user customizations.
-fn install_bundled_plugins() {
-    let plugins_dir = match Directory::plugins_directory() {
-        Some(dir) => dir,
-        None => return,
-    };
-
-    for entry in BUNDLED_PLUGINS_DIR.dirs() {
-        let name = match entry.path().file_name() {
-            Some(name) => name,
-            None => continue,
-        };
-        let target = plugins_dir.join(name);
-        if target.exists() {
-            continue;
-        }
-        if let Err(err) = extract_dir(entry, &target) {
-            tracing::error!(
-                "Failed to install bundled plugin {:?}: {:?}",
-                name,
-                err
-            );
-        }
-    }
-}
-
-fn extract_dir(dir: &Dir, target: &std::path::Path) -> std::io::Result<()> {
-    std::fs::create_dir_all(target)?;
-    for file in dir.files() {
-        let file_path = target.join(file.path().file_name().unwrap());
-        std::fs::write(&file_path, file.contents())?;
-    }
-    for subdir in dir.dirs() {
-        let subdir_name = subdir.path().file_name().unwrap();
-        extract_dir(subdir, &target.join(subdir_name))?;
-    }
-    Ok(())
-}
-
 #[derive(Parser)]
 #[clap(name = "Lapce")]
 #[clap(version=meta::VERSION)]
@@ -133,13 +87,6 @@ struct Cli {
     /// so the terminal prompt returns. The re-spawned child is the actual long-lived UI process.
     #[clap(short, long, action)]
     wait: bool,
-
-    /// Path(s) to plugins to load.  
-    /// This is primarily used for plugin development to make it easier to test changes to the
-    /// plugin without needing to copy the plugin to the plugins directory.  
-    /// This will cause any plugin with the same author & name to not run.
-    #[clap(long, action)]
-    plugin_path: Vec<PathBuf>,
 
     /// Paths to file(s) and/or folder(s) to open.
     /// When path is a file (that exists or not),
@@ -182,14 +129,11 @@ pub struct AppData {
     pub watcher: Arc<notify::RecommendedWatcher>,
     pub tracing_handle: Handle<Targets>,
     pub config: RwSignal<Arc<LapceConfig>>,
-    /// Paths to extra plugins to load
-    pub plugin_paths: Arc<Vec<PathBuf>>,
 }
 
 impl AppData {
     pub fn reload_config(&self) {
-        let config =
-            LapceConfig::load(&LapceWorkspace::default(), &[], &self.plugin_paths);
+        let config = LapceConfig::load(&LapceWorkspace::default());
 
         self.config.set(Arc::new(config));
         self.window_scale.set(self.config.get().ui.scale());
@@ -470,7 +414,6 @@ impl AppData {
             info,
             self.window_scale,
             self.latest_release.read_only(),
-            self.plugin_paths.clone(),
             self.app_command,
         );
 
@@ -820,7 +763,6 @@ fn workspace_view(workspace_data: Rc<WorkspaceData>) -> impl View {
             crate::search_modal::search_modal_popup(workspace_data.clone()),
             recent_files::recent_files_popup(workspace_data.clone()),
             about::about_popup(workspace_data.clone()),
-            crate::panel::plugin_view::plugin_popup(workspace_data.clone()),
             alert::alert_box(workspace_data.alert_data.clone()),
         ))
         .into_any()
@@ -1052,8 +994,6 @@ pub fn launch() {
     let latest_release = scope.create_rw_signal(Arc::new(None));
     let app_command = Listener::new_empty(scope);
 
-    let plugin_paths = Arc::new(cli.plugin_path);
-
     let (tx, rx) = channel();
     let mut watcher = notify::recommended_watcher(ConfigWatcher::new(tx)).unwrap();
     if let Some(path) = LapceConfig::settings_file() {
@@ -1071,16 +1011,8 @@ pub fn launch() {
             tracing::error!("{:?}", err);
         }
     }
-    if let Some(path) = Directory::plugins_directory() {
-        if let Err(err) = watcher.watch(&path, notify::RecursiveMode::Recursive) {
-            tracing::error!("{:?}", err);
-        }
-    }
-
-    install_bundled_plugins();
-
     let windows = scope.create_rw_signal(im::HashMap::new());
-    let config = LapceConfig::load(&LapceWorkspace::default(), &[], &plugin_paths);
+    let config = LapceConfig::load(&LapceWorkspace::default());
 
     // Restore scale from config
     window_scale.set(config.ui.scale());
@@ -1096,7 +1028,6 @@ pub fn launch() {
         app_command,
         tracing_handle: reload_handle,
         config,
-        plugin_paths,
     };
 
     let app = app_data.create_windows(db.clone(), cli.paths);

@@ -1,14 +1,12 @@
 use std::{
     path::{Path, PathBuf},
     rc::Rc,
-    sync::Arc,
 };
 
 use anyhow::{Result, anyhow};
 use crossbeam_channel::{Sender, unbounded};
 use floem::{peniko::kurbo::Vec2, reactive::SignalGet};
 use lapce_core::directory::Directory;
-use lapce_rpc::plugin::VoltID;
 use sha2::{Digest, Sha256};
 
 use crate::{
@@ -23,7 +21,6 @@ const APP: &str = "app";
 const WINDOW: &str = "window";
 const WORKSPACE_INFO: &str = "workspace_info";
 const WORKSPACE_FILES: &str = "workspace_files";
-const DISABLED_VOLTS: &str = "disabled_volts";
 const RECENT_WORKSPACES: &str = "recent_workspaces";
 
 /// Events sent to the background save thread. All persistence operations are
@@ -34,8 +31,6 @@ pub enum SaveEvent {
     Workspace(LapceWorkspace, WorkspaceInfo),
     RecentWorkspace(LapceWorkspace),
     Doc(DocInfo),
-    DisabledVolts(Vec<VoltID>),
-    WorkspaceDisabledVolts(Arc<LapceWorkspace>, Vec<VoltID>),
 }
 
 /// File-based persistence layer. All data is stored as JSON files in the config
@@ -123,81 +118,11 @@ impl LapceDb {
                                 tracing::error!("{:?}", err);
                             }
                         }
-                        SaveEvent::DisabledVolts(volts) => {
-                            if let Err(err) = local_db.insert_disabled_volts(volts) {
-                                tracing::error!("{:?}", err);
-                            }
-                        }
-                        SaveEvent::WorkspaceDisabledVolts(workspace, volts) => {
-                            if let Err(err) = local_db
-                                .insert_workspace_disabled_volts(workspace, volts)
-                            {
-                                tracing::error!("{:?}", err);
-                            }
-                        }
                     }
                 }
             })
             .unwrap();
         Ok(db)
-    }
-
-    pub fn get_disabled_volts(&self) -> Result<Vec<VoltID>> {
-        let volts = std::fs::read_to_string(self.folder.join(DISABLED_VOLTS))?;
-        let volts: Vec<VoltID> = serde_json::from_str(&volts)?;
-        Ok(volts)
-    }
-
-    pub fn save_disabled_volts(&self, volts: Vec<VoltID>) {
-        if let Err(err) = self.save_tx.send(SaveEvent::DisabledVolts(volts)) {
-            tracing::error!("{:?}", err);
-        }
-    }
-
-    pub fn save_workspace_disabled_volts(
-        &self,
-        workspace: Arc<LapceWorkspace>,
-        volts: Vec<VoltID>,
-    ) {
-        if let Err(err) = self
-            .save_tx
-            .send(SaveEvent::WorkspaceDisabledVolts(workspace, volts))
-        {
-            tracing::error!("{:?}", err);
-        }
-    }
-
-    pub fn insert_disabled_volts(&self, volts: Vec<VoltID>) -> Result<()> {
-        let volts = serde_json::to_string_pretty(&volts)?;
-        std::fs::write(self.folder.join(DISABLED_VOLTS), volts)?;
-        Ok(())
-    }
-
-    pub fn insert_workspace_disabled_volts(
-        &self,
-        workspace: Arc<LapceWorkspace>,
-        volts: Vec<VoltID>,
-    ) -> Result<()> {
-        let folder = self
-            .workspace_folder
-            .join(workspace_folder_name(&workspace));
-        if let Err(err) = std::fs::create_dir_all(&folder) {
-            tracing::error!("{:?}", err);
-        }
-
-        let volts = serde_json::to_string_pretty(&volts)?;
-        std::fs::write(folder.join(DISABLED_VOLTS), volts)?;
-        Ok(())
-    }
-
-    pub fn get_workspace_disabled_volts(
-        &self,
-        workspace: &LapceWorkspace,
-    ) -> Result<Vec<VoltID>> {
-        let folder = self.workspace_folder.join(workspace_folder_name(workspace));
-        let volts = std::fs::read_to_string(folder.join(DISABLED_VOLTS))?;
-        let volts: Vec<VoltID> = serde_json::from_str(&volts)?;
-        Ok(volts)
     }
 
     pub fn recent_workspaces(&self) -> Result<Vec<LapceWorkspace>> {
@@ -695,46 +620,6 @@ mod tests {
     }
 
     // -- Roundtrip persistence tests --
-
-    #[test]
-    fn roundtrip_disabled_volts() {
-        let (db, _dir) = temp_db();
-        let volts = vec![
-            VoltID {
-                author: "test".into(),
-                name: "plugin-a".into(),
-            },
-            VoltID {
-                author: "test".into(),
-                name: "plugin-b".into(),
-            },
-        ];
-        db.insert_disabled_volts(volts.clone()).unwrap();
-        let loaded = db.get_disabled_volts().unwrap();
-        assert_eq!(loaded.len(), 2);
-        assert_eq!(loaded[0].author, "test");
-        assert_eq!(loaded[0].name, "plugin-a");
-        assert_eq!(loaded[1].name, "plugin-b");
-    }
-
-    #[test]
-    fn roundtrip_workspace_disabled_volts() {
-        let (db, _dir) = temp_db();
-        let ws = LapceWorkspace {
-            kind: LapceWorkspaceType::Local,
-            path: Some(PathBuf::from("/project/x")),
-            last_open: 0,
-        };
-        let volts = vec![VoltID {
-            author: "a".into(),
-            name: "b".into(),
-        }];
-        db.insert_workspace_disabled_volts(Arc::new(ws.clone()), volts)
-            .unwrap();
-        let loaded = db.get_workspace_disabled_volts(&ws).unwrap();
-        assert_eq!(loaded.len(), 1);
-        assert_eq!(loaded[0].name, "b");
-    }
 
     #[test]
     fn roundtrip_doc_info() {
