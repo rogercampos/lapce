@@ -412,6 +412,379 @@ pub struct RoundedRectPathIter {
     arcs: [Arc; 8],
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::f64::consts::PI;
+
+    fn approx_eq(a: f64, b: f64) -> bool {
+        (a - b).abs() < 1e-9
+    }
+
+    // ── arc_subsegment ──
+
+    #[test]
+    fn arc_subsegment_full_range() {
+        let arc = Arc {
+            center: Point::new(10.0, 20.0),
+            radii: Vec2::new(5.0, 5.0),
+            start_angle: 0.0,
+            sweep_angle: PI,
+            x_rotation: 0.0,
+        };
+        let sub = arc_subsegment(&arc, 0.0..1.0);
+        assert!(approx_eq(sub.start_angle, 0.0));
+        assert!(approx_eq(sub.sweep_angle, PI));
+        assert!(approx_eq(sub.center.x, 10.0));
+        assert!(approx_eq(sub.center.y, 20.0));
+        assert!(approx_eq(sub.radii.x, 5.0));
+        assert!(approx_eq(sub.radii.y, 5.0));
+    }
+
+    #[test]
+    fn arc_subsegment_first_half() {
+        let arc = Arc {
+            center: Point::ZERO,
+            radii: Vec2::new(1.0, 1.0),
+            start_angle: 0.0,
+            sweep_angle: PI,
+            x_rotation: 0.0,
+        };
+        let sub = arc_subsegment(&arc, 0.0..0.5);
+        assert!(approx_eq(sub.start_angle, 0.0));
+        assert!(approx_eq(sub.sweep_angle, PI / 2.0));
+    }
+
+    #[test]
+    fn arc_subsegment_second_half() {
+        let arc = Arc {
+            center: Point::ZERO,
+            radii: Vec2::new(1.0, 1.0),
+            start_angle: 0.0,
+            sweep_angle: PI,
+            x_rotation: 0.0,
+        };
+        let sub = arc_subsegment(&arc, 0.5..1.0);
+        assert!(approx_eq(sub.start_angle, PI / 2.0));
+        assert!(approx_eq(sub.sweep_angle, PI / 2.0));
+    }
+
+    #[test]
+    fn arc_subsegment_quarter() {
+        let arc = Arc {
+            center: Point::new(5.0, 5.0),
+            radii: Vec2::new(3.0, 3.0),
+            start_angle: 0.0,
+            sweep_angle: 2.0 * PI,
+            x_rotation: 0.0,
+        };
+        let sub = arc_subsegment(&arc, 0.0..0.25);
+        assert!(approx_eq(sub.start_angle, 0.0));
+        assert!(approx_eq(sub.sweep_angle, FRAC_PI_2));
+    }
+
+    #[test]
+    fn arc_subsegment_middle_third() {
+        let arc = Arc {
+            center: Point::ZERO,
+            radii: Vec2::new(1.0, 1.0),
+            start_angle: 0.0,
+            sweep_angle: 3.0,
+            x_rotation: 0.0,
+        };
+        let sub = arc_subsegment(&arc, 1.0 / 3.0..2.0 / 3.0);
+        assert!(approx_eq(sub.start_angle, 1.0));
+        assert!(approx_eq(sub.sweep_angle, 1.0));
+    }
+
+    #[test]
+    fn arc_subsegment_preserves_center_and_radii() {
+        let arc = Arc {
+            center: Point::new(42.0, -17.5),
+            radii: Vec2::new(100.0, 200.0),
+            start_angle: 1.0,
+            sweep_angle: 2.0,
+            x_rotation: 0.5,
+        };
+        let sub = arc_subsegment(&arc, 0.25..0.75);
+        assert!(approx_eq(sub.center.x, 42.0));
+        assert!(approx_eq(sub.center.y, -17.5));
+        assert!(approx_eq(sub.radii.x, 100.0));
+        assert!(approx_eq(sub.radii.y, 200.0));
+        assert!(approx_eq(sub.x_rotation, 0.5));
+    }
+
+    #[test]
+    fn arc_subsegment_negative_sweep() {
+        let arc = Arc {
+            center: Point::ZERO,
+            radii: Vec2::new(1.0, 1.0),
+            start_angle: PI,
+            sweep_angle: -PI,
+            x_rotation: 0.0,
+        };
+        let sub = arc_subsegment(&arc, 0.0..0.5);
+        assert!(approx_eq(sub.start_angle, PI));
+        assert!(approx_eq(sub.sweep_angle, -PI / 2.0));
+    }
+
+    #[test]
+    fn arc_subsegment_zero_range() {
+        let arc = Arc {
+            center: Point::ZERO,
+            radii: Vec2::new(1.0, 1.0),
+            start_angle: 0.0,
+            sweep_angle: PI,
+            x_rotation: 0.0,
+        };
+        let sub = arc_subsegment(&arc, 0.5..0.5);
+        assert!(approx_eq(sub.sweep_angle, 0.0));
+        assert!(approx_eq(sub.start_angle, PI / 2.0));
+    }
+
+    #[test]
+    fn arc_subsegment_clamps_range() {
+        let arc = Arc {
+            center: Point::ZERO,
+            radii: Vec2::new(1.0, 1.0),
+            start_angle: 0.0,
+            sweep_angle: PI,
+            x_rotation: 0.0,
+        };
+        let sub = arc_subsegment(&arc, -0.5..1.5);
+        // Clamped to 0.0..1.0
+        assert!(approx_eq(sub.start_angle, 0.0));
+        assert!(approx_eq(sub.sweep_angle, PI));
+    }
+
+    // ── RectPathIter ──
+
+    #[test]
+    fn rect_path_iter_produces_four_segments() {
+        let iter = RectPathIter {
+            rect: Rect::new(0.0, 0.0, 100.0, 50.0),
+            radii: RoundedRectRadii::from_single_radius(0.0),
+            idx: 0,
+        };
+        let segments: Vec<PathSeg> = iter.collect();
+        assert_eq!(segments.len(), 4);
+    }
+
+    #[test]
+    fn rect_path_iter_zero_radius_straight_edges() {
+        let rect = Rect::new(0.0, 0.0, 100.0, 50.0);
+        let iter = RectPathIter {
+            rect,
+            radii: RoundedRectRadii::from_single_radius(0.0),
+            idx: 0,
+        };
+        let segments: Vec<PathSeg> = iter.collect();
+
+        // Top edge: (0,0) to (100,0)
+        if let PathSeg::Line(line) = &segments[0] {
+            assert!(approx_eq(line.p0.x, 0.0));
+            assert!(approx_eq(line.p0.y, 0.0));
+            assert!(approx_eq(line.p1.x, 100.0));
+            assert!(approx_eq(line.p1.y, 0.0));
+        } else {
+            panic!("Expected line segment");
+        }
+
+        // Right edge: (100,0) to (100,50)
+        if let PathSeg::Line(line) = &segments[1] {
+            assert!(approx_eq(line.p0.x, 100.0));
+            assert!(approx_eq(line.p0.y, 0.0));
+            assert!(approx_eq(line.p1.x, 100.0));
+            assert!(approx_eq(line.p1.y, 50.0));
+        } else {
+            panic!("Expected line segment");
+        }
+    }
+
+    #[test]
+    fn rect_path_iter_with_radius_shortens_edges() {
+        let rect = Rect::new(0.0, 0.0, 100.0, 50.0);
+        let r = 10.0;
+        let iter = RectPathIter {
+            rect,
+            radii: RoundedRectRadii::from_single_radius(r),
+            idx: 0,
+        };
+        let segments: Vec<PathSeg> = iter.collect();
+
+        // Top edge should be shortened by radius on each side
+        if let PathSeg::Line(line) = &segments[0] {
+            assert!(approx_eq(line.p0.x, r)); // 10
+            assert!(approx_eq(line.p1.x, 100.0 - r)); // 90
+        } else {
+            panic!("Expected line segment");
+        }
+    }
+
+    #[test]
+    fn total_len_no_radius() {
+        let rect = Rect::new(0.0, 0.0, 100.0, 50.0);
+        let iter = RectPathIter {
+            rect,
+            radii: RoundedRectRadii::from_single_radius(0.0),
+            idx: 0,
+        };
+        let total = iter.total_len(0.1);
+        // Perimeter = 2*(100+50) = 300
+        assert!((total - 300.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn total_len_with_radius() {
+        let rect = Rect::new(0.0, 0.0, 100.0, 100.0);
+        let r = 10.0;
+        let iter = RectPathIter {
+            rect,
+            radii: RoundedRectRadii::from_single_radius(r),
+            idx: 0,
+        };
+        let total = iter.total_len(0.01);
+        // Perimeter: 4 straight edges of (100 - 2*10) = 320 + 4 quarter arcs = full circle 2*pi*10
+        let expected = 4.0 * 80.0 + 2.0 * PI * r;
+        assert!(
+            (total - expected).abs() < 0.5,
+            "total={total}, expected={expected}"
+        );
+    }
+
+    #[test]
+    fn total_len_square_no_radius_is_perimeter() {
+        let side = 25.0;
+        let iter = RectPathIter {
+            rect: Rect::new(0.0, 0.0, side, side),
+            radii: RoundedRectRadii::from_single_radius(0.0),
+            idx: 0,
+        };
+        assert!((iter.total_len(0.1) - 4.0 * side).abs() < 0.1);
+    }
+
+    // ── build_corner_arc ──
+
+    #[test]
+    fn build_corner_arc_all_four_corners() {
+        let rect = Rect::new(0.0, 0.0, 100.0, 100.0);
+        let r = 10.0;
+        let iter = RectPathIter {
+            rect,
+            radii: RoundedRectRadii::from_single_radius(r),
+            idx: 0,
+        };
+
+        for i in 0..4 {
+            let arc = iter.build_corner_arc(i);
+            assert!(approx_eq(arc.radii.x, r));
+            assert!(approx_eq(arc.radii.y, r));
+            assert!(approx_eq(arc.sweep_angle, FRAC_PI_2));
+            assert!(approx_eq(arc.x_rotation, 0.0));
+        }
+    }
+
+    #[test]
+    fn build_corner_arc_centers() {
+        let rect = Rect::new(0.0, 0.0, 100.0, 80.0);
+        let r = 10.0;
+        let iter = RectPathIter {
+            rect,
+            radii: RoundedRectRadii::from_single_radius(r),
+            idx: 0,
+        };
+
+        // Top-left center
+        let tl = iter.build_corner_arc(0);
+        assert!(approx_eq(tl.center.x, r));
+        assert!(approx_eq(tl.center.y, r));
+
+        // Top-right center
+        let tr = iter.build_corner_arc(1);
+        assert!(approx_eq(tr.center.x, 100.0 - r));
+        assert!(approx_eq(tr.center.y, r));
+
+        // Bottom-right center
+        let br = iter.build_corner_arc(2);
+        assert!(approx_eq(br.center.x, 100.0 - r));
+        assert!(approx_eq(br.center.y, 80.0 - r));
+
+        // Bottom-left center
+        let bl = iter.build_corner_arc(3);
+        assert!(approx_eq(bl.center.x, r));
+        assert!(approx_eq(bl.center.y, 80.0 - r));
+    }
+
+    // ── RoundedRectPathIter ──
+
+    #[test]
+    fn rounded_rect_path_iter_produces_16_elements() {
+        let iter = RectPathIter {
+            rect: Rect::new(0.0, 0.0, 100.0, 50.0),
+            radii: RoundedRectRadii::from_single_radius(5.0),
+            idx: 0,
+        };
+        let rounded = iter.rounded_rect_path();
+        let elements: Vec<ArcOrPath> = rounded.collect();
+        assert_eq!(elements.len(), 16);
+    }
+
+    #[test]
+    fn rounded_rect_path_iter_pattern() {
+        // The pattern should be: Arc, Line, Arc, Corner, Arc, Line, Arc, Corner, ...
+        let iter = RectPathIter {
+            rect: Rect::new(0.0, 0.0, 100.0, 50.0),
+            radii: RoundedRectRadii::from_single_radius(5.0),
+            idx: 0,
+        };
+        let rounded = iter.rounded_rect_path();
+        let elements: Vec<ArcOrPath> = rounded.collect();
+
+        // Check the expected pattern
+        assert!(matches!(elements[0], ArcOrPath::Arc(_)));
+        assert!(matches!(elements[1], ArcOrPath::Path(_)));
+        assert!(matches!(elements[2], ArcOrPath::Arc(_)));
+        assert!(matches!(elements[3], ArcOrPath::Corner));
+        assert!(matches!(elements[4], ArcOrPath::Arc(_)));
+        assert!(matches!(elements[5], ArcOrPath::Path(_)));
+        assert!(matches!(elements[6], ArcOrPath::Arc(_)));
+        assert!(matches!(elements[7], ArcOrPath::Corner));
+        assert!(matches!(elements[8], ArcOrPath::Arc(_)));
+        assert!(matches!(elements[9], ArcOrPath::Path(_)));
+        assert!(matches!(elements[10], ArcOrPath::Arc(_)));
+        assert!(matches!(elements[11], ArcOrPath::Corner));
+        assert!(matches!(elements[12], ArcOrPath::Arc(_)));
+        assert!(matches!(elements[13], ArcOrPath::Path(_)));
+        assert!(matches!(elements[14], ArcOrPath::Arc(_)));
+        assert!(matches!(elements[15], ArcOrPath::Corner));
+    }
+
+    // ── BorderPath ──
+
+    #[test]
+    fn border_path_new_clamps_radii() {
+        // Radii too large for the rect should be clamped
+        let bp = BorderPath::new(
+            Rect::new(0.0, 0.0, 20.0, 10.0),
+            RoundedRectRadii::from_single_radius(100.0),
+        );
+        // Should not panic; radii get clamped to shortest_side/2 = 5.0
+        let total = bp.path_iter.rect.total_len(0.1);
+        assert!(total > 0.0);
+    }
+
+    #[test]
+    fn border_path_subsegment_sets_range() {
+        let mut bp = BorderPath::new(
+            Rect::new(0.0, 0.0, 100.0, 100.0),
+            RoundedRectRadii::from_single_radius(10.0),
+        );
+        bp.subsegment(0.25..0.75);
+        assert!((bp.range.start - 0.25).abs() < f64::EPSILON);
+        assert!((bp.range.end - 0.75).abs() < f64::EPSILON);
+    }
+}
+
 #[derive(Debug)]
 pub enum ArcOrPath {
     Arc(Arc),

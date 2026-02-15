@@ -163,3 +163,283 @@ pub fn get_key_modifiers(key_event: &KeyEvent) -> Modifiers {
 
     mods
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // -- KeyPress::parse ---------------------------------------------------
+
+    #[test]
+    fn parse_simple_key() {
+        let presses = KeyPress::parse("a");
+        assert_eq!(presses.len(), 1);
+        assert_eq!(
+            presses[0].key,
+            KeyInput::Keyboard(
+                Key::Character("a".into()),
+                PhysicalKey::Code(KeyCode::KeyA)
+            )
+        );
+        assert!(presses[0].mods.is_empty());
+    }
+
+    #[test]
+    fn parse_with_ctrl_modifier() {
+        let presses = KeyPress::parse("Ctrl+s");
+        assert_eq!(presses.len(), 1);
+        assert_eq!(presses[0].mods, Modifiers::CONTROL);
+        assert_eq!(
+            presses[0].key,
+            KeyInput::Keyboard(
+                Key::Character("s".into()),
+                PhysicalKey::Code(KeyCode::KeyS)
+            )
+        );
+    }
+
+    #[test]
+    fn parse_multiple_modifiers() {
+        let presses = KeyPress::parse("Ctrl+Shift+Alt+a");
+        assert_eq!(presses.len(), 1);
+        assert_eq!(
+            presses[0].mods,
+            Modifiers::CONTROL | Modifiers::SHIFT | Modifiers::ALT
+        );
+    }
+
+    #[test]
+    fn display_ctrl_alt_a() {
+        let kp = KeyPress::new(
+            KeyInput::Keyboard(
+                Key::Character("a".into()),
+                PhysicalKey::Code(KeyCode::KeyA),
+            ),
+            Modifiers::CONTROL | Modifiers::ALT,
+        );
+        let s = kp.to_string();
+        assert!(s.contains("Ctrl+"), "got: {s}");
+        assert!(s.contains("Alt+"), "got: {s}");
+        // KeyInput Display uses uppercase for letter keys (KeyA -> "A")
+        assert!(s.ends_with('A'), "got: {s}");
+    }
+
+    #[test]
+    fn parse_chord_sequence() {
+        let presses = KeyPress::parse("Ctrl+k Ctrl+s");
+        assert_eq!(presses.len(), 2);
+        assert_eq!(presses[0].mods, Modifiers::CONTROL);
+        assert_eq!(presses[1].mods, Modifiers::CONTROL);
+    }
+
+    #[test]
+    fn parse_named_key() {
+        let presses = KeyPress::parse("Escape");
+        assert_eq!(presses.len(), 1);
+        assert_eq!(
+            presses[0].key,
+            KeyInput::Keyboard(
+                Key::Named(NamedKey::Escape),
+                PhysicalKey::Code(KeyCode::Escape)
+            )
+        );
+    }
+
+    #[test]
+    fn parse_unrecognized_key_skipped() {
+        let presses = KeyPress::parse("Ctrl+NOTAKEY");
+        assert!(presses.is_empty());
+    }
+
+    #[test]
+    fn parse_altgr_maps_to_alt() {
+        let presses = KeyPress::parse("Altgr+a");
+        assert_eq!(presses.len(), 1);
+        // altgr is treated as alt in the parser
+        assert_eq!(presses[0].mods, Modifiers::ALT);
+    }
+
+    // -- KeyPress::is_char -------------------------------------------------
+
+    #[test]
+    fn is_char_plain_character() {
+        let kp = KeyPress::new(
+            KeyInput::Keyboard(
+                Key::Character("a".into()),
+                PhysicalKey::Code(KeyCode::KeyA),
+            ),
+            Modifiers::empty(),
+        );
+        assert!(kp.is_char());
+    }
+
+    #[test]
+    fn is_char_with_shift_is_true() {
+        let kp = KeyPress::new(
+            KeyInput::Keyboard(
+                Key::Character("A".into()),
+                PhysicalKey::Code(KeyCode::KeyA),
+            ),
+            Modifiers::SHIFT,
+        );
+        assert!(kp.is_char());
+    }
+
+    #[test]
+    fn is_char_with_ctrl_is_false() {
+        let kp = KeyPress::new(
+            KeyInput::Keyboard(
+                Key::Character("a".into()),
+                PhysicalKey::Code(KeyCode::KeyA),
+            ),
+            Modifiers::CONTROL,
+        );
+        assert!(!kp.is_char());
+    }
+
+    #[test]
+    fn is_char_named_key_is_false() {
+        let kp = KeyPress::new(
+            KeyInput::Keyboard(
+                Key::Named(NamedKey::Enter),
+                PhysicalKey::Code(KeyCode::Enter),
+            ),
+            Modifiers::empty(),
+        );
+        assert!(!kp.is_char());
+    }
+
+    // -- KeyPress::is_modifiers --------------------------------------------
+
+    #[test]
+    fn is_modifiers_shift_left() {
+        let kp = KeyPress::new(
+            KeyInput::Keyboard(
+                Key::Named(NamedKey::Shift),
+                PhysicalKey::Code(KeyCode::ShiftLeft),
+            ),
+            Modifiers::SHIFT,
+        );
+        assert!(kp.is_modifiers());
+    }
+
+    #[test]
+    fn is_modifiers_control_right() {
+        let kp = KeyPress::new(
+            KeyInput::Keyboard(
+                Key::Named(NamedKey::Control),
+                PhysicalKey::Code(KeyCode::ControlRight),
+            ),
+            Modifiers::CONTROL,
+        );
+        assert!(kp.is_modifiers());
+    }
+
+    #[test]
+    fn is_modifiers_meta() {
+        let kp = KeyPress::new(
+            KeyInput::Keyboard(
+                Key::Named(NamedKey::Meta),
+                PhysicalKey::Code(KeyCode::Meta),
+            ),
+            Modifiers::META,
+        );
+        assert!(kp.is_modifiers());
+    }
+
+    #[test]
+    fn is_modifiers_regular_key_false() {
+        let kp = KeyPress::new(
+            KeyInput::Keyboard(
+                Key::Character("a".into()),
+                PhysicalKey::Code(KeyCode::KeyA),
+            ),
+            Modifiers::empty(),
+        );
+        assert!(!kp.is_modifiers());
+    }
+
+    // -- KeyPress::to_lowercase --------------------------------------------
+
+    #[test]
+    fn to_lowercase_character() {
+        let kp = KeyPress::new(
+            KeyInput::Keyboard(
+                Key::Character("A".into()),
+                PhysicalKey::Code(KeyCode::KeyA),
+            ),
+            Modifiers::SHIFT,
+        );
+        let lower = kp.to_lowercase();
+        assert_eq!(
+            lower.key,
+            KeyInput::Keyboard(
+                Key::Character("a".into()),
+                PhysicalKey::Code(KeyCode::KeyA)
+            )
+        );
+        assert_eq!(lower.mods, Modifiers::SHIFT);
+    }
+
+    #[test]
+    fn to_lowercase_named_key_unchanged() {
+        let kp = KeyPress::new(
+            KeyInput::Keyboard(
+                Key::Named(NamedKey::Enter),
+                PhysicalKey::Code(KeyCode::Enter),
+            ),
+            Modifiers::CONTROL,
+        );
+        let lower = kp.to_lowercase();
+        assert_eq!(lower.key, kp.key);
+    }
+
+    // -- KeyPress::label ---------------------------------------------------
+
+    #[test]
+    fn label_ctrl_a() {
+        let kp = KeyPress::parse("Ctrl+a");
+        assert_eq!(kp.len(), 1);
+        let label = kp[0].label();
+        assert!(label.starts_with("Ctrl+"));
+        // KeyInput Display uses uppercase for letter keys (KeyA -> "A")
+        assert!(label.ends_with('A'), "got: {label}");
+    }
+
+    #[test]
+    fn label_no_modifiers() {
+        let kp = KeyPress::parse("Escape");
+        assert_eq!(kp.len(), 1);
+        let label = kp[0].label();
+        assert_eq!(label, "Escape");
+    }
+
+    #[test]
+    fn label_meta_key() {
+        let kp = KeyPress::parse("Meta+q");
+        assert_eq!(kp.len(), 1);
+        let label = kp[0].label();
+        // on macOS it should be Cmd+, on windows Win+, else Meta+
+        let expected_prefix = match std::env::consts::OS {
+            "macos" => "Cmd+",
+            "windows" => "Win+",
+            _ => "Meta+",
+        };
+        assert!(label.starts_with(expected_prefix), "got: {label}");
+    }
+
+    // -- Display -----------------------------------------------------------
+
+    #[test]
+    fn display_no_mods() {
+        let kp = KeyPress::new(
+            KeyInput::Keyboard(
+                Key::Named(NamedKey::Space),
+                PhysicalKey::Code(KeyCode::Space),
+            ),
+            Modifiers::empty(),
+        );
+        let s = kp.to_string();
+        assert_eq!(s, "Space");
+    }
+}

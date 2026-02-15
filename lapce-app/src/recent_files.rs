@@ -435,6 +435,199 @@ fn recent_files_content(workspace_data: Rc<WorkspaceData>) -> impl View {
     })
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── duplicate_filenames ──
+
+    #[test]
+    fn duplicate_filenames_empty_list() {
+        let items: Vec<PathBuf> = vec![];
+        assert!(duplicate_filenames(&items).is_empty());
+    }
+
+    #[test]
+    fn duplicate_filenames_no_duplicates() {
+        let items = vec![
+            PathBuf::from("/a/foo.rs"),
+            PathBuf::from("/b/bar.rs"),
+            PathBuf::from("/c/baz.rs"),
+        ];
+        assert!(duplicate_filenames(&items).is_empty());
+    }
+
+    #[test]
+    fn duplicate_filenames_with_duplicates() {
+        let items = vec![
+            PathBuf::from("/a/foo.rs"),
+            PathBuf::from("/b/foo.rs"),
+            PathBuf::from("/c/bar.rs"),
+        ];
+        let dups = duplicate_filenames(&items);
+        assert_eq!(dups.len(), 1);
+        assert!(dups.contains(&OsString::from("foo.rs")));
+    }
+
+    #[test]
+    fn duplicate_filenames_multiple_duplicates() {
+        let items = vec![
+            PathBuf::from("/a/foo.rs"),
+            PathBuf::from("/b/foo.rs"),
+            PathBuf::from("/c/bar.rs"),
+            PathBuf::from("/d/bar.rs"),
+            PathBuf::from("/e/unique.rs"),
+        ];
+        let dups = duplicate_filenames(&items);
+        assert_eq!(dups.len(), 2);
+        assert!(dups.contains(&OsString::from("foo.rs")));
+        assert!(dups.contains(&OsString::from("bar.rs")));
+    }
+
+    #[test]
+    fn duplicate_filenames_triple_occurrence() {
+        let items = vec![
+            PathBuf::from("/a/mod.rs"),
+            PathBuf::from("/b/mod.rs"),
+            PathBuf::from("/c/mod.rs"),
+        ];
+        let dups = duplicate_filenames(&items);
+        assert_eq!(dups.len(), 1);
+        assert!(dups.contains(&OsString::from("mod.rs")));
+    }
+
+    #[test]
+    fn duplicate_filenames_root_paths_no_file_name() {
+        // PathBuf::from("/") has no file_name()
+        let items = vec![PathBuf::from("/"), PathBuf::from("/")];
+        assert!(duplicate_filenames(&items).is_empty());
+    }
+
+    // ── file_display_parts ──
+
+    #[test]
+    fn display_parts_no_duplicate_no_workspace() {
+        let path = PathBuf::from("/home/user/project/src/main.rs");
+        let dups = HashSet::new();
+        let ws: Option<PathBuf> = None;
+        let (filename, dir_hint) = file_display_parts(&path, &dups, &ws);
+        assert_eq!(filename, "main.rs");
+        assert_eq!(dir_hint, "");
+    }
+
+    #[test]
+    fn display_parts_duplicate_no_workspace() {
+        let path = PathBuf::from("/home/user/project/src/main.rs");
+        let dups = {
+            let mut s = HashSet::new();
+            s.insert(OsString::from("main.rs"));
+            s
+        };
+        let ws: Option<PathBuf> = None;
+        let (filename, dir_hint) = file_display_parts(&path, &dups, &ws);
+        assert_eq!(filename, "main.rs");
+        // Without workspace, shows full parent path
+        assert_eq!(dir_hint, "/home/user/project/src");
+    }
+
+    #[test]
+    fn display_parts_duplicate_with_workspace() {
+        let path = PathBuf::from("/home/user/project/src/main.rs");
+        let dups = {
+            let mut s = HashSet::new();
+            s.insert(OsString::from("main.rs"));
+            s
+        };
+        let ws = Some(PathBuf::from("/home/user/project"));
+        let (filename, dir_hint) = file_display_parts(&path, &dups, &ws);
+        assert_eq!(filename, "main.rs");
+        // With workspace, shows relative parent path
+        assert_eq!(dir_hint, "src");
+    }
+
+    #[test]
+    fn display_parts_duplicate_path_outside_workspace() {
+        let path = PathBuf::from("/other/location/main.rs");
+        let dups = {
+            let mut s = HashSet::new();
+            s.insert(OsString::from("main.rs"));
+            s
+        };
+        let ws = Some(PathBuf::from("/home/user/project"));
+        let (filename, dir_hint) = file_display_parts(&path, &dups, &ws);
+        assert_eq!(filename, "main.rs");
+        // Outside workspace, falls back to full parent path
+        assert_eq!(dir_hint, "/other/location");
+    }
+
+    #[test]
+    fn display_parts_not_duplicate_with_workspace() {
+        let path = PathBuf::from("/home/user/project/src/lib.rs");
+        let dups = HashSet::new();
+        let ws = Some(PathBuf::from("/home/user/project"));
+        let (filename, dir_hint) = file_display_parts(&path, &dups, &ws);
+        assert_eq!(filename, "lib.rs");
+        // Not a duplicate — no dir hint even with workspace
+        assert_eq!(dir_hint, "");
+    }
+
+    #[test]
+    fn display_parts_root_file() {
+        // A file directly in root
+        let path = PathBuf::from("/config.toml");
+        let dups = {
+            let mut s = HashSet::new();
+            s.insert(OsString::from("config.toml"));
+            s
+        };
+        let ws: Option<PathBuf> = None;
+        let (filename, dir_hint) = file_display_parts(&path, &dups, &ws);
+        assert_eq!(filename, "config.toml");
+        assert_eq!(dir_hint, "/");
+    }
+
+    #[test]
+    fn display_parts_deep_nested_duplicate_with_workspace() {
+        let path = PathBuf::from("/workspace/src/modules/feature/components/mod.rs");
+        let dups = {
+            let mut s = HashSet::new();
+            s.insert(OsString::from("mod.rs"));
+            s
+        };
+        let ws = Some(PathBuf::from("/workspace"));
+        let (filename, dir_hint) = file_display_parts(&path, &dups, &ws);
+        assert_eq!(filename, "mod.rs");
+        assert_eq!(dir_hint, "src/modules/feature/components");
+    }
+
+    #[test]
+    fn display_parts_path_with_no_filename() {
+        // PathBuf::from("/") has no file_name
+        let path = PathBuf::from("/");
+        let dups = HashSet::new();
+        let ws: Option<PathBuf> = None;
+        let (filename, dir_hint) = file_display_parts(&path, &dups, &ws);
+        // Falls back to the full path string
+        assert_eq!(filename, "/");
+        assert_eq!(dir_hint, "");
+    }
+
+    #[test]
+    fn display_parts_workspace_is_parent_dir() {
+        let path = PathBuf::from("/ws/main.rs");
+        let dups = {
+            let mut s = HashSet::new();
+            s.insert(OsString::from("main.rs"));
+            s
+        };
+        let ws = Some(PathBuf::from("/ws"));
+        let (filename, dir_hint) = file_display_parts(&path, &dups, &ws);
+        assert_eq!(filename, "main.rs");
+        // Parent is /ws, stripped of workspace prefix → empty
+        assert_eq!(dir_hint, "");
+    }
+}
+
 fn recent_files_input(
     data: RecentFilesData,
     config: ReadSignal<Arc<LapceConfig>>,

@@ -1280,6 +1280,227 @@ mod tests {
         assert_eq!(33, lens.height_of_line(5));
     }
 
+    // ----- BracketParser tests -----
+
+    #[test]
+    fn is_left_recognizes_openers() {
+        assert!(BracketParser::is_left(&'('));
+        assert!(BracketParser::is_left(&'{'));
+        assert!(BracketParser::is_left(&'['));
+    }
+
+    #[test]
+    fn is_left_rejects_closers_and_other_chars() {
+        assert!(!BracketParser::is_left(&')'));
+        assert!(!BracketParser::is_left(&'}'));
+        assert!(!BracketParser::is_left(&']'));
+        assert!(!BracketParser::is_left(&'a'));
+        assert!(!BracketParser::is_left(&' '));
+    }
+
+    #[test]
+    fn bracket_parser_empty_code() {
+        let mut bp = BracketParser::new("".to_string(), true, 1000);
+        bp.parse();
+        assert!(bp.ast.children.is_empty());
+    }
+
+    #[test]
+    fn bracket_parser_no_brackets() {
+        let mut bp = BracketParser::new("hello world".to_string(), true, 1000);
+        bp.parse();
+        // No bracket children, so ast.len stays 0 (patch_len only runs on non-empty children)
+        assert!(bp.ast.children.is_empty());
+        assert_eq!(bp.ast.len, 0);
+    }
+
+    #[test]
+    fn bracket_parser_simple_parens() {
+        let mut bp = BracketParser::new("(a)".to_string(), true, 1000);
+        bp.parse();
+        // Should produce a Pair node containing (, Code, )
+        assert_eq!(bp.ast.len, 3);
+        assert!(!bp.ast.children.is_empty());
+    }
+
+    #[test]
+    fn bracket_parser_nested_brackets() {
+        let mut bp = BracketParser::new("{[()]}".to_string(), true, 1000);
+        bp.parse();
+        assert_eq!(bp.ast.len, 6);
+    }
+
+    #[test]
+    fn bracket_parser_multiple_pairs() {
+        let mut bp = BracketParser::new("(){}[]".to_string(), true, 1000);
+        bp.parse();
+        assert_eq!(bp.ast.len, 6);
+    }
+
+    #[test]
+    fn bracket_parser_with_code_between() {
+        let mut bp = BracketParser::new("a(b)c".to_string(), true, 1000);
+        bp.parse();
+        // The pair node includes the leading code 'a' + '(' + 'b' + ')' = 4
+        // Trailing 'c' is not captured as a child
+        assert_eq!(bp.ast.len, 4);
+    }
+
+    #[test]
+    fn bracket_parser_skips_string_brackets() {
+        // Brackets inside quotes should be ignored
+        let mut bp = BracketParser::new("\"(\"".to_string(), true, 1000);
+        bp.parse();
+        // The ( inside quotes should not create a Pair node
+        let has_pair = bp
+            .ast
+            .children
+            .iter()
+            .any(|n| matches!(n.tt, NodeType::Pair));
+        assert!(!has_pair);
+    }
+
+    #[test]
+    fn bracket_parser_unmatched_close() {
+        let mut bp = BracketParser::new(")".to_string(), true, 1000);
+        bp.parse();
+        // Should not panic, parser handles unmatched close brackets
+        assert!(!bp.ast.children.is_empty());
+    }
+
+    #[test]
+    fn bracket_parser_unmatched_open() {
+        let mut bp = BracketParser::new("(".to_string(), true, 1000);
+        bp.parse();
+        // Should not panic
+        assert!(!bp.ast.children.is_empty());
+    }
+
+    #[test]
+    fn highlight_pos_simple_parens() {
+        let mut bp = BracketParser::new("(a)".to_string(), true, 1000);
+        bp.parse();
+        let palette = &["bracket.color.1", "bracket.color.2", "bracket.color.3"];
+        let mut pos_vec = vec![];
+        BracketParser::highlight_pos(&bp.ast, &mut pos_vec, &mut 0, &mut 0, palette);
+        // Should have two entries: ( and )
+        assert_eq!(pos_vec.len(), 2);
+        // Opening bracket gets color at level 0
+        assert_eq!(pos_vec[0].1, "bracket.color.1");
+        // Closing bracket gets the same color (level returns to 0)
+        assert_eq!(pos_vec[1].1, "bracket.color.1");
+    }
+
+    #[test]
+    fn highlight_pos_nested_brackets_cycle_colors() {
+        let mut bp = BracketParser::new("({[]})".to_string(), true, 1000);
+        bp.parse();
+        let palette = &["c1", "c2", "c3"];
+        let mut pos_vec = vec![];
+        BracketParser::highlight_pos(&bp.ast, &mut pos_vec, &mut 0, &mut 0, palette);
+        // 6 brackets, each pair gets a different level
+        assert_eq!(pos_vec.len(), 6);
+        // Level 0: ( and )
+        assert_eq!(pos_vec[0].1, "c1"); // (
+        assert_eq!(pos_vec[5].1, "c1"); // )
+        // Level 1: { and }
+        assert_eq!(pos_vec[1].1, "c2"); // {
+        assert_eq!(pos_vec[4].1, "c2"); // }
+        // Level 2: [ and ]
+        assert_eq!(pos_vec[2].1, "c3"); // [
+        assert_eq!(pos_vec[3].1, "c3"); // ]
+    }
+
+    #[test]
+    fn highlight_pos_unmatched_close_bracket() {
+        let mut bp = BracketParser::new(")".to_string(), true, 1000);
+        bp.parse();
+        let palette = &["c1", "c2", "c3"];
+        let mut pos_vec = vec![];
+        BracketParser::highlight_pos(&bp.ast, &mut pos_vec, &mut 0, &mut 0, palette);
+        // Unmatched closing bracket gets special "bracket.unpaired" color
+        assert_eq!(pos_vec.len(), 1);
+        assert_eq!(pos_vec[0].1, "bracket.unpaired");
+    }
+
+    #[test]
+    fn highlight_pos_positions_are_correct() {
+        let mut bp = BracketParser::new("ab(cd)ef".to_string(), true, 1000);
+        bp.parse();
+        let palette = &["c1"];
+        let mut pos_vec = vec![];
+        BracketParser::highlight_pos(&bp.ast, &mut pos_vec, &mut 0, &mut 0, palette);
+        assert_eq!(pos_vec.len(), 2);
+        assert_eq!(pos_vec[0].0, 2); // ( at offset 2
+        assert_eq!(pos_vec[1].0, 5); // ) at offset 5
+    }
+
+    #[test]
+    fn bracket_parser_inactive_skips_parsing() {
+        let bp = BracketParser::new("({[]})".to_string(), false, 1000);
+        // When inactive, bracket_pos should be empty
+        assert!(bp.bracket_pos.is_empty());
+    }
+
+    #[test]
+    fn ast_node_default() {
+        let node = ASTNode::default();
+        assert!(matches!(node.tt, NodeType::Dummy));
+        assert_eq!(node.len, 0);
+        assert!(node.children.is_empty());
+    }
+
+    #[test]
+    fn ast_node_new_with_type() {
+        let node = ASTNode::new_with_type(NodeType::LeftParen, 1);
+        assert!(matches!(node.tt, NodeType::LeftParen));
+        assert_eq!(node.len, 1);
+        assert_eq!(node.level, 0);
+    }
+
+    // ----- Syntax::lens_from_normal_lines -----
+
+    #[test]
+    fn lens_empty_normal_lines() {
+        let lens = Syntax::lens_from_normal_lines(10, 25, 2, &[]);
+        assert_eq!(10, lens.len());
+        // All lines at lens_height
+        assert_eq!(20, lens.height_of_line(10));
+    }
+
+    #[test]
+    fn lens_all_normal_lines() {
+        let lens = Syntax::lens_from_normal_lines(3, 25, 2, &[0, 1, 2]);
+        assert_eq!(3, lens.len());
+        assert_eq!(75, lens.height_of_line(3));
+    }
+
+    #[test]
+    fn lens_single_normal_line_in_middle() {
+        let lens = Syntax::lens_from_normal_lines(5, 25, 2, &[2]);
+        assert_eq!(5, lens.len());
+        // Lines 0-1 at lens_height (2), line 2 at line_height (25), lines 3-4 at lens_height (2)
+        assert_eq!(4, lens.height_of_line(2)); // 2*2 = 4
+        assert_eq!(29, lens.height_of_line(3)); // 4 + 25 = 29
+        assert_eq!(33, lens.height_of_line(5)); // 29 + 2*2 = 33
+    }
+
+    // ----- SyntaxLayers edge cases -----
+
+    #[test]
+    fn syntax_plaintext_has_no_layers() {
+        let syntax = Syntax::plaintext();
+        // PlainText has no tree-sitter grammar, so layers should be None
+        assert!(syntax.layers.is_none());
+    }
+
+    #[test]
+    fn syntax_init_from_unknown_ext() {
+        let syntax = Syntax::init(std::path::Path::new("file.unknownext"));
+        // Unknown extensions default to PlainText
+        assert_eq!(syntax.language, LapceLanguage::PlainText);
+    }
+
     #[test]
     fn test_lens_iter() {
         let lens = Syntax::lens_from_normal_lines(5, 25, 2, &[0, 2, 4]);

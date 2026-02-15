@@ -542,3 +542,151 @@ pub enum WindowCommand {
     NewWindow,
     CloseWindow,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn lapce_internal_commands_is_nonempty() {
+        let cmds = lapce_internal_commands();
+        assert!(!cmds.is_empty());
+    }
+
+    #[test]
+    fn lapce_internal_commands_no_duplicate_keys() {
+        let cmds = lapce_internal_commands();
+        let mut seen = std::collections::HashSet::new();
+        for key in cmds.keys() {
+            assert!(seen.insert(key.clone()), "duplicate key: {key}");
+        }
+    }
+
+    #[test]
+    fn lapce_internal_commands_contains_workbench_commands() {
+        let cmds = lapce_internal_commands();
+        // Spot-check known workbench commands
+        assert!(cmds.contains_key("open_folder"));
+        assert!(cmds.contains_key("palette"));
+        assert!(cmds.contains_key("quit"));
+        assert!(cmds.contains_key("new_file"));
+        assert!(cmds.contains_key("zoom_in"));
+        assert!(cmds.contains_key("zoom_out"));
+    }
+
+    #[test]
+    fn lapce_internal_commands_contains_edit_commands() {
+        let cmds = lapce_internal_commands();
+        // EditCommand variants have strum serialization
+        for c in EditCommand::iter() {
+            let key = c.to_string();
+            assert!(cmds.contains_key(&key), "missing EditCommand: {key}");
+            assert!(
+                matches!(cmds[&key].kind, CommandKind::Edit(_)),
+                "wrong kind for {key}"
+            );
+        }
+    }
+
+    #[test]
+    fn lapce_internal_commands_contains_move_commands() {
+        let cmds = lapce_internal_commands();
+        for c in MoveCommand::iter() {
+            let key = c.to_string();
+            assert!(cmds.contains_key(&key), "missing MoveCommand: {key}");
+        }
+    }
+
+    #[test]
+    fn lapce_internal_commands_contains_scroll_commands() {
+        let cmds = lapce_internal_commands();
+        for c in ScrollCommand::iter() {
+            let key = c.to_string();
+            assert!(cmds.contains_key(&key), "missing ScrollCommand: {key}");
+        }
+    }
+
+    #[test]
+    fn lapce_internal_commands_contains_focus_commands() {
+        let cmds = lapce_internal_commands();
+        for c in FocusCommand::iter() {
+            let key = c.to_string();
+            assert!(cmds.contains_key(&key), "missing FocusCommand: {key}");
+        }
+    }
+
+    #[test]
+    fn lapce_internal_commands_all_have_none_data() {
+        let cmds = lapce_internal_commands();
+        for (key, cmd) in &cmds {
+            assert!(cmd.data.is_none(), "command {key} should have data=None");
+        }
+    }
+
+    #[test]
+    fn command_kind_desc_workbench_with_message() {
+        let kind = CommandKind::Workbench(LapceWorkbenchCommand::OpenFolder);
+        assert_eq!(kind.desc(), Some("Open Folder"));
+    }
+
+    #[test]
+    fn command_kind_desc_multi_selection_is_none() {
+        let kind =
+            CommandKind::MultiSelection(MultiSelectionCommand::SelectAllCurrent);
+        assert_eq!(kind.desc(), None);
+    }
+
+    #[test]
+    fn command_kind_str_workbench() {
+        let kind = CommandKind::Workbench(LapceWorkbenchCommand::Quit);
+        assert_eq!(kind.str(), "quit");
+    }
+
+    #[test]
+    fn command_kind_str_multi_selection_is_empty() {
+        let kind =
+            CommandKind::MultiSelection(MultiSelectionCommand::SelectAllCurrent);
+        assert_eq!(kind.str(), "");
+    }
+
+    #[test]
+    fn command_kind_from_edit() {
+        let cmd = Command::Edit(EditCommand::Undo);
+        let kind = CommandKind::from(cmd);
+        assert!(matches!(kind, CommandKind::Edit(EditCommand::Undo)));
+    }
+
+    #[test]
+    fn command_kind_from_move() {
+        let cmd = Command::Move(MoveCommand::Up);
+        let kind = CommandKind::from(cmd);
+        assert!(matches!(kind, CommandKind::Move(MoveCommand::Up)));
+    }
+
+    #[test]
+    fn command_kind_from_scroll() {
+        let cmd = Command::Scroll(ScrollCommand::PageUp);
+        let kind = CommandKind::from(cmd);
+        assert!(matches!(kind, CommandKind::Scroll(ScrollCommand::PageUp)));
+    }
+
+    #[test]
+    fn command_kind_from_motion_mode() {
+        let cmd = Command::MotionMode(MotionModeCommand::MotionModeDelete);
+        let kind = CommandKind::from(cmd);
+        assert!(matches!(
+            kind,
+            CommandKind::MotionMode(MotionModeCommand::MotionModeDelete)
+        ));
+    }
+
+    #[test]
+    fn command_kind_from_multi_selection() {
+        let cmd = Command::MultiSelection(MultiSelectionCommand::SelectAllCurrent);
+        let kind = CommandKind::from(cmd);
+        assert!(matches!(
+            kind,
+            CommandKind::MultiSelection(MultiSelectionCommand::SelectAllCurrent)
+        ));
+    }
+}

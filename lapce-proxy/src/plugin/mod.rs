@@ -1418,3 +1418,229 @@ fn client_capabilities() -> ClientCapabilities {
         ..Default::default()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn client_capabilities_has_text_document() {
+        let caps = client_capabilities();
+        assert!(caps.text_document.is_some());
+    }
+
+    #[test]
+    fn client_capabilities_snippet_support() {
+        let caps = client_capabilities();
+        let td = caps.text_document.unwrap();
+        let completion = td.completion.unwrap();
+        let item = completion.completion_item.unwrap();
+        assert_eq!(item.snippet_support, Some(true));
+    }
+
+    #[test]
+    fn client_capabilities_completion_resolve_additional_text_edits() {
+        let caps = client_capabilities();
+        let td = caps.text_document.unwrap();
+        let completion = td.completion.unwrap();
+        let item = completion.completion_item.unwrap();
+        let resolve = item.resolve_support.unwrap();
+        assert_eq!(resolve.properties, vec!["additionalTextEdits"]);
+    }
+
+    #[test]
+    fn client_capabilities_signature_help_markdown() {
+        let caps = client_capabilities();
+        let td = caps.text_document.unwrap();
+        let sig = td.signature_help.unwrap();
+        let info = sig.signature_information.unwrap();
+        let formats = info.documentation_format.unwrap();
+        assert_eq!(formats, vec![MarkupKind::Markdown, MarkupKind::PlainText]);
+    }
+
+    #[test]
+    fn client_capabilities_signature_label_offset_support() {
+        let caps = client_capabilities();
+        let td = caps.text_document.unwrap();
+        let sig = td.signature_help.unwrap();
+        let info = sig.signature_information.unwrap();
+        let param = info.parameter_information.unwrap();
+        assert_eq!(param.label_offset_support, Some(true));
+    }
+
+    #[test]
+    fn client_capabilities_signature_active_parameter_support() {
+        let caps = client_capabilities();
+        let td = caps.text_document.unwrap();
+        let sig = td.signature_help.unwrap();
+        let info = sig.signature_information.unwrap();
+        assert_eq!(info.active_parameter_support, Some(true));
+    }
+
+    #[test]
+    fn client_capabilities_hover_markdown() {
+        let caps = client_capabilities();
+        let td = caps.text_document.unwrap();
+        let hover = td.hover.unwrap();
+        let formats = hover.content_format.unwrap();
+        assert_eq!(formats, vec![MarkupKind::Markdown, MarkupKind::PlainText]);
+    }
+
+    #[test]
+    fn client_capabilities_did_save() {
+        let caps = client_capabilities();
+        let td = caps.text_document.unwrap();
+        let sync = td.synchronization.unwrap();
+        assert_eq!(sync.did_save, Some(true));
+        assert_eq!(sync.dynamic_registration, Some(true));
+    }
+
+    #[test]
+    fn client_capabilities_code_action_data_and_resolve() {
+        let caps = client_capabilities();
+        let td = caps.text_document.unwrap();
+        let ca = td.code_action.unwrap();
+        assert_eq!(ca.data_support, Some(true));
+        let resolve = ca.resolve_support.unwrap();
+        assert_eq!(resolve.properties, vec!["edit"]);
+    }
+
+    #[test]
+    fn client_capabilities_code_action_kinds() {
+        let caps = client_capabilities();
+        let td = caps.text_document.unwrap();
+        let ca = td.code_action.unwrap();
+        let literal = ca.code_action_literal_support.unwrap();
+        let kinds = &literal.code_action_kind.value_set;
+        assert!(kinds.contains(&CodeActionKind::QUICKFIX.as_str().to_string()));
+        assert!(kinds.contains(&CodeActionKind::REFACTOR.as_str().to_string()));
+        assert!(kinds.contains(&CodeActionKind::SOURCE.as_str().to_string()));
+        assert!(kinds.contains(&"quickassist".to_string()));
+        assert!(kinds.contains(&"source.fixAll".to_string()));
+    }
+
+    #[test]
+    fn client_capabilities_type_definition_no_link_support() {
+        let caps = client_capabilities();
+        let td = caps.text_document.unwrap();
+        let typedef = td.type_definition.unwrap();
+        // Explicitly false due to lsp-types bug workaround
+        assert_eq!(typedef.link_support, Some(false));
+    }
+
+    #[test]
+    fn client_capabilities_window_work_done_progress() {
+        let caps = client_capabilities();
+        let window = caps.window.unwrap();
+        assert_eq!(window.work_done_progress, Some(true));
+    }
+
+    #[test]
+    fn client_capabilities_show_message() {
+        let caps = client_capabilities();
+        let window = caps.window.unwrap();
+        let sm = window.show_message.unwrap();
+        let item = sm.message_action_item.unwrap();
+        assert_eq!(item.additional_properties_support, Some(true));
+    }
+
+    #[test]
+    fn client_capabilities_workspace_folders() {
+        let caps = client_capabilities();
+        let ws = caps.workspace.unwrap();
+        assert_eq!(ws.workspace_folders, Some(true));
+        assert_eq!(ws.configuration, Some(false));
+    }
+
+    #[test]
+    fn client_capabilities_experimental_has_server_status() {
+        let caps = client_capabilities();
+        let experimental = caps.experimental.unwrap();
+        let obj = experimental.as_object().unwrap();
+        assert_eq!(
+            obj.get("serverStatusNotification"),
+            Some(&Value::Bool(true))
+        );
+    }
+
+    #[test]
+    fn client_capabilities_experimental_has_commands() {
+        let caps = client_capabilities();
+        let experimental = caps.experimental.unwrap();
+        let obj = experimental.as_object().unwrap();
+        let commands = obj.get("commands").unwrap().as_object().unwrap();
+        let cmd_list = commands.get("commands").unwrap().as_array().unwrap();
+        assert!(cmd_list.contains(&Value::String("rust-analyzer.runSingle".into())));
+        assert!(
+            cmd_list.contains(&Value::String("rust-analyzer.debugSingle".into()))
+        );
+    }
+
+    #[test]
+    fn client_capabilities_call_hierarchy() {
+        let caps = client_capabilities();
+        let td = caps.text_document.unwrap();
+        let ch = td.call_hierarchy.unwrap();
+        assert_eq!(ch.dynamic_registration, Some(true));
+    }
+
+    #[test]
+    fn client_capabilities_document_symbol_hierarchical() {
+        let caps = client_capabilities();
+        let td = caps.text_document.unwrap();
+        let ds = td.document_symbol.unwrap();
+        assert_eq!(ds.hierarchical_document_symbol_support, Some(true));
+    }
+
+    #[test]
+    fn client_capabilities_folding_range() {
+        let caps = client_capabilities();
+        let td = caps.text_document.unwrap();
+        let fr = td.folding_range.unwrap();
+        assert_eq!(fr.dynamic_registration, Some(false));
+        assert_eq!(fr.line_folding_only, Some(false));
+        assert!(fr.range_limit.is_none());
+    }
+
+    #[test]
+    fn client_capabilities_inlay_hint_present() {
+        let caps = client_capabilities();
+        let td = caps.text_document.unwrap();
+        assert!(td.inlay_hint.is_some());
+    }
+
+    #[test]
+    fn client_capabilities_inline_completion_present() {
+        let caps = client_capabilities();
+        let td = caps.text_document.unwrap();
+        assert!(td.inline_completion.is_some());
+    }
+
+    #[test]
+    fn client_capabilities_diagnostic_present() {
+        let caps = client_capabilities();
+        let td = caps.text_document.unwrap();
+        assert!(td.diagnostic.is_some());
+    }
+
+    #[test]
+    fn client_capabilities_semantic_tokens_present() {
+        let caps = client_capabilities();
+        let td = caps.text_document.unwrap();
+        assert!(td.semantic_tokens.is_some());
+    }
+
+    #[test]
+    fn client_capabilities_definition_present() {
+        let caps = client_capabilities();
+        let td = caps.text_document.unwrap();
+        assert!(td.definition.is_some());
+    }
+
+    #[test]
+    fn client_capabilities_publish_diagnostics_present() {
+        let caps = client_capabilities();
+        let td = caps.text_document.unwrap();
+        assert!(td.publish_diagnostics.is_some());
+    }
+}

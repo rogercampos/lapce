@@ -293,3 +293,261 @@ fn inline_completion_text(
         ICompletionRes::Set(text.to_string(), prefix.len())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use lapce_core::buffer::rope_text::RopeTextRef;
+    use lapce_xi_rope::Rope;
+    use lsp_types::InsertTextFormat;
+
+    use super::{ICompletionRes, InlineCompletionItem, inline_completion_text};
+
+    /// Helper to create an InlineCompletionItem for tests.
+    fn item(
+        insert_text: &str,
+        range: Option<std::ops::Range<usize>>,
+        format: Option<InsertTextFormat>,
+    ) -> InlineCompletionItem {
+        InlineCompletionItem {
+            insert_text: insert_text.to_string(),
+            filter_text: None,
+            range,
+            command: None,
+            insert_text_format: format,
+        }
+    }
+
+    /// Helper: run inline_completion_text on a given buffer string.
+    fn run(
+        buffer: &str,
+        start_offset: usize,
+        cursor_offset: usize,
+        completion: &InlineCompletionItem,
+        current: Option<&str>,
+    ) -> ICompletionRes {
+        let rope = Rope::from(buffer);
+        let rt = RopeTextRef::new(&rope);
+        inline_completion_text(rt, start_offset, cursor_offset, completion, current)
+    }
+
+    // --- Plain text completions ---
+
+    #[test]
+    fn plain_text_strips_prefix() {
+        // Buffer: "pr" on a line, completion is "println"
+        // start_offset = 0, so prefix = "pr" (from offset 0 to end of line)
+        let c = item("println", None, None);
+        match run("pr", 0, 2, &c, None) {
+            ICompletionRes::Set(text, shift) => {
+                assert_eq!(text, "intln");
+                assert_eq!(shift, 2);
+            }
+            other => {
+                panic!("expected Set, got {:?}", std::mem::discriminant(&other))
+            }
+        }
+    }
+
+    #[test]
+    fn plain_text_full_match_returns_empty_set() {
+        // Buffer already contains the full completion text.
+        // strip_prefix succeeds but returns "" — Set with empty string.
+        let c = item("hello", None, None);
+        match run("hello", 0, 5, &c, None) {
+            ICompletionRes::Set(text, shift) => {
+                assert_eq!(text, "");
+                assert_eq!(shift, 5);
+            }
+            other => panic!(
+                "expected Set with empty text, got {:?}",
+                std::mem::discriminant(&other)
+            ),
+        }
+    }
+
+    #[test]
+    fn plain_text_no_prefix_match_hides() {
+        // Buffer text doesn't match start of completion
+        let c = item("println", None, None);
+        assert!(matches!(run("xyz", 0, 3, &c, None), ICompletionRes::Hide));
+    }
+
+    #[test]
+    fn plain_text_unchanged_when_same() {
+        // Current completion matches what we'd compute
+        let c = item("println", None, None);
+        match run("pr", 0, 2, &c, Some("intln")) {
+            ICompletionRes::Unchanged => {}
+            other => panic!(
+                "expected Unchanged, got {:?}",
+                std::mem::discriminant(&other)
+            ),
+        }
+    }
+
+    #[test]
+    fn plain_text_set_when_different_from_current() {
+        let c = item("println", None, None);
+        match run("pr", 0, 2, &c, Some("old_value")) {
+            ICompletionRes::Set(text, _) => {
+                assert_eq!(text, "intln");
+            }
+            other => {
+                panic!("expected Set, got {:?}", std::mem::discriminant(&other))
+            }
+        }
+    }
+
+    #[test]
+    fn plain_text_empty_prefix() {
+        // start_offset at beginning of empty content before newline
+        let c = item("hello", None, None);
+        match run("\n", 0, 0, &c, None) {
+            ICompletionRes::Set(text, shift) => {
+                assert_eq!(text, "hello");
+                assert_eq!(shift, 0);
+            }
+            other => {
+                panic!("expected Set, got {:?}", std::mem::discriminant(&other))
+            }
+        }
+    }
+
+    // --- Snippet completions ---
+
+    #[test]
+    fn snippet_strips_tabstops() {
+        // Snippet: "println!(${1:msg})" -> plain text "println!(msg)"
+        let c = item("println!(${1:msg})", None, Some(InsertTextFormat::SNIPPET));
+        match run("pr", 0, 2, &c, None) {
+            ICompletionRes::Set(text, shift) => {
+                assert_eq!(text, "intln!(msg)");
+                assert_eq!(shift, 2);
+            }
+            other => {
+                panic!("expected Set, got {:?}", std::mem::discriminant(&other))
+            }
+        }
+    }
+
+    #[test]
+    fn snippet_unparseable_produces_empty_text() {
+        // The snippet parser can't extract elements from "${invalid" (no valid
+        // tabstop number), so it produces an empty snippet whose text() is "".
+        // Since prefix is also "" (buffer is empty), strip_prefix succeeds
+        // with "", resulting in Set("", 0).
+        let c = item("${invalid", None, Some(InsertTextFormat::SNIPPET));
+        match run("", 0, 0, &c, None) {
+            ICompletionRes::Set(text, shift) => {
+                assert_eq!(text, "");
+                assert_eq!(shift, 0);
+            }
+            other => {
+                panic!(
+                    "expected Set with empty text, got {:?}",
+                    std::mem::discriminant(&other)
+                )
+            }
+        }
+    }
+
+    // --- Range checks ---
+
+    #[test]
+    fn range_matching_cursor_prev_boundary() {
+        // Range start matches cursor's prev_code_boundary
+        // For "pr|", prev_code_boundary of offset 2 in "pr" should be 0
+        // Range start = 0 matches start_offset = 0, so this should work
+        let c = item("println", Some(0..2), None);
+        match run("pr", 0, 2, &c, None) {
+            ICompletionRes::Set(text, _) => {
+                assert_eq!(text, "intln");
+            }
+            other => {
+                panic!("expected Set, got {:?}", std::mem::discriminant(&other))
+            }
+        }
+    }
+
+    #[test]
+    fn range_not_matching_hides() {
+        // Range start (10) doesn't match cursor prev boundary or start_offset (0)
+        let c = item("println", Some(10..15), None);
+        assert!(matches!(run("pr", 0, 2, &c, None), ICompletionRes::Hide));
+    }
+
+    #[test]
+    fn range_matches_start_offset() {
+        // Range start == start_offset, so it should proceed
+        let c = item("println", Some(0..5), None);
+        match run("pr", 0, 2, &c, None) {
+            ICompletionRes::Set(text, _) => {
+                assert_eq!(text, "intln");
+            }
+            other => {
+                panic!("expected Set, got {:?}", std::mem::discriminant(&other))
+            }
+        }
+    }
+
+    // --- Multiline buffer ---
+
+    #[test]
+    fn multiline_buffer_second_line() {
+        // Completion on the second line
+        // "first\npr" -> start_offset=6, prefix = "pr"
+        let c = item("println", None, None);
+        match run("first\npr", 6, 8, &c, None) {
+            ICompletionRes::Set(text, shift) => {
+                assert_eq!(text, "intln");
+                assert_eq!(shift, 2);
+            }
+            other => {
+                panic!("expected Set, got {:?}", std::mem::discriminant(&other))
+            }
+        }
+    }
+
+    // --- Default text format ---
+
+    #[test]
+    fn none_format_defaults_to_plain_text() {
+        let c = item("hello", None, None);
+        match run("he", 0, 2, &c, None) {
+            ICompletionRes::Set(text, shift) => {
+                assert_eq!(text, "llo");
+                assert_eq!(shift, 2);
+            }
+            other => {
+                panic!("expected Set, got {:?}", std::mem::discriminant(&other))
+            }
+        }
+    }
+
+    // --- InlineCompletionStatus ---
+
+    #[test]
+    fn status_enum_equality() {
+        use super::InlineCompletionStatus;
+        assert_eq!(
+            InlineCompletionStatus::Inactive,
+            InlineCompletionStatus::Inactive
+        );
+        assert_eq!(
+            InlineCompletionStatus::Started,
+            InlineCompletionStatus::Started
+        );
+        assert_eq!(
+            InlineCompletionStatus::Active,
+            InlineCompletionStatus::Active
+        );
+        assert_ne!(
+            InlineCompletionStatus::Inactive,
+            InlineCompletionStatus::Active
+        );
+        assert_ne!(
+            InlineCompletionStatus::Started,
+            InlineCompletionStatus::Active
+        );
+    }
+}

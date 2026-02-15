@@ -1187,3 +1187,321 @@ fn search_in_path(
 
     Ok(ProxyResponse::GlobalSearchResponse { matches })
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{path::PathBuf, sync::atomic::AtomicU64};
+
+    use indexmap::IndexMap;
+    use lapce_rpc::proxy::{ProxyResponse, SearchMatch};
+
+    use super::search_in_path;
+
+    /// Create a temp directory with files containing known content.
+    fn setup_search_dir() -> (tempfile::TempDir, Vec<PathBuf>) {
+        let dir = tempfile::tempdir().unwrap();
+
+        let file1 = dir.path().join("hello.txt");
+        std::fs::write(&file1, "Hello World\nfoo bar\nHello Again\n").unwrap();
+
+        let file2 = dir.path().join("test.rs");
+        std::fs::write(&file2, "fn main() {\n    println!(\"hello\");\n}\n")
+            .unwrap();
+
+        let file3 = dir.path().join("empty.txt");
+        std::fs::write(&file3, "").unwrap();
+
+        (dir, vec![file1, file2, file3])
+    }
+
+    fn extract_matches(
+        resp: Result<ProxyResponse, lapce_rpc::RpcError>,
+    ) -> IndexMap<PathBuf, Vec<SearchMatch>> {
+        match resp.unwrap() {
+            ProxyResponse::GlobalSearchResponse { matches } => matches,
+            other => panic!("unexpected response: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn basic_case_sensitive_search() {
+        let (_dir, files) = setup_search_dir();
+        let id = AtomicU64::new(1);
+
+        let matches = extract_matches(search_in_path(
+            1,
+            &id,
+            files.into_iter(),
+            "Hello",
+            true,
+            false,
+            false,
+        ));
+
+        // Only hello.txt should match (case-sensitive "Hello")
+        assert_eq!(matches.len(), 1);
+        let file_matches = matches.values().next().unwrap();
+        assert_eq!(file_matches.len(), 2); // "Hello World" and "Hello Again"
+        assert_eq!(file_matches[0].line, 1);
+        assert_eq!(file_matches[1].line, 3);
+    }
+
+    #[test]
+    fn case_insensitive_search() {
+        let (_dir, files) = setup_search_dir();
+        let id = AtomicU64::new(1);
+
+        let matches = extract_matches(search_in_path(
+            1,
+            &id,
+            files.into_iter(),
+            "hello",
+            false, // case insensitive
+            false,
+            false,
+        ));
+
+        // Both hello.txt and test.rs have "hello" (case insensitive)
+        assert_eq!(matches.len(), 2);
+    }
+
+    #[test]
+    fn whole_word_search() {
+        let (_dir, files) = setup_search_dir();
+        let id = AtomicU64::new(1);
+
+        let matches = extract_matches(search_in_path(
+            1,
+            &id,
+            files.into_iter(),
+            "foo",
+            true,
+            true, // whole word
+            false,
+        ));
+
+        assert_eq!(matches.len(), 1);
+        let file_matches = matches.values().next().unwrap();
+        assert_eq!(file_matches.len(), 1);
+        assert_eq!(file_matches[0].line, 2);
+        assert!(file_matches[0].line_content.contains("foo"));
+    }
+
+    #[test]
+    fn regex_search() {
+        let (_dir, files) = setup_search_dir();
+        let id = AtomicU64::new(1);
+
+        let matches = extract_matches(search_in_path(
+            1,
+            &id,
+            files.into_iter(),
+            r"fn\s+\w+",
+            true,
+            false,
+            true, // regex
+        ));
+
+        // test.rs has "fn main"
+        assert_eq!(matches.len(), 1);
+        let file_matches = matches.values().next().unwrap();
+        assert_eq!(file_matches.len(), 1);
+        assert!(file_matches[0].line_content.contains("fn main"));
+    }
+
+    #[test]
+    fn no_matches_returns_empty() {
+        let (_dir, files) = setup_search_dir();
+        let id = AtomicU64::new(1);
+
+        let matches = extract_matches(search_in_path(
+            1,
+            &id,
+            files.into_iter(),
+            "nonexistent_pattern_xyz",
+            true,
+            false,
+            false,
+        ));
+
+        assert!(matches.is_empty());
+    }
+
+    #[test]
+    fn invalid_regex_returns_error() {
+        let (_dir, files) = setup_search_dir();
+        let id = AtomicU64::new(1);
+
+        let result = search_in_path(
+            1,
+            &id,
+            files.into_iter(),
+            "[invalid regex",
+            true,
+            false,
+            true, // regex mode
+        );
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn cancelled_search_returns_error() {
+        let (_dir, files) = setup_search_dir();
+        // Set current_id to a different value than the search id
+        let id = AtomicU64::new(999);
+
+        let result = search_in_path(
+            1, // id != current_id
+            &id,
+            files.into_iter(),
+            "Hello",
+            true,
+            false,
+            false,
+        );
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn skips_directories() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("test.txt");
+        std::fs::write(&file, "match\n").unwrap();
+        let subdir = dir.path().join("subdir");
+        std::fs::create_dir(&subdir).unwrap();
+
+        let id = AtomicU64::new(1);
+        let paths = vec![file.clone(), subdir];
+
+        let matches = extract_matches(search_in_path(
+            1,
+            &id,
+            paths.into_iter(),
+            "match",
+            true,
+            false,
+            false,
+        ));
+
+        // Only the file should match, not the directory
+        assert_eq!(matches.len(), 1);
+        assert!(matches.contains_key(&file));
+    }
+
+    #[test]
+    fn match_offsets_are_correct() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("offsets.txt");
+        std::fs::write(&file, "abcHELLOxyz\n").unwrap();
+
+        let id = AtomicU64::new(1);
+
+        let matches = extract_matches(search_in_path(
+            1,
+            &id,
+            vec![file].into_iter(),
+            "HELLO",
+            true,
+            false,
+            false,
+        ));
+
+        let file_matches = matches.values().next().unwrap();
+        assert_eq!(file_matches[0].start, 3);
+        assert_eq!(file_matches[0].end, 8);
+    }
+
+    #[test]
+    fn long_line_truncation() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("long.txt");
+        // Create a line > 200 chars with a match in the middle
+        let prefix = "a".repeat(150);
+        let suffix = "b".repeat(150);
+        let line = format!("{prefix}MATCH{suffix}\n");
+        std::fs::write(&file, &line).unwrap();
+
+        let id = AtomicU64::new(1);
+
+        let matches = extract_matches(search_in_path(
+            1,
+            &id,
+            vec![file].into_iter(),
+            "MATCH",
+            true,
+            false,
+            false,
+        ));
+
+        let file_matches = matches.values().next().unwrap();
+        // The line_content should be truncated (shorter than the original line)
+        assert!(file_matches[0].line_content.len() < line.len());
+        // But should still contain the match
+        assert!(file_matches[0].line_content.contains("MATCH"));
+    }
+
+    #[test]
+    fn empty_file_no_matches() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("empty.txt");
+        std::fs::write(&file, "").unwrap();
+
+        let id = AtomicU64::new(1);
+
+        let matches = extract_matches(search_in_path(
+            1,
+            &id,
+            vec![file].into_iter(),
+            "anything",
+            true,
+            false,
+            false,
+        ));
+
+        assert!(matches.is_empty());
+    }
+
+    #[test]
+    fn empty_paths_iterator() {
+        let id = AtomicU64::new(1);
+
+        let matches = extract_matches(search_in_path(
+            1,
+            &id,
+            std::iter::empty(),
+            "anything",
+            true,
+            false,
+            false,
+        ));
+
+        assert!(matches.is_empty());
+    }
+
+    #[test]
+    fn multiple_matches_per_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("multi.txt");
+        std::fs::write(&file, "aaa\nbbb\naaa\nbbb\naaa\n").unwrap();
+
+        let id = AtomicU64::new(1);
+
+        let matches = extract_matches(search_in_path(
+            1,
+            &id,
+            vec![file].into_iter(),
+            "aaa",
+            true,
+            false,
+            false,
+        ));
+
+        let file_matches = matches.values().next().unwrap();
+        assert_eq!(file_matches.len(), 3);
+        assert_eq!(file_matches[0].line, 1);
+        assert_eq!(file_matches[1].line, 3);
+        assert_eq!(file_matches[2].line, 5);
+    }
+}

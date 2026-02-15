@@ -32,3 +32,81 @@ impl EditorPosition {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use lapce_core::buffer::rope_text::RopeTextRef;
+    use lapce_xi_rope::Rope;
+
+    #[test]
+    fn offset_variant_returns_directly() {
+        let rope = Rope::from("hello world");
+        let rt = RopeTextRef::new(&rope);
+        let pos = EditorPosition::Offset(5);
+        assert_eq!(pos.to_offset(&rt), 5);
+    }
+
+    #[test]
+    fn offset_variant_zero() {
+        let rope = Rope::from("abc");
+        let rt = RopeTextRef::new(&rope);
+        assert_eq!(EditorPosition::Offset(0).to_offset(&rt), 0);
+    }
+
+    #[test]
+    fn position_variant_first_line() {
+        let rope = Rope::from("hello\nworld");
+        let rt = RopeTextRef::new(&rope);
+        let pos = EditorPosition::Position(Position {
+            line: 0,
+            character: 3,
+        });
+        assert_eq!(pos.to_offset(&rt), 3);
+    }
+
+    #[test]
+    fn position_variant_second_line() {
+        let rope = Rope::from("hello\nworld");
+        let rt = RopeTextRef::new(&rope);
+        let pos = EditorPosition::Position(Position {
+            line: 1,
+            character: 2,
+        });
+        // Line 1 starts at offset 6, character 2 => offset 8
+        assert_eq!(pos.to_offset(&rt), 8);
+    }
+
+    #[test]
+    fn line_variant_no_indentation() {
+        let rope = Rope::from("hello\nworld");
+        let rt = RopeTextRef::new(&rope);
+        let pos = EditorPosition::Line(0);
+        // first_non_blank_character_on_line(0) => 0
+        assert_eq!(pos.to_offset(&rt), 0);
+    }
+
+    #[test]
+    fn line_variant_with_indentation() {
+        let rope = Rope::from("    hello\nworld");
+        let rt = RopeTextRef::new(&rope);
+        let pos = EditorPosition::Line(0);
+        // first_non_blank_character_on_line(0) => 4 (skips spaces)
+        assert_eq!(pos.to_offset(&rt), 4);
+    }
+
+    #[test]
+    fn line_variant_second_line_indented() {
+        let rope = Rope::from("hello\n  world");
+        let rt = RopeTextRef::new(&rope);
+        let pos = EditorPosition::Line(1);
+        // Line 1 starts at 6, first non-blank at offset 8
+        assert_eq!(pos.to_offset(&rt), 8);
+    }
+
+    #[test]
+    fn editor_position_equality() {
+        assert_eq!(EditorPosition::Offset(5), EditorPosition::Offset(5));
+        assert_ne!(EditorPosition::Offset(5), EditorPosition::Line(5));
+    }
+}

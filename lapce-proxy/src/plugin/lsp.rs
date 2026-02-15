@@ -542,3 +542,144 @@ pub fn read_message<T: BufRead>(reader: &mut T) -> Result<String> {
     let body = String::from_utf8(body_buffer)?;
     Ok(body)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Cursor;
+
+    // ── parse_header ──
+
+    #[test]
+    fn parse_header_content_length() {
+        match parse_header("Content-Length: 42").unwrap() {
+            LspHeader::ContentLength(len) => assert_eq!(len, 42),
+            LspHeader::ContentType => panic!("expected ContentLength"),
+        }
+    }
+
+    #[test]
+    fn parse_header_content_length_case_insensitive() {
+        match parse_header("CONTENT-LENGTH: 100").unwrap() {
+            LspHeader::ContentLength(len) => assert_eq!(len, 100),
+            LspHeader::ContentType => panic!("expected ContentLength"),
+        }
+    }
+
+    #[test]
+    fn parse_header_content_type() {
+        match parse_header("Content-Type: application/json").unwrap() {
+            LspHeader::ContentType => {} // expected
+            LspHeader::ContentLength(_) => panic!("expected ContentType"),
+        }
+    }
+
+    #[test]
+    fn parse_header_content_type_case_insensitive() {
+        match parse_header("content-type: utf-8").unwrap() {
+            LspHeader::ContentType => {} // expected
+            LspHeader::ContentLength(_) => panic!("expected ContentType"),
+        }
+    }
+
+    #[test]
+    fn parse_header_malformed_no_colon() {
+        assert!(parse_header("malformed").is_err());
+    }
+
+    #[test]
+    fn parse_header_unknown_header() {
+        assert!(parse_header("X-Custom: value").is_err());
+    }
+
+    #[test]
+    fn parse_header_empty_string() {
+        assert!(parse_header("").is_err());
+    }
+
+    #[test]
+    fn parse_header_invalid_content_length() {
+        assert!(parse_header("Content-Length: abc").is_err());
+    }
+
+    #[test]
+    fn parse_header_whitespace_trimmed() {
+        match parse_header("  Content-Length  :  256  ").unwrap() {
+            LspHeader::ContentLength(len) => assert_eq!(len, 256),
+            LspHeader::ContentType => panic!("expected ContentLength"),
+        }
+    }
+
+    // ── read_message ──
+
+    #[test]
+    fn read_message_simple() {
+        let body = r#"{"jsonrpc":"2.0"}"#;
+        let msg = format!("Content-Length: {}\r\n\r\n{}", body.len(), body);
+        let mut reader = Cursor::new(msg.into_bytes());
+        let result = read_message(&mut reader).unwrap();
+        assert_eq!(result, body);
+    }
+
+    #[test]
+    fn read_message_with_content_type_header() {
+        let body = r#"{"id":1}"#;
+        let msg = format!(
+            "Content-Length: {}\r\nContent-Type: application/json\r\n\r\n{}",
+            body.len(),
+            body
+        );
+        let mut reader = Cursor::new(msg.into_bytes());
+        let result = read_message(&mut reader).unwrap();
+        assert_eq!(result, body);
+    }
+
+    #[test]
+    fn read_message_missing_content_length() {
+        let msg = "Content-Type: application/json\r\n\r\n{}";
+        let mut reader = Cursor::new(msg.as_bytes().to_vec());
+        assert!(read_message(&mut reader).is_err());
+    }
+
+    #[test]
+    fn read_message_empty_input() {
+        let mut reader = Cursor::new(Vec::new());
+        // Empty input has no content-length header
+        assert!(read_message(&mut reader).is_err());
+    }
+
+    #[test]
+    fn read_message_large_body() {
+        let body = "a".repeat(1000);
+        let msg = format!("Content-Length: {}\r\n\r\n{}", body.len(), body);
+        let mut reader = Cursor::new(msg.into_bytes());
+        let result = read_message(&mut reader).unwrap();
+        assert_eq!(result, body);
+    }
+
+    #[test]
+    fn read_message_unicode_body() {
+        let body = r#"{"result":"こんにちは"}"#;
+        let msg = format!("Content-Length: {}\r\n\r\n{}", body.len(), body);
+        let mut reader = Cursor::new(msg.into_bytes());
+        let result = read_message(&mut reader).unwrap();
+        assert_eq!(result, body);
+    }
+
+    #[test]
+    fn read_message_content_length_zero() {
+        let msg = "Content-Length: 0\r\n\r\n";
+        let mut reader = Cursor::new(msg.as_bytes().to_vec());
+        let result = read_message(&mut reader).unwrap();
+        assert_eq!(result, "");
+    }
+
+    #[test]
+    fn read_message_headers_case_insensitive() {
+        let body = "hello";
+        let msg = format!("CONTENT-LENGTH: {}\r\n\r\n{}", body.len(), body);
+        let mut reader = Cursor::new(msg.into_bytes());
+        let result = read_message(&mut reader).unwrap();
+        assert_eq!(result, body);
+    }
+}

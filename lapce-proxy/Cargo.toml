@@ -64,3 +64,6 @@ git = "https://github.com/lapce/wasi-experimental-http"
 [target.'cfg(target_os = "macos")'.dependencies.locale_config]
 git    = "https://github.com/lapce/locale_config.git"
 branch = "lapce"
+
+[dev-dependencies]
+tempfile = { workspace = true }

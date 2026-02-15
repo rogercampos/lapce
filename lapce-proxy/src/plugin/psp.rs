@@ -1421,3 +1421,302 @@ fn semantic_tokens_legend(
         ) => &options.semantic_tokens_options.legend,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use lsp_types::{
+        SemanticToken, SemanticTokensFullOptions, SemanticTokensOptions,
+        SemanticTokensRegistrationOptions, StaticRegistrationOptions,
+        TextDocumentRegistrationOptions,
+    };
+
+    fn make_legend(types: Vec<&'static str>) -> SemanticTokensLegend {
+        SemanticTokensLegend {
+            token_types: types
+                .into_iter()
+                .map(lsp_types::SemanticTokenType::new)
+                .collect(),
+            token_modifiers: vec![],
+        }
+    }
+
+    fn make_options_provider(
+        types: Vec<&'static str>,
+    ) -> SemanticTokensServerCapabilities {
+        SemanticTokensServerCapabilities::SemanticTokensOptions(
+            SemanticTokensOptions {
+                legend: make_legend(types),
+                full: Some(SemanticTokensFullOptions::Bool(true)),
+                ..Default::default()
+            },
+        )
+    }
+
+    fn make_registration_provider(
+        types: Vec<&'static str>,
+    ) -> SemanticTokensServerCapabilities {
+        SemanticTokensServerCapabilities::SemanticTokensRegistrationOptions(
+            SemanticTokensRegistrationOptions {
+                text_document_registration_options:
+                    TextDocumentRegistrationOptions {
+                        document_selector: None,
+                    },
+                semantic_tokens_options: SemanticTokensOptions {
+                    legend: make_legend(types),
+                    full: Some(SemanticTokensFullOptions::Bool(true)),
+                    ..Default::default()
+                },
+                static_registration_options: StaticRegistrationOptions { id: None },
+            },
+        )
+    }
+
+    fn tok(
+        delta_line: u32,
+        delta_start: u32,
+        length: u32,
+        token_type: u32,
+    ) -> SemanticToken {
+        SemanticToken {
+            delta_line,
+            delta_start,
+            length,
+            token_type,
+            token_modifiers_bitset: 0,
+        }
+    }
+
+    // ── semantic_tokens_legend ──
+
+    #[test]
+    fn legend_from_options_variant() {
+        let provider = make_options_provider(vec!["keyword", "variable"]);
+        let legend = semantic_tokens_legend(&provider);
+        assert_eq!(legend.token_types.len(), 2);
+        assert_eq!(legend.token_types[0].as_str(), "keyword");
+        assert_eq!(legend.token_types[1].as_str(), "variable");
+    }
+
+    #[test]
+    fn legend_from_registration_variant() {
+        let provider = make_registration_provider(vec!["function", "type"]);
+        let legend = semantic_tokens_legend(&provider);
+        assert_eq!(legend.token_types.len(), 2);
+        assert_eq!(legend.token_types[0].as_str(), "function");
+        assert_eq!(legend.token_types[1].as_str(), "type");
+    }
+
+    // ── format_semantic_styles ──
+
+    #[test]
+    fn format_returns_none_when_provider_is_none() {
+        let text = Rope::from("hello");
+        let tokens = SemanticTokens {
+            result_id: None,
+            data: vec![],
+        };
+        let result = format_semantic_styles(&text, None, &tokens);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn format_empty_tokens_returns_empty_vec() {
+        let text = Rope::from("hello world");
+        let provider = make_options_provider(vec!["keyword"]);
+        let tokens = SemanticTokens {
+            result_id: None,
+            data: vec![],
+        };
+        let result =
+            format_semantic_styles(&text, Some(&provider), &tokens).unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn format_single_token_on_first_line() {
+        // "hello world"
+        //  ^^^^^  = token_type 0, length 5
+        let text = Rope::from("hello world");
+        let provider = make_options_provider(vec!["keyword"]);
+        let tokens = SemanticTokens {
+            result_id: None,
+            data: vec![tok(0, 0, 5, 0)],
+        };
+        let result =
+            format_semantic_styles(&text, Some(&provider), &tokens).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].start, 0);
+        assert_eq!(result[0].end, 5);
+        assert_eq!(result[0].style.fg_color.as_deref(), Some("keyword"));
+    }
+
+    #[test]
+    fn format_two_tokens_same_line() {
+        // "let foo = 42"
+        //  ^^^           = keyword (0..3)
+        //      ^^^       = variable (4..7)
+        let text = Rope::from("let foo = 42");
+        let provider = make_options_provider(vec!["keyword", "variable"]);
+        let tokens = SemanticTokens {
+            result_id: None,
+            data: vec![
+                tok(0, 0, 3, 0), // "let"
+                tok(0, 4, 3, 1), // "foo" — delta_start=4 from "let" start
+            ],
+        };
+        let result =
+            format_semantic_styles(&text, Some(&provider), &tokens).unwrap();
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].start, 0);
+        assert_eq!(result[0].end, 3);
+        assert_eq!(result[0].style.fg_color.as_deref(), Some("keyword"));
+        assert_eq!(result[1].start, 4);
+        assert_eq!(result[1].end, 7);
+        assert_eq!(result[1].style.fg_color.as_deref(), Some("variable"));
+    }
+
+    #[test]
+    fn format_tokens_across_lines() {
+        // line 0: "fn main() {"
+        // line 1: "    return 42;"
+        // line 2: "}"
+        let text = Rope::from("fn main() {\n    return 42;\n}");
+        let provider = make_options_provider(vec!["keyword", "function", "number"]);
+        let tokens = SemanticTokens {
+            result_id: None,
+            data: vec![
+                tok(0, 0, 2, 0), // "fn" at line 0 col 0
+                tok(0, 3, 4, 1), // "main" at line 0 col 3
+                tok(1, 4, 6, 0), // "return" at line 1 col 4
+                tok(0, 7, 2, 2), // "42" at line 1 col 11
+            ],
+        };
+        let result =
+            format_semantic_styles(&text, Some(&provider), &tokens).unwrap();
+        assert_eq!(result.len(), 4);
+
+        // "fn" at byte 0..2
+        assert_eq!(result[0].start, 0);
+        assert_eq!(result[0].end, 2);
+        assert_eq!(result[0].style.fg_color.as_deref(), Some("keyword"));
+
+        // "main" at byte 3..7
+        assert_eq!(result[1].start, 3);
+        assert_eq!(result[1].end, 7);
+        assert_eq!(result[1].style.fg_color.as_deref(), Some("function"));
+
+        // "return" at line 1, col 4 → byte offset 12 + 4 = 16..22
+        assert_eq!(result[2].start, 16);
+        assert_eq!(result[2].end, 22);
+        assert_eq!(result[2].style.fg_color.as_deref(), Some("keyword"));
+
+        // "42" at line 1, col 11 → byte offset 12 + 11 = 23..25
+        assert_eq!(result[3].start, 23);
+        assert_eq!(result[3].end, 25);
+        assert_eq!(result[3].style.fg_color.as_deref(), Some("number"));
+    }
+
+    #[test]
+    fn format_with_multibyte_utf8() {
+        // "let α = 1" — α is 2 bytes UTF-8, 1 UTF-16 code unit
+        // We want to highlight "α" (token at col 4, length 1 in UTF-16)
+        let text = Rope::from("let α = 1");
+        let provider = make_options_provider(vec!["variable"]);
+        let tokens = SemanticTokens {
+            result_id: None,
+            data: vec![tok(0, 4, 1, 0)], // UTF-16 col 4, length 1
+        };
+        let result =
+            format_semantic_styles(&text, Some(&provider), &tokens).unwrap();
+        assert_eq!(result.len(), 1);
+        // "α" starts at byte 4 (after "let "), occupies 2 bytes
+        assert_eq!(result[0].start, 4);
+        assert_eq!(result[0].end, 6); // 4 + 2 bytes for α
+    }
+
+    #[test]
+    fn format_with_emoji_surrogate_pair() {
+        // "x 🎉 y"
+        // 🎉 is 4 bytes in UTF-8, 2 UTF-16 code units
+        // "x" at col 0, "🎉" at col 2, "y" at col 5
+        let text = Rope::from("x 🎉 y");
+        let provider = make_options_provider(vec!["variable"]);
+        // Highlight "y" — UTF-16 col is 2 (x_) + 2 (🎉) + 1 ( ) = 5
+        let tokens = SemanticTokens {
+            result_id: None,
+            data: vec![tok(0, 5, 1, 0)],
+        };
+        let result =
+            format_semantic_styles(&text, Some(&provider), &tokens).unwrap();
+        assert_eq!(result.len(), 1);
+        // "y" at byte offset: 1(x) + 1( ) + 4(🎉) + 1( ) = 7
+        assert_eq!(result[0].start, 7);
+        assert_eq!(result[0].end, 8);
+    }
+
+    #[test]
+    fn format_normal_multiline_not_skipped() {
+        // Verify tokens across lines are not incorrectly skipped.
+        // line 0: "aaaaaaaaaa" (10 chars)
+        // line 1: "b"
+        let text = Rope::from("aaaaaaaaaa\nb");
+        let provider = make_options_provider(vec!["a", "b"]);
+        let tokens = SemanticTokens {
+            result_id: None,
+            data: vec![
+                tok(0, 8, 2, 0), // "aa" at bytes 8..10 on line 0
+                tok(1, 0, 1, 1), // "b" at line 1, col 0 → byte 11
+            ],
+        };
+        let result =
+            format_semantic_styles(&text, Some(&provider), &tokens).unwrap();
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].start, 8);
+        assert_eq!(result[0].end, 10);
+        assert_eq!(result[1].start, 11);
+        assert_eq!(result[1].end, 12);
+    }
+
+    #[test]
+    fn format_multiple_token_types() {
+        let text = Rope::from("fn add(a: i32) -> i32 {}");
+        let types = vec!["keyword", "function", "parameter", "type"];
+        let provider = make_options_provider(types);
+        let tokens = SemanticTokens {
+            result_id: None,
+            data: vec![
+                tok(0, 0, 2, 0), // "fn"
+                tok(0, 3, 3, 1), // "add"
+                tok(0, 4, 1, 2), // "a"
+                tok(0, 3, 3, 3), // "i32" (first)
+                tok(0, 8, 3, 3), // "i32" (second)
+            ],
+        };
+        let result =
+            format_semantic_styles(&text, Some(&provider), &tokens).unwrap();
+        assert_eq!(result.len(), 5);
+
+        assert_eq!(result[0].style.fg_color.as_deref(), Some("keyword"));
+        assert_eq!(result[1].style.fg_color.as_deref(), Some("function"));
+        assert_eq!(result[2].style.fg_color.as_deref(), Some("parameter"));
+        assert_eq!(result[3].style.fg_color.as_deref(), Some("type"));
+        assert_eq!(result[4].style.fg_color.as_deref(), Some("type"));
+    }
+
+    #[test]
+    fn format_with_registration_options_variant() {
+        let text = Rope::from("hello");
+        let provider = make_registration_provider(vec!["string"]);
+        let tokens = SemanticTokens {
+            result_id: None,
+            data: vec![tok(0, 0, 5, 0)],
+        };
+        let result =
+            format_semantic_styles(&text, Some(&provider), &tokens).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].start, 0);
+        assert_eq!(result[0].end, 5);
+        assert_eq!(result[0].style.fg_color.as_deref(), Some("string"));
+    }
+}

@@ -527,6 +527,286 @@ impl Find {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn search(
+        text: &str,
+        pattern: &str,
+        case_matching: CaseMatching,
+        whole_words: bool,
+        is_regex: bool,
+    ) -> Vec<(usize, usize)> {
+        let rope = Rope::from(text);
+        let regex = if is_regex {
+            RegexBuilder::new(pattern)
+                .size_limit(REGEX_SIZE_LIMIT)
+                .case_insensitive(matches!(
+                    case_matching,
+                    CaseMatching::CaseInsensitive
+                ))
+                .build()
+                .ok()
+        } else {
+            None
+        };
+        let search = FindSearchString {
+            content: pattern.to_string(),
+            regex,
+        };
+        let mut occurrences = Selection::new();
+        Find::find(
+            &rope,
+            &search,
+            0,
+            rope.len(),
+            case_matching,
+            whole_words,
+            false,
+            &mut occurrences,
+        );
+        occurrences
+            .regions()
+            .iter()
+            .map(|r| (r.start, r.end))
+            .collect()
+    }
+
+    // ----- Find::find() static method -----
+
+    #[test]
+    fn find_simple_literal() {
+        let results =
+            search("hello world", "world", CaseMatching::Exact, false, false);
+        assert_eq!(results, vec![(6, 11)]);
+    }
+
+    #[test]
+    fn find_multiple_occurrences() {
+        let results = search("abcabc", "abc", CaseMatching::Exact, false, false);
+        assert_eq!(results, vec![(0, 3), (3, 6)]);
+    }
+
+    #[test]
+    fn find_no_match() {
+        let results =
+            search("hello world", "xyz", CaseMatching::Exact, false, false);
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn find_case_insensitive() {
+        let results = search(
+            "Hello HELLO hello",
+            "hello",
+            CaseMatching::CaseInsensitive,
+            false,
+            false,
+        );
+        assert_eq!(results.len(), 3);
+    }
+
+    #[test]
+    fn find_case_sensitive() {
+        let results = search(
+            "Hello HELLO hello",
+            "hello",
+            CaseMatching::Exact,
+            false,
+            false,
+        );
+        assert_eq!(results, vec![(12, 17)]);
+    }
+
+    #[test]
+    fn find_whole_words_only() {
+        let results = search(
+            "cat concatenate caterpillar cat",
+            "cat",
+            CaseMatching::Exact,
+            true,
+            false,
+        );
+        // Only standalone "cat" matches, not "concatenate" or "caterpillar"
+        assert_eq!(results, vec![(0, 3), (28, 31)]);
+    }
+
+    #[test]
+    fn find_regex_pattern() {
+        let results = search(
+            "foo123 bar456 baz",
+            r"\d+",
+            CaseMatching::Exact,
+            false,
+            true,
+        );
+        assert_eq!(results, vec![(3, 6), (10, 13)]);
+    }
+
+    #[test]
+    fn find_regex_case_insensitive() {
+        let results = search(
+            "Foo foo FOO",
+            "foo",
+            CaseMatching::CaseInsensitive,
+            false,
+            true,
+        );
+        assert_eq!(results.len(), 3);
+    }
+
+    #[test]
+    fn find_empty_text() {
+        let results = search("", "hello", CaseMatching::Exact, false, false);
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn find_at_boundaries() {
+        let results = search("abc", "abc", CaseMatching::Exact, false, false);
+        assert_eq!(results, vec![(0, 3)]);
+    }
+
+    #[test]
+    fn find_multiline() {
+        let results = search(
+            "line1\nline2\nline3",
+            "line",
+            CaseMatching::Exact,
+            false,
+            false,
+        );
+        assert_eq!(results, vec![(0, 4), (6, 10), (12, 16)]);
+    }
+
+    #[test]
+    fn find_with_slop_includes_boundary_matches() {
+        let rope = Rope::from("hello world hello");
+        let search = FindSearchString {
+            content: "hello".to_string(),
+            regex: None,
+        };
+        let mut occurrences = Selection::new();
+        // Search a middle range with slop enabled
+        Find::find(
+            &rope,
+            &search,
+            5,
+            12,
+            CaseMatching::Exact,
+            false,
+            true, // include_slop
+            &mut occurrences,
+        );
+        let results: Vec<(usize, usize)> = occurrences
+            .regions()
+            .iter()
+            .map(|r| (r.start, r.end))
+            .collect();
+        // With slop, the search range expands to catch matches near boundaries
+        assert!(results.contains(&(0, 5)));
+        assert!(results.contains(&(12, 17)));
+    }
+
+    #[test]
+    fn find_overlapping_pattern_first_wins() {
+        // "aba" in "ababa" — ambiguous match, first occurrence wins
+        let results = search("ababa", "aba", CaseMatching::Exact, false, false);
+        assert_eq!(results, vec![(0, 3)]);
+    }
+
+    #[test]
+    fn find_unicode_text() {
+        let results = search(
+            "café résumé café",
+            "café",
+            CaseMatching::Exact,
+            false,
+            false,
+        );
+        assert_eq!(results.len(), 2);
+    }
+
+    // ----- is_matching_whole_words -----
+
+    #[test]
+    fn whole_words_standalone_word() {
+        let rope = Rope::from("hello world");
+        assert!(Find::is_matching_whole_words(&rope, 0, 5)); // "hello"
+        assert!(Find::is_matching_whole_words(&rope, 6, 11)); // "world"
+    }
+
+    #[test]
+    fn whole_words_not_at_word_boundary() {
+        let rope = Rope::from("caterpillar");
+        assert!(!Find::is_matching_whole_words(&rope, 0, 3)); // "cat" is not a whole word
+    }
+
+    #[test]
+    fn whole_words_with_punctuation_boundary() {
+        let rope = Rope::from("hello,world");
+        assert!(Find::is_matching_whole_words(&rope, 0, 5)); // "hello" with comma after
+        assert!(Find::is_matching_whole_words(&rope, 6, 11)); // "world" with comma before
+    }
+
+    // ----- Find::find() with regex edge cases -----
+
+    #[test]
+    fn find_regex_zero_length_match_advances() {
+        // a* matches empty strings — the search should not loop infinitely
+        let results = search("abc", "a*", CaseMatching::Exact, false, true);
+        // Should get matches without hanging
+        assert!(!results.is_empty());
+    }
+
+    #[test]
+    fn find_whole_words_with_regex() {
+        let results = search(
+            "cat concatenate cat",
+            "cat",
+            CaseMatching::Exact,
+            true,
+            true, // regex mode
+        );
+        // Only standalone "cat" matches
+        assert_eq!(results, vec![(0, 3), (16, 19)]);
+    }
+
+    #[test]
+    fn find_single_char_pattern() {
+        let results = search("aaa", "a", CaseMatching::Exact, false, false);
+        assert_eq!(results, vec![(0, 1), (1, 2), (2, 3)]);
+    }
+
+    #[test]
+    fn find_without_slop_exact_range() {
+        let rope = Rope::from("abcdefghij");
+        let search = FindSearchString {
+            content: "abc".to_string(),
+            regex: None,
+        };
+        let mut occurrences = Selection::new();
+        // Search only in range 3..10, should not find "abc" at offset 0
+        Find::find(
+            &rope,
+            &search,
+            3,
+            10,
+            CaseMatching::Exact,
+            false,
+            false,
+            &mut occurrences,
+        );
+        let results: Vec<(usize, usize)> = occurrences
+            .regions()
+            .iter()
+            .map(|r| (r.start, r.end))
+            .collect();
+        assert!(results.is_empty());
+    }
+}
+
 /// Per-document find results. Each open document has its own FindResult which stores
 /// the computed match occurrences. The `progress` signal tracks incremental search state
 /// so the editor can show partial results while a large document is still being searched.
