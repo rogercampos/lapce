@@ -26,8 +26,8 @@ use self::{
     kind::PaletteKind,
 };
 use crate::{
-    command::{CommandExecuted, CommandKind, InternalCommand},
-    editor::{EditorData, EditorViewKind, location::EditorLocation},
+    command::{CommandExecuted, CommandKind},
+    editor::EditorData,
     keypress::{KeyPressFocus, condition::Condition},
     main_split::MainSplitData,
     workspace::LapceWorkspace,
@@ -80,12 +80,9 @@ pub struct PaletteData {
     pub input: RwSignal<PaletteInput>,
     kind: RwSignal<PaletteKind>,
     pub input_editor: EditorData,
-    pub preview_editor: EditorData,
-    pub has_preview: RwSignal<bool>,
     /// Listened on for which entry in the palette has been clicked
     pub clicked_index: RwSignal<Option<usize>>,
     pub main_split: MainSplitData,
-    pub references: RwSignal<Vec<EditorLocation>>,
     pub common: Rc<CommonData>,
 }
 
@@ -106,16 +103,12 @@ impl PaletteData {
         let items = cx.create_rw_signal(im::Vector::new());
         let preselect_index = cx.create_rw_signal(None);
         let index = cx.create_rw_signal(0);
-        let references = cx.create_rw_signal(Vec::new());
         let input = cx.create_rw_signal(PaletteInput {
             input: "".to_string(),
-            kind: PaletteKind::Reference,
+            kind: PaletteKind::Language,
         });
-        let kind = cx.create_rw_signal(PaletteKind::Reference);
+        let kind = cx.create_rw_signal(PaletteKind::Language);
         let input_editor = main_split.editors.make_local(cx, common.clone());
-        let preview_editor = main_split.editors.make_local(cx, common.clone());
-        preview_editor.kind.set(EditorViewKind::Preview);
-        let has_preview = cx.create_rw_signal(false);
         let run_id = cx.create_rw_signal(0);
         let run_id_counter = Arc::new(AtomicU64::new(0));
 
@@ -218,12 +211,9 @@ impl PaletteData {
             items,
             filtered_items,
             input_editor,
-            preview_editor,
-            has_preview,
             input,
             kind,
             clicked_index,
-            references,
             common,
         };
 
@@ -291,14 +281,6 @@ impl PaletteData {
         {
             let palette = palette.clone();
             cx.create_effect(move |_| {
-                let _ = palette.index.get();
-                palette.preview();
-            });
-        }
-
-        {
-            let palette = palette.clone();
-            cx.create_effect(move |_| {
                 let focus = palette.common.focus.get();
                 if focus != Focus::Palette
                     && palette.status.get_untracked() != PaletteStatus::Inactive
@@ -330,15 +312,10 @@ impl PaletteData {
     /// Execute the internal behavior of the palette for the given kind. This ignores updating and
     /// focusing the palette input.
     fn run_inner(&self, kind: PaletteKind) {
-        self.has_preview.set(false);
-
         let run_id = self.run_id_counter.fetch_add(1, Ordering::Relaxed) + 1;
         self.run_id.set(run_id);
 
         match kind {
-            PaletteKind::Reference => {
-                self.get_references();
-            }
             PaletteKind::Language => {
                 self.get_languages();
             }
@@ -346,34 +323,6 @@ impl PaletteData {
                 self.get_line_endings();
             }
         }
-    }
-
-    /// Initialize the list of references in the file, from the current editor location.
-    fn get_references(&self) {
-        let items = self
-            .references
-            .get_untracked()
-            .into_iter()
-            .map(|l| {
-                let full_path = l.path.clone();
-                let mut path = l.path.clone();
-                if let Some(workspace_path) = self.workspace.path.as_ref() {
-                    path = path
-                        .strip_prefix(workspace_path)
-                        .unwrap_or(&full_path)
-                        .to_path_buf();
-                }
-                let filter_text = path.to_str().unwrap_or("").to_string();
-                PaletteItem {
-                    content: PaletteItemContent::Reference { path, location: l },
-                    filter_text,
-                    score: 0,
-                    indices: vec![],
-                }
-            })
-            .collect();
-
-        self.items.set(items);
     }
 
     fn get_languages(&self) {
@@ -433,13 +382,6 @@ impl PaletteData {
         self.close();
         if let Some(item) = items.get(index) {
             match &item.content {
-                PaletteItemContent::Reference { location, .. } => {
-                    self.common.internal_command.send(
-                        InternalCommand::JumpToLocation {
-                            location: location.clone(),
-                        },
-                    );
-                }
                 PaletteItemContent::Language { name } => {
                     let editor = self.main_split.active_editor.get_untracked();
                     let doc = match editor {
@@ -474,36 +416,7 @@ impl PaletteData {
         }
     }
 
-    /// Update the preview for the currently active palette item, if it has one.
-    fn preview(&self) {
-        if self.status.get_untracked() == PaletteStatus::Inactive {
-            return;
-        }
-
-        let index = self.index.get_untracked();
-        let items = self.filtered_items.get_untracked();
-        if let Some(item) = items.get(index) {
-            match &item.content {
-                PaletteItemContent::Language { .. } => {}
-                PaletteItemContent::LineEnding { .. } => {}
-                PaletteItemContent::Reference { location, .. } => {
-                    self.has_preview.set(true);
-                    let (doc, new_doc) =
-                        self.main_split.get_doc(location.path.clone(), None);
-                    self.preview_editor.update_doc(doc);
-                    self.preview_editor.go_to_location(
-                        location.clone(),
-                        new_doc,
-                        None,
-                    );
-                }
-            }
-        }
-    }
-
     /// Cancel the palette, doing cleanup specific to the palette kind.
-    /// For theme pickers, canceling must revert the live preview back to the saved config,
-    /// which is why we reload the full config here.
     fn cancel(&self) {
         self.close();
     }
@@ -514,7 +427,6 @@ impl PaletteData {
         if self.common.focus.get_untracked() == Focus::Palette {
             self.common.focus.set(Focus::Workbench);
         }
-        self.has_preview.set(false);
         self.items.update(|items| items.clear());
         self.input_editor.doc().reload(Rope::from(""), true);
         self.input_editor

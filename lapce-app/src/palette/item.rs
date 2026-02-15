@@ -1,8 +1,4 @@
-use std::path::PathBuf;
-
 use lapce_core::line_ending::LineEnding;
-
-use crate::editor::location::EditorLocation;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct PaletteItem {
@@ -14,14 +10,6 @@ pub struct PaletteItem {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum PaletteItemContent {
-    Reference {
-        path: PathBuf,
-        location: EditorLocation,
-    },
-    Language {
-        name: String,
-    },
-    LineEnding {
-        kind: LineEnding,
-    },
+    Language { name: String },
+    LineEnding { kind: LineEnding },
 }
