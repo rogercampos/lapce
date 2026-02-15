@@ -14,10 +14,6 @@ pub struct PaletteItem {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum PaletteItemContent {
-    File {
-        path: PathBuf,
-        full_path: PathBuf,
-    },
     Reference {
         path: PathBuf,
         location: EditorLocation,

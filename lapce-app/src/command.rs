@@ -251,9 +251,9 @@ pub enum LapceWorkbenchCommand {
     #[strum(serialize = "go_to_line")]
     GoToLine,
 
-    #[strum(serialize = "palette")]
-    #[strum(message = "Go to File")]
-    Palette,
+    #[strum(serialize = "go_to_file")]
+    #[strum(message = "Go To File")]
+    GoToFile,
 
     #[strum(serialize = "toggle_maximized_panel")]
     ToggleMaximizedPanel,
@@ -518,7 +518,7 @@ mod tests {
         let cmds = lapce_internal_commands();
         // Spot-check known workbench commands
         assert!(cmds.contains_key("open_folder"));
-        assert!(cmds.contains_key("palette"));
+        assert!(cmds.contains_key("go_to_file"));
         assert!(cmds.contains_key("quit"));
         assert!(cmds.contains_key("new_file"));
         assert!(cmds.contains_key("zoom_in"));

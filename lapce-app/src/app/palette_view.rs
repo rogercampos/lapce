@@ -34,8 +34,7 @@ pub(super) fn palette_item(
     config: ReadSignal<Arc<LapceConfig>>,
 ) -> impl View + use<> {
     match &item.content {
-        PaletteItemContent::File { path, .. }
-        | PaletteItemContent::Reference { path, .. } => {
+        PaletteItemContent::Reference { path, .. } => {
             let file_name = path
                 .file_name()
                 .unwrap_or_default()

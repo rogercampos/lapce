@@ -15,6 +15,7 @@ pub mod file_icon;
 pub mod find;
 pub mod focus_text;
 pub mod global_search;
+pub mod go_to_file;
 pub mod go_to_line;
 pub mod hover;
 pub mod id;

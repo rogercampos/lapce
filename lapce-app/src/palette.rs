@@ -1,5 +1,4 @@
 use std::{
-    path::PathBuf,
     rc::Rc,
     sync::{
         Arc,
@@ -10,7 +9,7 @@ use std::{
 
 use anyhow::Result;
 use floem::{
-    ext_event::{create_ext_action, create_signal_from_channel},
+    ext_event::create_signal_from_channel,
     keyboard::Modifiers,
     reactive::{ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith},
 };
@@ -19,7 +18,6 @@ use lapce_core::{
     command::FocusCommand, language::LapceLanguage, line_ending::LineEnding,
     movement::Movement, selection::Selection, syntax::Syntax,
 };
-use lapce_rpc::proxy::ProxyResponse;
 use lapce_xi_rope::Rope;
 use nucleo::Utf32Str;
 
@@ -111,9 +109,9 @@ impl PaletteData {
         let references = cx.create_rw_signal(Vec::new());
         let input = cx.create_rw_signal(PaletteInput {
             input: "".to_string(),
-            kind: PaletteKind::File,
+            kind: PaletteKind::Reference,
         });
-        let kind = cx.create_rw_signal(PaletteKind::File);
+        let kind = cx.create_rw_signal(PaletteKind::Reference);
         let input_editor = main_split.editors.make_local(cx, common.clone());
         let preview_editor = main_split.editors.make_local(cx, common.clone());
         preview_editor.kind.set(EditorViewKind::Preview);
@@ -338,9 +336,6 @@ impl PaletteData {
         self.run_id.set(run_id);
 
         match kind {
-            PaletteKind::File => {
-                self.get_files();
-            }
             PaletteKind::Reference => {
                 self.get_references();
             }
@@ -351,42 +346,6 @@ impl PaletteData {
                 self.get_line_endings();
             }
         }
-    }
-
-    /// Initialize the palette with the files in the current workspace.
-    fn get_files(&self) {
-        let workspace = self.workspace.clone();
-        let set_items = self.items.write_only();
-        let send =
-            create_ext_action(self.common.scope, move |items: Vec<PathBuf>| {
-                let items = items
-                    .into_iter()
-                    .map(|full_path| {
-                        let path =
-                            if let Some(workspace_path) = workspace.path.as_ref() {
-                                full_path
-                                    .strip_prefix(workspace_path)
-                                    .unwrap_or(&full_path)
-                                    .to_path_buf()
-                            } else {
-                                full_path.clone()
-                            };
-                        let filter_text = path.to_string_lossy().into_owned();
-                        PaletteItem {
-                            content: PaletteItemContent::File { path, full_path },
-                            filter_text,
-                            score: 0,
-                            indices: Vec::new(),
-                        }
-                    })
-                    .collect::<im::Vector<_>>();
-                set_items.set(items);
-            });
-        self.common.proxy.get_files(move |result| {
-            if let Ok(ProxyResponse::GetFilesResponse { items }) = result {
-                send(items);
-            }
-        });
     }
 
     /// Initialize the list of references in the file, from the current editor location.
@@ -474,13 +433,6 @@ impl PaletteData {
         self.close();
         if let Some(item) = items.get(index) {
             match &item.content {
-                PaletteItemContent::File { full_path, .. } => {
-                    self.common
-                        .internal_command
-                        .send(InternalCommand::OpenFile {
-                            path: full_path.clone(),
-                        });
-                }
                 PaletteItemContent::Reference { location, .. } => {
                     self.common.internal_command.send(
                         InternalCommand::JumpToLocation {
@@ -532,7 +484,6 @@ impl PaletteData {
         let items = self.filtered_items.get_untracked();
         if let Some(item) = items.get(index) {
             match &item.content {
-                PaletteItemContent::File { .. } => {}
                 PaletteItemContent::Language { .. } => {}
                 PaletteItemContent::LineEnding { .. } => {}
                 PaletteItemContent::Reference { location, .. } => {

@@ -2,7 +2,7 @@
 
 [[keymaps]]
 key = "meta+shift+o"
-command = "palette"
+command = "go_to_file"
 
 [[keymaps]]
 key = "meta+e"

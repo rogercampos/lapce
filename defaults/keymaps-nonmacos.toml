@@ -2,7 +2,7 @@
 
 [[keymaps]]
 key = "ctrl+shift+n"
-command = "palette"
+command = "go_to_file"
 
 [[keymaps]]
 key = "ctrl+e"
