@@ -60,6 +60,7 @@ use crate::{
     file_explorer::data::FileExplorerData,
     find::Find,
     global_search::GlobalSearchData,
+    go_to_line::GoToLineData,
     hover::HoverData,
     id::WorkspaceId,
     inline_completion::InlineCompletionData,
@@ -96,6 +97,7 @@ pub enum Focus {
     AboutPopup,
     RecentFiles,
     SearchModal,
+    GoToLine,
     Panel(PanelKind),
 }
 
@@ -164,6 +166,7 @@ pub struct WorkspaceData {
     pub global_search: GlobalSearchData,
     pub search_modal_data: SearchModalData,
     pub about_data: AboutData,
+    pub go_to_line_data: GoToLineData,
     pub recent_files: RwSignal<Vec<PathBuf>>,
     pub recent_files_data: RecentFilesData,
     pub alert_data: AlertBoxData,
@@ -428,6 +431,8 @@ impl WorkspaceData {
         );
 
         let about_data = AboutData::new(cx, common.focus);
+        let go_to_line_data =
+            GoToLineData::new(cx, main_split.clone(), common.clone());
         let recent_files = cx.create_rw_signal(Vec::<PathBuf>::new());
         let recent_files_data = RecentFilesData::new(
             cx,
@@ -451,6 +456,7 @@ impl WorkspaceData {
             global_search,
             search_modal_data,
             about_data,
+            go_to_line_data,
             recent_files,
             recent_files_data,
             alert_data,
@@ -778,8 +784,8 @@ impl WorkspaceData {
             }
 
             // ==== Palette Commands ====
-            PaletteLine => {
-                self.palette.run(PaletteKind::Line);
+            GoToLine => {
+                self.go_to_line_data.open();
             }
             Palette => {
                 self.palette.run(PaletteKind::File);
@@ -1542,6 +1548,7 @@ impl WorkspaceData {
             Focus::SearchModal => {
                 Some(keypress.key_down(event, &self.search_modal_data))
             }
+            Focus::GoToLine => Some(keypress.key_down(event, &self.go_to_line_data)),
             Focus::Panel(PanelKind::Search) => {
                 Some(keypress.key_down(event, &self.global_search))
             }

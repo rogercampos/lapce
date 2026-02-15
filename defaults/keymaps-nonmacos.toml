@@ -165,7 +165,7 @@ command = "document_end"
 
 [[keymaps]]
 key = "ctrl+g"
-command = "palette.line"
+command = "go_to_line"
 
 # --------------------------------- RubyMine overrides ---------------------------------
 

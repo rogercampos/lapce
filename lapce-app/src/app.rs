@@ -46,6 +46,7 @@ use crate::{
     config::{LapceConfig, color::LapceColor, watcher::ConfigWatcher},
     db::LapceDb,
     editor::location::{EditorLocation, EditorPosition},
+    go_to_line,
     listener::Listener,
     panel::{position::PanelContainerPosition, view::panel_container_view},
     recent_files,
@@ -762,6 +763,7 @@ fn workspace_view(workspace_data: Rc<WorkspaceData>) -> impl View {
             palette_view::palette(workspace_data.clone()),
             crate::search_modal::search_modal_popup(workspace_data.clone()),
             recent_files::recent_files_popup(workspace_data.clone()),
+            go_to_line::go_to_line_popup(workspace_data.clone()),
             about::about_popup(workspace_data.clone()),
             alert::alert_box(workspace_data.alert_data.clone()),
         ))

@@ -18,10 +18,6 @@ pub enum PaletteItemContent {
         path: PathBuf,
         full_path: PathBuf,
     },
-    Line {
-        line: usize,
-        content: String,
-    },
     Reference {
         path: PathBuf,
         location: EditorLocation,

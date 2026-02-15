@@ -16,9 +16,8 @@ use floem::{
 };
 use itertools::Itertools;
 use lapce_core::{
-    buffer::rope_text::RopeText, command::FocusCommand, language::LapceLanguage,
-    line_ending::LineEnding, movement::Movement, selection::Selection,
-    syntax::Syntax,
+    command::FocusCommand, language::LapceLanguage, line_ending::LineEnding,
+    movement::Movement, selection::Selection, syntax::Syntax,
 };
 use lapce_rpc::proxy::ProxyResponse;
 use lapce_xi_rope::Rope;
@@ -30,10 +29,7 @@ use self::{
 };
 use crate::{
     command::{CommandExecuted, CommandKind, InternalCommand},
-    editor::{
-        EditorData, EditorViewKind,
-        location::{EditorLocation, EditorPosition},
-    },
+    editor::{EditorData, EditorViewKind, location::EditorLocation},
     keypress::{KeyPressFocus, condition::Condition},
     main_split::MainSplitData,
     workspace::LapceWorkspace,
@@ -345,9 +341,6 @@ impl PaletteData {
             PaletteKind::File => {
                 self.get_files();
             }
-            PaletteKind::Line => {
-                self.get_lines();
-            }
             PaletteKind::Reference => {
                 self.get_references();
             }
@@ -394,46 +387,6 @@ impl PaletteData {
                 send(items);
             }
         });
-    }
-
-    /// Initialize the palette with the lines in the current document.
-    fn get_lines(&self) {
-        let editor = self.main_split.active_editor.get_untracked();
-        let doc = match editor {
-            Some(editor) => editor.doc(),
-            None => {
-                return;
-            }
-        };
-
-        let buffer = doc.buffer.get_untracked();
-        let last_line_number = buffer.last_line() + 1;
-        let last_line_number_len = last_line_number.to_string().len();
-        let items = buffer
-            .text()
-            .lines(0..buffer.len())
-            .enumerate()
-            .map(|(i, l)| {
-                let line_number = i + 1;
-                let text = format!(
-                    "{}{} {}",
-                    line_number,
-                    vec![" "; last_line_number_len - line_number.to_string().len()]
-                        .join(""),
-                    l
-                );
-                PaletteItem {
-                    content: PaletteItemContent::Line {
-                        line: i,
-                        content: text.clone(),
-                    },
-                    filter_text: text,
-                    score: 0,
-                    indices: vec![],
-                }
-            })
-            .collect();
-        self.items.set(items);
     }
 
     /// Initialize the list of references in the file, from the current editor location.
@@ -528,33 +481,6 @@ impl PaletteData {
                             path: full_path.clone(),
                         });
                 }
-                PaletteItemContent::Line { line, .. } => {
-                    let editor = self.main_split.active_editor.get_untracked();
-                    let doc = match editor {
-                        Some(editor) => editor.doc(),
-                        None => {
-                            return;
-                        }
-                    };
-                    let path = doc
-                        .content
-                        .with_untracked(|content| content.path().cloned());
-                    let path = match path {
-                        Some(path) => path,
-                        None => return,
-                    };
-                    self.common.internal_command.send(
-                        InternalCommand::JumpToLocation {
-                            location: EditorLocation {
-                                path,
-                                position: Some(EditorPosition::Line(*line)),
-                                scroll_offset: None,
-
-                                same_editor_tab: false,
-                            },
-                        },
-                    );
-                }
                 PaletteItemContent::Reference { location, .. } => {
                     self.common.internal_command.send(
                         InternalCommand::JumpToLocation {
@@ -607,35 +533,6 @@ impl PaletteData {
         if let Some(item) = items.get(index) {
             match &item.content {
                 PaletteItemContent::File { .. } => {}
-                PaletteItemContent::Line { line, .. } => {
-                    self.has_preview.set(true);
-                    let editor = self.main_split.active_editor.get_untracked();
-                    let doc = match editor {
-                        Some(editor) => editor.doc(),
-                        None => {
-                            return;
-                        }
-                    };
-                    let path = doc
-                        .content
-                        .with_untracked(|content| content.path().cloned());
-                    let path = match path {
-                        Some(path) => path,
-                        None => return,
-                    };
-                    self.preview_editor.update_doc(doc);
-                    self.preview_editor.go_to_location(
-                        EditorLocation {
-                            path,
-                            position: Some(EditorPosition::Line(*line)),
-                            scroll_offset: None,
-
-                            same_editor_tab: false,
-                        },
-                        false,
-                        None,
-                    );
-                }
                 PaletteItemContent::Language { .. } => {}
                 PaletteItemContent::LineEnding { .. } => {}
                 PaletteItemContent::Reference { location, .. } => {

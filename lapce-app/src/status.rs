@@ -187,7 +187,7 @@ pub fn status(
                 .color(config.get().color(LapceColor::STATUS_FOREGROUND))
         }),
         stack({
-            let palette_clone = palette.clone();
+            let go_to_line_data = workspace_data.go_to_line_data.clone();
             let cursor_info = status_text(config, editor, move || {
                 if let Some(editor) = editor.get() {
                     let mut status = String::new();
@@ -222,7 +222,7 @@ pub fn status(
                 String::new()
             })
             .on_click_stop(move |_| {
-                palette_clone.run(PaletteKind::Line);
+                go_to_line_data.open();
             });
             let palette_clone = palette.clone();
             let line_ending_info = status_text(config, editor, move || {

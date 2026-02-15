@@ -204,7 +204,7 @@ when = "!list_focus"
 
 [[keymaps]]
 key = "meta+l"
-command = "palette.line"
+command = "go_to_line"
 
 # --------------------------------- RubyMine overrides ---------------------------------
 

@@ -103,8 +103,7 @@ pub(super) fn palette_item(
                 .style(|s| s.align_items(Some(AlignItems::Center)).max_width_full()),
             )
         }
-        PaletteItemContent::Line { .. }
-        | PaletteItemContent::Language { .. }
+        PaletteItemContent::Language { .. }
         | PaletteItemContent::LineEnding { .. } => {
             let text = item.filter_text;
             let indices = item.indices;

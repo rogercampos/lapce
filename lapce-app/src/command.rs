@@ -248,8 +248,8 @@ pub enum LapceWorkbenchCommand {
     NewFile,
 
     #[strum(message = "Go To Line")]
-    #[strum(serialize = "palette.line")]
-    PaletteLine,
+    #[strum(serialize = "go_to_line")]
+    GoToLine,
 
     #[strum(serialize = "palette")]
     #[strum(message = "Go to File")]
