@@ -13,11 +13,14 @@ use std::{
 
 use clap::Parser;
 use floem::{
-    IntoView, View,
+    IntoView, View, WindowIdExt,
     event::{Event, EventListener, EventPropagation},
     ext_event::{create_ext_action, create_signal_from_channel},
     menu::Menu,
-    peniko::kurbo::{Point, Size},
+    peniko::{
+        Gradient,
+        kurbo::{Point, Size},
+    },
     prelude::SignalTrack,
     reactive::{
         RwSignal, Scope, SignalGet, SignalUpdate, SignalWith, create_effect,
@@ -658,7 +661,7 @@ fn workbench(workspace_data: Rc<WorkspaceData>) -> impl View {
                     main_split_width.set(width);
                 }
             })
-            .style(|s| s.flex_grow(1.0))
+            .style(|s| s.flex_grow(1.0).gap(6.0))
         },
         panel_container_view(workspace_data.clone(), PanelContainerPosition::Bottom),
         lsp_views::window_message_view(
@@ -672,7 +675,7 @@ fn workbench(workspace_data: Rc<WorkspaceData>) -> impl View {
             workbench_size.set(size);
         }
     })
-    .style(move |s| s.flex_col().size_full())
+    .style(move |s| s.flex_col().size_full().padding(6.0).gap(6.0))
     .debug_name("Workbench")
 }
 
@@ -736,6 +739,7 @@ fn workspace_view(workspace_data: Rc<WorkspaceData>) -> impl View {
     let config = workspace_data.common.config;
     let workspace_scope = workspace_data.scope;
     let hover_active = workspace_data.common.hover.active;
+    let window_id = workspace_data.common.window_common.window_id;
 
     let view = if workspace_data.workspace.path.is_none() {
         empty_workspace_view(workspace_data.clone()).into_any()
@@ -780,9 +784,18 @@ fn workspace_view(workspace_data: Rc<WorkspaceData>) -> impl View {
         })
         .style(move |s| {
             let config = config.get();
+            let scale = window_id.scale();
+            let gradient = Gradient::new_linear(
+                Point::new(100.0 * scale, 0.0),
+                Point::new(900.0 * scale, -300.0 * scale),
+            )
+            .with_stops([
+                (0.0, config.color(LapceColor::SHELL_BACKGROUND_TOP)),
+                (1.0, config.color(LapceColor::SHELL_BACKGROUND)),
+            ]);
             s.size_full()
                 .color(config.color(LapceColor::EDITOR_FOREGROUND))
-                .background(config.color(LapceColor::EDITOR_BACKGROUND))
+                .background(gradient)
                 .font_size(config.ui.font_size() as f32)
                 .apply_if(!config.ui.font_family.is_empty(), |s| {
                     s.font_family(config.ui.font_family.clone())

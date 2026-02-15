@@ -410,6 +410,10 @@ Navigation through hierarchical results requires building a flat list of visible
 
 - **`make_local` editors have no `editor_tab_id`:** Editors created via `main_split.editors.make_local()` get `editor_tab_id = None`. This means `pointer_down()` won't send `FocusEditorTab`, and many focus commands that require `editor_tab_id` (split, close tab, etc.) will return `CommandExecuted::No`. This is by design for preview/local editors.
 
+- **Floem gradient backgrounds:** Floem supports gradient backgrounds via peniko's `Gradient` type passed to `.background()`. **Only `Gradient::new_linear()` works reliably.** `Gradient::new_radial()` and `new_two_point_radial()` render as all-white when used with `.background()` in the style system — the Vello renderer doesn't handle them correctly in this context. Workaround: use angled linear gradients to approximate radial effects. Import: `use floem::peniko::{Gradient, kurbo::Point};`. Example: `Gradient::new_linear(Point::new(0.0, 0.0), Point::new(800.0, 400.0)).with_stops([(0.0, color_a), (1.0, color_b)])`.
+
+- **Adding new theme colors:** Requires changes in 3 places: (1) add a `pub const` in `lapce-app/src/config/color.rs` (`LapceColor` impl), (2) add a base variable + UI mapping in `defaults/dark-theme.toml` (`[color-theme.base]` + `[color-theme.ui]`), (3) same in `defaults/light-theme.toml`. Access via `config.color(LapceColor::YOUR_CONSTANT)` which returns `floem::peniko::Color`.
+
 ## Language Support & Syntax Highlighting
 
 `LapceLanguage` enum (~65 variants in `lapce-core/src/language.rs`) maps to `SyntaxProperties` via array indexing. Each entry contains `TreeSitterProperties` (grammar name, query files, code glance config), `CommentProperties` (single/multi-line tokens), and file extensions/names for detection.

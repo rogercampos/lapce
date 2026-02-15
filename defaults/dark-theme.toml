@@ -29,6 +29,8 @@ yellow = "#E5C07B"
 primary-background = "$black"
 # Background for 'secondary' elements: panels, palette, status bar, completion, hover
 secondary-background = "#21252B"
+shell-background = "#21252B"
+shell-background-top = "#2244AA"
 current-background = "#2C313A"
 text = "$white"
 dim-text = "#5C6370"
@@ -159,7 +161,7 @@ dim-text = "#5C6370"
 "debug.breakpoint" = "$red"
 "debug.breakpoint.hover" = "#E06C7566"
 
-"panel.background" = "$secondary-background"
+"panel.background" = "#1A1D23"
 "panel.foreground" = "$text"
 "panel.foreground.dim" = "$dim-text"
 "panel.current.background" = "$current-background"
@@ -182,6 +184,9 @@ dim-text = "#5C6370"
 "status.modal.terminal.foreground" = "$black"
 
 "markdown.blockquote" = "#898989"
+
+"shell.background" = "$shell-background"
+"shell.background.top" = "$shell-background-top"
 
 "terminal.cursor" = "$text"
 "terminal.foreground" = "$text"

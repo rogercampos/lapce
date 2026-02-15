@@ -131,4 +131,7 @@ impl LapceColor {
     pub const STATUS_BACKGROUND: &'static str = "status.background";
     pub const STATUS_FOREGROUND: &'static str = "status.foreground";
     pub const MARKDOWN_BLOCKQUOTE: &'static str = "markdown.blockquote";
+
+    pub const SHELL_BACKGROUND: &'static str = "shell.background";
+    pub const SHELL_BACKGROUND_TOP: &'static str = "shell.background.top";
 }

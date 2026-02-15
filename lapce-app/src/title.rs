@@ -206,15 +206,7 @@ pub fn title(workspace_data: Rc<WorkspaceData>) -> impl View {
             title_height.set(height);
         }
     })
-    .style(move |s| {
-        let config = config.get();
-        s.width_pct(100.0)
-            .height(37.0)
-            .items_center()
-            .background(config.color(LapceColor::PANEL_BACKGROUND))
-            .border_bottom(1.0)
-            .border_color(config.color(LapceColor::LAPCE_BORDER))
-    })
+    .style(move |s| s.width_pct(100.0).height(37.0).items_center())
     .debug_name("Title / Top Bar")
 }
 

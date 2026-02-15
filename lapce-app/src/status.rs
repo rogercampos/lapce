@@ -304,10 +304,7 @@ pub fn status(
     })
     .style(move |s| {
         let config = config.get();
-        s.border_top(1.0)
-            .border_color(config.color(LapceColor::LAPCE_BORDER))
-            .background(config.color(LapceColor::STATUS_BACKGROUND))
-            .flex_basis(config.ui.status_height() as f32)
+        s.flex_basis(config.ui.status_height() as f32)
             .flex_grow(0.0)
             .flex_shrink(0.0)
             .items_center()

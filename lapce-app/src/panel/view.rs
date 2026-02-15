@@ -11,7 +11,7 @@ use floem::{
     taffy::AlignItems,
     unit::PxPctAuto,
     views::{
-        Decorators, container, dyn_stack, empty, h_stack, label, stack,
+        Decorators, clip, container, dyn_stack, empty, h_stack, label, stack,
         stack_from_iter, tab, text,
     },
 };
@@ -335,44 +335,24 @@ pub fn panel_container_view(
                 drag_start.set(None);
             })
             .style(move |s| {
-                let is_dragging = drag_start.get().is_some();
                 let current_size = current_size.get();
-                let config = config.get();
                 s.absolute()
                     .apply_if(position == PanelContainerPosition::Bottom, |s| {
-                        s.width_pct(100.0).height(4.0).margin_top(-2.0)
+                        s.width_pct(100.0).height(10.0).margin_top(-8.0)
                     })
                     .apply_if(position == PanelContainerPosition::Left, |s| {
-                        s.width(4.0)
+                        s.width(10.0)
                             .margin_left(current_size.width as f32 - 2.0)
                             .height_pct(100.0)
                     })
                     .apply_if(position == PanelContainerPosition::Right, |s| {
-                        s.width(4.0).margin_left(-2.0).height_pct(100.0)
+                        s.width(10.0).margin_left(-8.0).height_pct(100.0)
                     })
-                    .apply_if(is_dragging, |s| {
-                        s.background(config.color(LapceColor::EDITOR_CARET))
-                            .apply_if(
-                                position == PanelContainerPosition::Bottom,
-                                |s| s.cursor(CursorStyle::RowResize),
-                            )
-                            .apply_if(
-                                position != PanelContainerPosition::Bottom,
-                                |s| s.cursor(CursorStyle::ColResize),
-                            )
-                            .z_index(2)
+                    .apply_if(position == PanelContainerPosition::Bottom, |s| {
+                        s.cursor(CursorStyle::RowResize)
                     })
-                    .hover(|s| {
-                        s.background(config.color(LapceColor::EDITOR_CARET))
-                            .apply_if(
-                                position == PanelContainerPosition::Bottom,
-                                |s| s.cursor(CursorStyle::RowResize),
-                            )
-                            .apply_if(
-                                position != PanelContainerPosition::Bottom,
-                                |s| s.cursor(CursorStyle::ColResize),
-                            )
-                            .z_index(2)
+                    .apply_if(position != PanelContainerPosition::Bottom, |s| {
+                        s.cursor(CursorStyle::ColResize)
                     })
             })
         }
@@ -380,10 +360,16 @@ pub fn panel_container_view(
 
     let is_bottom = position.is_bottom();
     stack((
-        panel_picker(workspace_data.clone(), position.first()),
-        panel_view(workspace_data.clone(), position.first()),
-        panel_view(workspace_data.clone(), position.second()),
-        panel_picker(workspace_data.clone(), position.second()),
+        clip(
+            stack((
+                panel_picker(workspace_data.clone(), position.first()),
+                panel_view(workspace_data.clone(), position.first()),
+                panel_view(workspace_data.clone(), position.second()),
+                panel_picker(workspace_data.clone(), position.second()),
+            ))
+            .style(move |s| s.size_full().apply_if(!is_bottom, |s| s.flex_col())),
+        )
+        .style(move |s| s.size_full().border_radius(6.0)),
         resize_drag_view(position),
     ))
     .on_resize(move |rect| {
@@ -403,25 +389,21 @@ pub fn panel_container_view(
         s.apply_if(!panel.is_container_shown(&position, true), |s| s.hide())
             .apply_if(position == PanelContainerPosition::Bottom, |s| {
                 s.width_pct(100.0)
-                    .apply_if(!is_maximized, |s| {
-                        s.border_top(1.0).height(size as f32)
-                    })
+                    .background(config.color(LapceColor::PANEL_BACKGROUND))
+                    .apply_if(!is_maximized, |s| s.height(size as f32))
                     .apply_if(is_maximized, |s| s.flex_grow(1.0))
             })
             .apply_if(position == PanelContainerPosition::Left, |s| {
-                s.border_right(1.0)
-                    .width(size as f32)
+                s.width(size as f32)
                     .height_pct(100.0)
                     .background(config.color(LapceColor::PANEL_BACKGROUND))
             })
             .apply_if(position == PanelContainerPosition::Right, |s| {
-                s.border_left(1.0)
-                    .width(size as f32)
+                s.width(size as f32)
                     .height_pct(100.0)
                     .background(config.color(LapceColor::PANEL_BACKGROUND))
             })
-            .apply_if(!is_bottom, |s| s.flex_col())
-            .border_color(config.color(LapceColor::LAPCE_BORDER))
+            .border_radius(6.0)
             .color(config.color(LapceColor::PANEL_FOREGROUND))
     })
     .debug_name(format!("{:?} Panel Container View", position))

@@ -193,7 +193,7 @@ pub(super) fn editor_tab_header(
             .style(move |s| {
                 s.items_center()
                     .justify_center()
-                    .border_left(if i.get() == 0 { 1.0 } else { 0.0 })
+                    .border_left(0.0)
                     .border_right(1.0)
                     .border_color(config.get().color(LapceColor::LAPCE_BORDER))
                     .padding_horiz(6.)
@@ -329,6 +329,7 @@ pub(super) fn editor_tab_header(
                 .items_center()
                 .justify_center()
                 .cursor(CursorStyle::Pointer)
+                .apply_if(i.get() == 0, |s| s.border_top_left_radius(6.0))
                 .hover(|s| s.background(config.color(LapceColor::HOVER_BACKGROUND)))
         })
         .debug_name("Tab and Active Indicator")
@@ -489,6 +490,8 @@ pub(super) fn editor_tab_header(
             .border_color(config.color(LapceColor::LAPCE_BORDER))
             .background(config.color(LapceColor::PANEL_BACKGROUND))
             .height(config.ui.header_height() as i32)
+            .border_top_left_radius(6.0)
+            .border_top_right_radius(6.0)
     })
     .debug_name("Editor Tab Header")
 }
@@ -1188,8 +1191,8 @@ pub(super) fn main_split(workspace_data: Rc<WorkspaceData>) -> impl View {
             let config = config.get();
             let is_hidden = panel.panel_bottom_maximized(true)
                 && panel.is_container_shown(&PanelContainerPosition::Bottom, true);
-            s.border_color(config.color(LapceColor::LAPCE_BORDER))
-                .background(config.color(LapceColor::EDITOR_BACKGROUND))
+            s.background(config.color(LapceColor::EDITOR_BACKGROUND))
+                .border_radius(6.0)
                 .apply_if(is_hidden, |s| s.display(Display::None))
                 .width_full()
                 .flex_grow(1.0)
