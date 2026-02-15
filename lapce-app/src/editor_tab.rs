@@ -21,7 +21,7 @@ use crate::{
     config::{LapceConfig, color::LapceColor, icon::LapceIcons},
     doc::{Doc, DocContent},
     editor::{EditorData, EditorInfo, location::EditorLocation},
-    id::{EditorTabId, KeymapId, SettingsId, SplitId, ThemeColorSettingsId},
+    id::{EditorTabId, KeymapId, SettingsId, SplitId},
     main_split::{Editors, MainSplitData},
     workspace_data::WorkspaceData,
 };
@@ -32,7 +32,6 @@ use crate::{
 pub enum EditorTabChildInfo {
     Editor(EditorInfo),
     Settings,
-    ThemeColorSettings,
     Keymap,
 }
 
@@ -49,9 +48,6 @@ impl EditorTabChildInfo {
             }
             EditorTabChildInfo::Settings => {
                 EditorTabChild::Settings(SettingsId::next())
-            }
-            EditorTabChildInfo::ThemeColorSettings => {
-                EditorTabChild::ThemeColorSettings(ThemeColorSettingsId::next())
             }
             EditorTabChildInfo::Keymap => EditorTabChild::Keymap(KeymapId::next()),
         }
@@ -117,7 +113,6 @@ pub enum EditorTabChildSource {
     Editor { path: PathBuf, doc: Rc<Doc> },
     NewFileEditor,
     Settings,
-    ThemeColorSettings,
     Keymap,
 }
 
@@ -129,7 +124,6 @@ pub enum EditorTabChildSource {
 pub enum EditorTabChild {
     Editor(EditorId),
     Settings(SettingsId),
-    ThemeColorSettings(ThemeColorSettingsId),
     Keymap(KeymapId),
 }
 
@@ -147,7 +141,6 @@ impl EditorTabChild {
         match self {
             EditorTabChild::Editor(id) => id.to_raw(),
             EditorTabChild::Settings(id) => id.to_raw(),
-            EditorTabChild::ThemeColorSettings(id) => id.to_raw(),
             EditorTabChild::Keymap(id) => id.to_raw(),
         }
     }
@@ -167,9 +160,6 @@ impl EditorTabChild {
                 EditorTabChildInfo::Editor(editor_data.editor_info(data))
             }
             EditorTabChild::Settings(_) => EditorTabChildInfo::Settings,
-            EditorTabChild::ThemeColorSettings(_) => {
-                EditorTabChildInfo::ThemeColorSettings
-            }
             EditorTabChild::Keymap(_) => EditorTabChildInfo::Keymap,
         }
     }
@@ -236,17 +226,6 @@ impl EditorTabChild {
                     icon: config.ui_svg(LapceIcons::SETTINGS),
                     color: Some(config.color(LapceColor::LAPCE_ICON_ACTIVE)),
                     name: "Settings".to_string(),
-                    path: None,
-
-                    is_pristine: true,
-                }
-            }),
-            EditorTabChild::ThemeColorSettings(_) => create_memo(move |_| {
-                let config = config.get();
-                EditorTabChildViewInfo {
-                    icon: config.ui_svg(LapceIcons::SYMBOL_COLOR),
-                    color: Some(config.color(LapceColor::LAPCE_ICON_ACTIVE)),
-                    name: "Theme Colors".to_string(),
                     path: None,
 
                     is_pristine: true,
@@ -332,11 +311,6 @@ impl EditorTabData {
             EditorTabChildSource::Settings => {
                 self.children.iter().position(|(_, _, child)| {
                     matches!(child, EditorTabChild::Settings(_))
-                })
-            }
-            EditorTabChildSource::ThemeColorSettings => {
-                self.children.iter().position(|(_, _, child)| {
-                    matches!(child, EditorTabChild::ThemeColorSettings(_))
                 })
             }
             EditorTabChildSource::Keymap => {

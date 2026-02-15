@@ -358,12 +358,6 @@ impl PaletteData {
             PaletteKind::Reference => {
                 self.get_references();
             }
-            PaletteKind::ColorTheme => {
-                self.get_color_themes();
-            }
-            PaletteKind::IconTheme => {
-                self.get_icon_themes();
-            }
             PaletteKind::Language => {
                 self.get_languages();
             }
@@ -498,44 +492,6 @@ impl PaletteData {
         self.items.set(items);
     }
 
-    fn get_color_themes(&self) {
-        let config = self.common.config.get_untracked();
-        let items = config
-            .color_theme_list()
-            .iter()
-            .map(|name| PaletteItem {
-                content: PaletteItemContent::ColorTheme { name: name.clone() },
-                filter_text: name.clone(),
-                score: 0,
-                indices: Vec::new(),
-            })
-            .collect();
-        self.preselect_matching(
-            &items,
-            &self.common.config.get_untracked().color_theme.name,
-        );
-        self.items.set(items);
-    }
-
-    fn get_icon_themes(&self) {
-        let config = self.common.config.get_untracked();
-        let items = config
-            .icon_theme_list()
-            .iter()
-            .map(|name| PaletteItem {
-                content: PaletteItemContent::IconTheme { name: name.clone() },
-                filter_text: name.clone(),
-                score: 0,
-                indices: Vec::new(),
-            })
-            .collect();
-        self.preselect_matching(
-            &items,
-            &self.common.config.get_untracked().icon_theme.name,
-        );
-        self.items.set(items);
-    }
-
     fn get_languages(&self) {
         let langs = LapceLanguage::languages();
         let items = langs
@@ -641,20 +597,6 @@ impl PaletteData {
                         },
                     );
                 }
-                PaletteItemContent::ColorTheme { name } => self
-                    .common
-                    .internal_command
-                    .send(InternalCommand::SetColorTheme {
-                        name: name.clone(),
-                        save: true,
-                    }),
-                PaletteItemContent::IconTheme { name } => self
-                    .common
-                    .internal_command
-                    .send(InternalCommand::SetIconTheme {
-                        name: name.clone(),
-                        save: true,
-                    }),
                 PaletteItemContent::Language { name } => {
                     let editor = self.main_split.active_editor.get_untracked();
                     let doc = match editor {
@@ -743,20 +685,6 @@ impl PaletteData {
                         None,
                     );
                 }
-                PaletteItemContent::ColorTheme { name } => self
-                    .common
-                    .internal_command
-                    .send(InternalCommand::SetColorTheme {
-                        name: name.clone(),
-                        save: false,
-                    }),
-                PaletteItemContent::IconTheme { name } => self
-                    .common
-                    .internal_command
-                    .send(InternalCommand::SetIconTheme {
-                        name: name.clone(),
-                        save: false,
-                    }),
             }
         }
     }
@@ -765,15 +693,6 @@ impl PaletteData {
     /// For theme pickers, canceling must revert the live preview back to the saved config,
     /// which is why we reload the full config here.
     fn cancel(&self) {
-        if let PaletteKind::ColorTheme | PaletteKind::IconTheme =
-            self.kind.get_untracked()
-        {
-            // TODO(minor): We don't really need to reload the *entire config* here!
-            self.common
-                .internal_command
-                .send(InternalCommand::ReloadConfig);
-        }
-
         self.close();
     }
 

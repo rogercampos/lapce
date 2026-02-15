@@ -34,7 +34,7 @@ use crate::{
     keymap::keymap_view,
     main_split::{SplitContent, SplitData, SplitDirection, SplitMoveDirection},
     panel::position::PanelContainerPosition,
-    settings::{settings_view, theme_color_settings_view},
+    settings::settings_view,
     workspace_data::{Focus, WorkspaceData},
 };
 
@@ -554,9 +554,6 @@ pub(super) fn editor_tab_content(
                 }
             }
             EditorTabChild::Settings(_) => settings_view(editors, common).into_any(),
-            EditorTabChild::ThemeColorSettings(_) => {
-                theme_color_settings_view(editors, common).into_any()
-            }
             EditorTabChild::Keymap(_) => keymap_view(editors, common).into_any(),
         };
         child.style(|s| s.size_full())

@@ -116,12 +116,6 @@ pub struct LapceConfig {
     // tab_layout_info: Arc<RwLock<HashMap<(FontFamily, usize), f64>>>,
     #[serde(skip)]
     svg_store: Arc<RwLock<SvgStore>>,
-    /// A list of the themes that are available. This is primarily for populating
-    /// the theme picker, and serves as a cache.
-    #[serde(skip)]
-    color_theme_list: im::Vector<String>,
-    #[serde(skip)]
-    icon_theme_list: im::Vector<String>,
     /// The couple names for the wrap style
     #[serde(skip)]
     wrap_style_list: im::Vector<String>,
@@ -141,20 +135,6 @@ impl LapceConfig {
         lapce_config.available_color_themes = Self::load_color_themes();
         lapce_config.available_icon_themes = Self::load_icon_themes();
         lapce_config.resolve_theme(workspace);
-
-        lapce_config.color_theme_list = lapce_config
-            .available_color_themes
-            .values()
-            .map(|(name, _)| name.clone())
-            .sorted()
-            .collect();
-
-        lapce_config.icon_theme_list = lapce_config
-            .available_icon_themes
-            .values()
-            .map(|(name, _, _)| name.clone())
-            .sorted()
-            .collect();
 
         lapce_config.wrap_style_list = im::vector![
             WrapStyle::None.to_string(),
@@ -303,7 +283,7 @@ impl LapceConfig {
     /// Built-in themes are inserted last, so they always override any local/plugin
     /// theme with the same name, guaranteeing the defaults are always available.
     fn load_color_themes() -> HashMap<String, (String, config::Config)> {
-        let mut themes = Self::load_local_themes().unwrap_or_default();
+        let mut themes = HashMap::new();
 
         let (name, theme) =
             Self::load_color_theme_from_str(DEFAULT_LIGHT_THEME).unwrap();
@@ -317,20 +297,6 @@ impl LapceConfig {
 
     pub fn default_color_theme(&self) -> &ColorThemeConfig {
         &DEFAULT_DARK_THEME_COLOR_CONFIG
-    }
-
-    /// Set the active color theme.
-    /// Note that this does not save the config.
-    pub fn set_color_theme(&mut self, workspace: &LapceWorkspace, theme: &str) {
-        self.core.color_theme = theme.to_string();
-        self.resolve_theme(workspace);
-    }
-
-    /// Set the active icon theme.  
-    /// Note that this does not save the config.
-    pub fn set_icon_theme(&mut self, workspace: &LapceWorkspace, theme: &str) {
-        self.core.icon_theme = theme.to_string();
-        self.resolve_theme(workspace);
     }
 
     /// Get the color by the name from the current theme if it exists
@@ -412,34 +378,7 @@ impl LapceConfig {
         };
     }
 
-    fn load_local_themes() -> Option<HashMap<String, (String, config::Config)>> {
-        let themes_folder = Directory::themes_directory()?;
-        let themes: HashMap<String, (String, config::Config)> =
-            std::fs::read_dir(themes_folder)
-                .ok()?
-                .filter_map(|entry| {
-                    entry
-                        .ok()
-                        .and_then(|entry| Self::load_color_theme(&entry.path()))
-                })
-                .collect();
-        Some(themes)
-    }
-
-    fn load_color_theme(path: &Path) -> Option<(String, (String, config::Config))> {
-        if !path.is_file() {
-            return None;
-        }
-        let config = config::Config::builder()
-            .add_source(config::File::from(path))
-            .build()
-            .ok()?;
-        let table = config.get_table("color-theme").ok()?;
-        let name = table.get("name")?.to_string();
-        Some((name.to_lowercase(), (name, config)))
-    }
-
-    /// Load the given theme by its contents.  
+    /// Load the given theme by its contents.
     /// Returns `(name, theme fields)`
     fn load_color_theme_from_str(s: &str) -> Option<(String, config::Config)> {
         let config = config::Config::builder()
@@ -470,19 +409,6 @@ impl LapceConfig {
         let table = config.get_table("icon-theme").ok()?;
         let name = table.get("name")?.to_string();
         Some((name, config))
-    }
-
-    pub fn export_theme(&self) -> String {
-        let mut table = toml::value::Table::new();
-        let mut theme = self.color_theme.clone();
-        theme.name = "".to_string();
-        table.insert(
-            "color-theme".to_string(),
-            toml::Value::try_from(&theme).unwrap(),
-        );
-        table.insert("ui".to_string(), toml::Value::try_from(&self.ui).unwrap());
-        let value = toml::Value::Table(table);
-        toml::to_string_pretty(&value).unwrap()
     }
 
     /// Returns the path to the user's global settings file, creating an empty
@@ -637,37 +563,11 @@ impl LapceConfig {
         self.svg_store.read().logo_svg()
     }
 
-    /// List of the color themes that are available by their display names.
-    pub fn color_theme_list(&self) -> im::Vector<String> {
-        self.color_theme_list.clone()
-    }
-
-    /// List of the icon themes that are available by their display names.
-    pub fn icon_theme_list(&self) -> im::Vector<String> {
-        self.icon_theme_list.clone()
-    }
-
     /// Get the dropdown information for the specific setting, used for the settings UI.
     /// This should aim to efficiently return the data, because it is used to determine whether to
     /// update the dropdown items.
     pub fn get_dropdown_info(&self, kind: &str, key: &str) -> Option<DropdownInfo> {
         match (kind, key) {
-            ("core", "color-theme") => Some(DropdownInfo {
-                active_index: self
-                    .color_theme_list
-                    .iter()
-                    .position(|s| s == &self.color_theme.name)
-                    .unwrap_or(0),
-                items: self.color_theme_list.clone(),
-            }),
-            ("core", "icon-theme") => Some(DropdownInfo {
-                active_index: self
-                    .icon_theme_list
-                    .iter()
-                    .position(|s| s == &self.icon_theme.name)
-                    .unwrap_or(0),
-                items: self.icon_theme_list.clone(),
-            }),
             ("editor", "wrap-style") => Some(DropdownInfo {
                 // TODO: it would be better to have the text not be the default kebab-case when
                 // displayed in settings, but we would need to map back from the dropdown's value
@@ -854,21 +754,6 @@ mod tests {
     #[test]
     fn load_icon_theme_from_str_invalid_toml() {
         assert!(LapceConfig::load_icon_theme_from_str("{{bad").is_none());
-    }
-
-    // ── export_theme ────────────────────────────────────────────────
-
-    #[test]
-    fn export_theme_produces_valid_toml() {
-        let config = LapceConfig::test_default();
-        let exported = config.export_theme();
-        // Should parse back as valid TOML
-        let parsed: Result<toml::Value, _> = toml::from_str(&exported);
-        assert!(parsed.is_ok(), "Exported theme is not valid TOML");
-        let table = parsed.unwrap();
-        // Should have a "color-theme" section with an empty name
-        let ct = table.get("color-theme").unwrap();
-        assert_eq!(ct.get("name").unwrap().as_str().unwrap(), "");
     }
 
     // ── completion_color ────────────────────────────────────────────

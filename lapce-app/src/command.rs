@@ -183,14 +183,6 @@ pub enum LapceWorkbenchCommand {
     #[strum(message = "Show Environment")]
     ShowEnvironment,
 
-    #[strum(serialize = "change_color_theme")]
-    #[strum(message = "Change Color Theme")]
-    ChangeColorTheme,
-
-    #[strum(serialize = "change_icon_theme")]
-    #[strum(message = "Change Icon Theme")]
-    ChangeIconTheme,
-
     #[strum(serialize = "open_settings")]
     #[strum(message = "Open Settings")]
     OpenSettings,
@@ -202,10 +194,6 @@ pub enum LapceWorkbenchCommand {
     #[strum(serialize = "open_settings_directory")]
     #[strum(message = "Open Settings Directory")]
     OpenSettingsDirectory,
-
-    #[strum(serialize = "open_theme_color_settings")]
-    #[strum(message = "Open Theme Color Settings")]
-    OpenThemeColorSettings,
 
     #[strum(serialize = "open_keyboard_shortcuts")]
     #[strum(message = "Open Keyboard Shortcuts")]
@@ -226,10 +214,6 @@ pub enum LapceWorkbenchCommand {
     #[strum(serialize = "open_proxy_directory")]
     #[strum(message = "Open Proxy Directory")]
     OpenProxyDirectory,
-
-    #[strum(serialize = "open_themes_directory")]
-    #[strum(message = "Open Themes Directory")]
-    OpenThemesDirectory,
 
     #[strum(serialize = "open_grammars_directory")]
     #[strum(message = "Open Grammars Directory")]
@@ -313,14 +297,6 @@ pub enum LapceWorkbenchCommand {
 
     #[strum(serialize = "focus_editor")]
     FocusEditor,
-
-    #[strum(serialize = "export_current_theme_settings")]
-    #[strum(message = "Export current settings to a theme file")]
-    ExportCurrentThemeSettings,
-
-    #[strum(serialize = "install_theme")]
-    #[strum(message = "Install current theme file")]
-    InstallTheme,
 
     #[strum(serialize = "change_file_language")]
     #[strum(message = "Change current file language")]
@@ -490,16 +466,6 @@ pub enum InternalCommand {
         editor_tab_id: EditorTabId,
     },
 
-    SetColorTheme {
-        name: String,
-        /// Whether to save the theme to the config file
-        save: bool,
-    },
-    SetIconTheme {
-        name: String,
-        /// Whether to save the theme to the config file
-        save: bool,
-    },
     UpdateLogLevel {
         level: tracing_subscriber::filter::LevelFilter,
     },

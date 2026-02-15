@@ -652,9 +652,6 @@ impl WorkspaceData {
                     open_uri(&dir);
                 }
             }
-            OpenThemeColorSettings => {
-                self.main_split.open_theme_color_settings();
-            }
             OpenKeyboardShortcuts => {
                 self.main_split.open_keymap();
             }
@@ -693,11 +690,6 @@ impl WorkspaceData {
                     open_uri(&dir);
                 }
             }
-            OpenThemesDirectory => {
-                if let Some(dir) = Directory::themes_directory() {
-                    open_uri(&dir);
-                }
-            }
             OpenGrammarsDirectory => {
                 if let Some(dir) = Directory::grammars_directory() {
                     open_uri(&dir);
@@ -709,10 +701,6 @@ impl WorkspaceData {
                 }
             }
 
-            InstallTheme => {}
-            ExportCurrentThemeSettings => {
-                self.main_split.export_theme();
-            }
             ToggleInlayHints => {}
 
             // ==== Window ====
@@ -798,12 +786,6 @@ impl WorkspaceData {
             }
             PaletteWorkspace => {
                 self.palette.run(PaletteKind::Workspace);
-            }
-            ChangeColorTheme => {
-                self.palette.run(PaletteKind::ColorTheme);
-            }
-            ChangeIconTheme => {
-                self.palette.run(PaletteKind::IconTheme);
             }
             ChangeFileLanguage => {
                 self.palette.run(PaletteKind::Language);
@@ -1348,36 +1330,6 @@ impl WorkspaceData {
             }
             InternalCommand::FocusEditorTab { editor_tab_id } => {
                 self.main_split.active_editor_tab.set(Some(editor_tab_id));
-            }
-            InternalCommand::SetColorTheme { name, save } => {
-                if save {
-                    // The config file is watched
-                    LapceConfig::update_file(
-                        "core",
-                        "color-theme",
-                        toml_edit::Value::from(name),
-                    );
-                } else {
-                    let mut new_config = self.common.config.get_untracked();
-                    Arc::make_mut(&mut new_config)
-                        .set_color_theme(&self.workspace, &name);
-                    self.set_config.set(new_config);
-                }
-            }
-            InternalCommand::SetIconTheme { name, save } => {
-                if save {
-                    // The config file is watched
-                    LapceConfig::update_file(
-                        "core",
-                        "icon-theme",
-                        toml_edit::Value::from(name),
-                    );
-                } else {
-                    let mut new_config = self.common.config.get_untracked();
-                    Arc::make_mut(&mut new_config)
-                        .set_icon_theme(&self.workspace, &name);
-                    self.set_config.set(new_config);
-                }
             }
             InternalCommand::OpenWebUri { uri } => {
                 if !uri.is_empty() {

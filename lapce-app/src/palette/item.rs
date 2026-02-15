@@ -29,12 +29,6 @@ pub enum PaletteItemContent {
         path: PathBuf,
         location: EditorLocation,
     },
-    ColorTheme {
-        name: String,
-    },
-    IconTheme {
-        name: String,
-    },
     Language {
         name: String,
     },

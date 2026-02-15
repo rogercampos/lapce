@@ -106,9 +106,7 @@ pub(super) fn palette_item(
         PaletteItemContent::Line { .. }
         | PaletteItemContent::Workspace { .. }
         | PaletteItemContent::Language { .. }
-        | PaletteItemContent::LineEnding { .. }
-        | PaletteItemContent::ColorTheme { .. }
-        | PaletteItemContent::IconTheme { .. } => {
+        | PaletteItemContent::LineEnding { .. } => {
             let text = item.filter_text;
             let indices = item.indices;
             container(

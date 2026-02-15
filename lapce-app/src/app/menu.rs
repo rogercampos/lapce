@@ -104,24 +104,6 @@ pub fn window_menu(
         }))
         .entry(MenuItem::new("Open Keyboard Shortcuts").action(move || {
             workbench_command.send(LapceWorkbenchCommand::OpenKeyboardShortcuts);
-        }))
-        .separator()
-        .entry(MenuItem::new("Change Color Theme").action(move || {
-            workbench_command.send(LapceWorkbenchCommand::ChangeColorTheme);
-        }))
-        .entry(MenuItem::new("Change Icon Theme").action(move || {
-            workbench_command.send(LapceWorkbenchCommand::ChangeIconTheme);
-        }))
-        .entry(MenuItem::new("Open Theme Color Settings").action(move || {
-            workbench_command.send(LapceWorkbenchCommand::OpenThemeColorSettings);
-        }))
-        .separator()
-        .entry(MenuItem::new("Export Theme Settings").action(move || {
-            workbench_command
-                .send(LapceWorkbenchCommand::ExportCurrentThemeSettings);
-        }))
-        .entry(MenuItem::new("Install Theme").action(move || {
-            workbench_command.send(LapceWorkbenchCommand::InstallTheme);
         }));
 
     let help_menu = {
@@ -146,9 +128,6 @@ pub fn window_menu(
                 }),
             )
             .separator()
-            .entry(MenuItem::new("Open Themes Directory").action(move || {
-                workbench_command.send(LapceWorkbenchCommand::OpenThemesDirectory);
-            }))
             .entry(MenuItem::new("Open Grammars Directory").action(move || {
                 workbench_command.send(LapceWorkbenchCommand::OpenGrammarsDirectory);
             }))

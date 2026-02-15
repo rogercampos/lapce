@@ -42,7 +42,7 @@ use crate::{
     editor_tab::{
         EditorTabChild, EditorTabChildSource, EditorTabData, EditorTabInfo,
     },
-    id::{EditorTabId, KeymapId, SettingsId, SplitId, ThemeColorSettingsId},
+    id::{EditorTabId, KeymapId, SettingsId, SplitId},
     keypress::{EventRef, KeyPressData, KeyPressHandle},
     workspace_data::{CommonData, Focus, WorkspaceData},
 };
@@ -521,7 +521,6 @@ impl MainSplitData {
                 Some(handle)
             }
             EditorTabChild::Settings(_) => None,
-            EditorTabChild::ThemeColorSettings(_) => None,
             EditorTabChild::Keymap(_) => None,
         }
     }
@@ -830,9 +829,6 @@ impl MainSplitData {
             }
             EditorTabChildSource::Settings => {
                 EditorTabChild::Settings(SettingsId::next())
-            }
-            EditorTabChildSource::ThemeColorSettings => {
-                EditorTabChild::ThemeColorSettings(ThemeColorSettingsId::next())
             }
             EditorTabChildSource::Keymap => EditorTabChild::Keymap(KeymapId::next()),
         }
@@ -1220,9 +1216,6 @@ impl MainSplitData {
             EditorTabChild::Settings(_) => {
                 EditorTabChild::Settings(SettingsId::next())
             }
-            EditorTabChild::ThemeColorSettings(_) => {
-                EditorTabChild::ThemeColorSettings(ThemeColorSettingsId::next())
-            }
             EditorTabChild::Keymap(_) => EditorTabChild::Keymap(KeymapId::next()),
         };
 
@@ -1574,7 +1567,6 @@ impl MainSplitData {
                 None
             }
             EditorTabChild::Settings(_) => None,
-            EditorTabChild::ThemeColorSettings(_) => None,
             EditorTabChild::Keymap(_) => None,
         }
     }
@@ -1805,7 +1797,6 @@ impl MainSplitData {
                 self.remove_editor(editor_id);
             }
             EditorTabChild::Settings(_) => {}
-            EditorTabChild::ThemeColorSettings(_) => {}
             EditorTabChild::Keymap(_) => {}
         }
 
@@ -1993,10 +1984,6 @@ impl MainSplitData {
 
     pub fn open_settings(&self) {
         self.get_editor_tab_child(EditorTabChildSource::Settings, false);
-    }
-
-    pub fn open_theme_color_settings(&self) {
-        self.get_editor_tab_child(EditorTabChildSource::ThemeColorSettings, false);
     }
 
     pub fn open_keymap(&self) {
@@ -2230,7 +2217,6 @@ impl MainSplitData {
                 editor.editor_tab_id.set(Some(editor_tab_id));
             }
             EditorTabChild::Settings(_) => {}
-            EditorTabChild::ThemeColorSettings(_) => {}
             EditorTabChild::Keymap(_) => {}
         }
         Some(())
@@ -2440,19 +2426,6 @@ impl MainSplitData {
         }
 
         Some(())
-    }
-
-    pub fn export_theme(&self) {
-        let child = self.new_file();
-        if let EditorTabChild::Editor(id) = child {
-            if let Some(editor) = self.editors.editor_untracked(id) {
-                let doc = editor.doc();
-                doc.reload(
-                    Rope::from(self.common.config.get_untracked().export_theme()),
-                    true,
-                );
-            }
-        }
     }
 
     pub fn show_env(&self) {
