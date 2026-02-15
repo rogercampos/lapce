@@ -847,7 +847,13 @@ fn window(window_data: WindowData) -> impl View {
             workspace.common.keypress.track();
             let workbench_command = workspace.common.workbench_command;
             let lapce_command = workspace.common.lapce_command;
-            window_menu(lapce_command, workbench_command)
+            let window_command = workspace.common.window_common.window_command;
+            window_menu(
+                lapce_command,
+                workbench_command,
+                window_command,
+                &workspace.workspace,
+            )
         } else {
             Menu::new("Lapce")
         }

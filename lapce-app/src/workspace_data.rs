@@ -784,9 +784,6 @@ impl WorkspaceData {
             Palette => {
                 self.palette.run(PaletteKind::File);
             }
-            PaletteWorkspace => {
-                self.palette.run(PaletteKind::Workspace);
-            }
             ChangeFileLanguage => {
                 self.palette.run(PaletteKind::Language);
             }

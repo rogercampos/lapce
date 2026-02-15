@@ -17,6 +17,7 @@ use crate::{
     config::{LapceConfig, color::LapceColor, icon::LapceIcons},
     listener::Listener,
     update::ReleaseInfo,
+    workspace::LapceWorkspace,
     workspace_data::WorkspaceData,
 };
 
@@ -26,6 +27,8 @@ use crate::{
 fn left(
     lapce_command: Listener<LapceCommand>,
     workbench_command: Listener<LapceWorkbenchCommand>,
+    window_command: Listener<WindowCommand>,
+    current_workspace: Arc<LapceWorkspace>,
     config: ReadSignal<Arc<LapceConfig>>,
 ) -> impl View {
     let is_macos = cfg!(target_os = "macos");
@@ -47,7 +50,14 @@ fn left(
             || "Menu",
             config,
         )
-        .popout_menu(move || window_menu(lapce_command, workbench_command))
+        .popout_menu(move || {
+            window_menu(
+                lapce_command,
+                workbench_command,
+                window_command,
+                &current_workspace,
+            )
+        })
         .style(move |s| {
             s.margin_left(4.0)
                 .margin_right(6.0)
@@ -165,13 +175,20 @@ pub fn title(workspace_data: Rc<WorkspaceData>) -> impl View {
     let lapce_command = workspace_data.common.lapce_command;
     let workbench_command = workspace_data.common.workbench_command;
     let window_command = workspace_data.common.window_common.window_command;
+    let current_workspace = workspace_data.workspace.clone();
     let latest_release = workspace_data.common.window_common.latest_release;
     let window_maximized = workspace_data.common.window_common.window_maximized;
     let title_height = workspace_data.title_height;
     let update_in_progress = workspace_data.update_in_progress;
     let config = workspace_data.common.config;
     stack((
-        left(lapce_command, workbench_command, config),
+        left(
+            lapce_command,
+            workbench_command,
+            window_command,
+            current_workspace,
+            config,
+        ),
         drag_window_area(empty())
             .style(|s| s.height_pct(100.0).flex_basis(0.0).flex_grow(1.0)),
         right(

@@ -1,28 +1,66 @@
+use std::sync::Arc;
+
 use floem::{
     action::show_context_menu,
     menu::{Menu, MenuItem},
+    reactive::use_context,
 };
 use lapce_core::command::FocusCommand;
 
 use crate::{
-    command::{CommandKind, InternalCommand, LapceCommand, LapceWorkbenchCommand},
+    command::{
+        CommandKind, InternalCommand, LapceCommand, LapceWorkbenchCommand,
+        WindowCommand,
+    },
+    db::LapceDb,
     editor_tab::EditorTabChild,
     id::EditorTabId,
     listener::Listener,
     main_split::TabCloseKind,
+    workspace::LapceWorkspace,
 };
 
 pub fn window_menu(
     lapce_command: Listener<LapceCommand>,
     workbench_command: Listener<LapceWorkbenchCommand>,
+    window_command: Listener<WindowCommand>,
+    current_workspace: &LapceWorkspace,
 ) -> Menu {
-    let file_menu = Menu::new("File")
-        .entry(MenuItem::new("Open Folder").action(move || {
-            workbench_command.send(LapceWorkbenchCommand::OpenFolder);
-        }))
-        .entry(MenuItem::new("Open Recent Workspace").action(move || {
-            workbench_command.send(LapceWorkbenchCommand::PaletteWorkspace);
-        }));
+    let file_menu = {
+        let mut menu = Menu::new("File").entry(MenuItem::new("Open Folder").action(
+            move || {
+                workbench_command.send(LapceWorkbenchCommand::OpenFolder);
+            },
+        ));
+
+        let mut recent_menu = Menu::new("Open Recent Workspace");
+        let db: Arc<LapceDb> = use_context().unwrap();
+        let workspaces = db.recent_workspaces().unwrap_or_default();
+        let mut has_entries = false;
+        for ws in workspaces {
+            if ws.path == current_workspace.path {
+                continue;
+            }
+            let Some(path) = ws.path.as_ref() else {
+                continue;
+            };
+            let label = path.to_string_lossy().to_string();
+            let ws_clone = ws.clone();
+            recent_menu =
+                recent_menu.entry(MenuItem::new(label).action(move || {
+                    window_command.send(WindowCommand::SetWorkspace {
+                        workspace: ws_clone.clone(),
+                    });
+                }));
+            has_entries = true;
+        }
+        if !has_entries {
+            recent_menu = recent_menu
+                .entry(MenuItem::new("No Recent Workspaces").enabled(false));
+        }
+        menu = menu.entry(recent_menu);
+        menu
+    };
 
     let view_menu = Menu::new("View")
         .entry(MenuItem::new("Toggle Left Panel").action(move || {

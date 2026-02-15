@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use lapce_core::line_ending::LineEnding;
 
-use crate::{editor::location::EditorLocation, workspace::LapceWorkspace};
+use crate::editor::location::EditorLocation;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct PaletteItem {
@@ -21,9 +21,6 @@ pub enum PaletteItemContent {
     Line {
         line: usize,
         content: String,
-    },
-    Workspace {
-        workspace: LapceWorkspace,
     },
     Reference {
         path: PathBuf,

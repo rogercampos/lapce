@@ -255,10 +255,6 @@ pub enum LapceWorkbenchCommand {
     #[strum(message = "Go to File")]
     Palette,
 
-    #[strum(message = "Open Recent Workspace")]
-    #[strum(serialize = "palette.workspace")]
-    PaletteWorkspace,
-
     #[strum(serialize = "toggle_maximized_panel")]
     ToggleMaximizedPanel,
 

@@ -12,10 +12,7 @@ use anyhow::Result;
 use floem::{
     ext_event::{create_ext_action, create_signal_from_channel},
     keyboard::Modifiers,
-    reactive::{
-        ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith,
-        use_context,
-    },
+    reactive::{ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith},
 };
 use itertools::Itertools;
 use lapce_core::{
@@ -32,8 +29,7 @@ use self::{
     kind::PaletteKind,
 };
 use crate::{
-    command::{CommandExecuted, CommandKind, InternalCommand, WindowCommand},
-    db::LapceDb,
+    command::{CommandExecuted, CommandKind, InternalCommand},
     editor::{
         EditorData, EditorViewKind,
         location::{EditorLocation, EditorPosition},
@@ -352,9 +348,6 @@ impl PaletteData {
             PaletteKind::Line => {
                 self.get_lines();
             }
-            PaletteKind::Workspace => {
-                self.get_workspaces();
-            }
             PaletteKind::Reference => {
                 self.get_references();
             }
@@ -440,27 +433,6 @@ impl PaletteData {
                 }
             })
             .collect();
-        self.items.set(items);
-    }
-
-    /// Initialize the palette with all the available workspaces, local and remote.
-    fn get_workspaces(&self) {
-        let db: Arc<LapceDb> = use_context().unwrap();
-        let workspaces = db.recent_workspaces().unwrap_or_default();
-
-        let items = workspaces
-            .into_iter()
-            .filter_map(|w| {
-                let filter_text = w.path.as_ref()?.to_str()?.to_string();
-                Some(PaletteItem {
-                    content: PaletteItemContent::Workspace { workspace: w },
-                    filter_text,
-                    score: 0,
-                    indices: vec![],
-                })
-            })
-            .collect();
-
         self.items.set(items);
     }
 
@@ -583,13 +555,6 @@ impl PaletteData {
                         },
                     );
                 }
-                PaletteItemContent::Workspace { workspace } => {
-                    self.common.window_common.window_command.send(
-                        WindowCommand::SetWorkspace {
-                            workspace: workspace.clone(),
-                        },
-                    );
-                }
                 PaletteItemContent::Reference { location, .. } => {
                     self.common.internal_command.send(
                         InternalCommand::JumpToLocation {
@@ -671,7 +636,6 @@ impl PaletteData {
                         None,
                     );
                 }
-                PaletteItemContent::Workspace { .. } => {}
                 PaletteItemContent::Language { .. } => {}
                 PaletteItemContent::LineEnding { .. } => {}
                 PaletteItemContent::Reference { location, .. } => {
