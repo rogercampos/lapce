@@ -111,8 +111,8 @@ pub(super) fn editor_tab_header(
                         config,
                         text(info.with(|info| {
                             info.path
-                                .clone()
-                                .map(|path| path.display().to_string())
+                                .as_ref()
+                                .map(|path| crate::path::display_path(path))
                                 .unwrap_or("local".to_string())
                         })),
                     )

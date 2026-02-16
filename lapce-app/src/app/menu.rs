@@ -44,7 +44,7 @@ pub fn window_menu(
             let Some(path) = ws.path.as_ref() else {
                 continue;
             };
-            let label = path.to_string_lossy().to_string();
+            let label = crate::path::display_path(path);
             let ws_clone = ws.clone();
             recent_menu =
                 recent_menu.entry(MenuItem::new(label).action(move || {

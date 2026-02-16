@@ -27,6 +27,7 @@ pub mod lsp;
 pub mod main_split;
 pub mod markdown;
 pub mod panel;
+pub mod path;
 pub mod proxy;
 pub mod recent_files;
 pub mod rename;

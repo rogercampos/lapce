@@ -172,7 +172,7 @@ fn file_node_text_view(data: FileExplorerData, node: FileNodeViewData) -> impl V
                             .padding_right(5.0)
                             .selectable(false)
                     }),
-                    label(move || path.to_string_lossy().to_string()).style(
+                    label(move || crate::path::display_path(&path)).style(
                         move |s| {
                             s.height(ui_line_height.get())
                                 .color(

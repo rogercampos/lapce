@@ -167,9 +167,8 @@ fn file_view(
 
     let folder = path
         .parent()
-        .and_then(|s| s.to_str())
-        .unwrap_or("")
-        .to_string();
+        .map(|s| crate::path::display_path(s))
+        .unwrap_or_default();
 
     stack((
         stack((

@@ -576,9 +576,8 @@ fn go_to_file_item_view(
     let folder = item
         .path
         .parent()
-        .unwrap_or("".as_ref())
-        .to_string_lossy()
-        .into_owned();
+        .map(|p| crate::path::display_path(p))
+        .unwrap_or_default();
     let folder_len = folder.len();
 
     let file_name_indices = item

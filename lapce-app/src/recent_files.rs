@@ -312,7 +312,7 @@ fn file_display_parts(
                     .as_ref()
                     .and_then(|ws| p.strip_prefix(ws).ok())
                     .map(|p| p.to_string_lossy().to_string())
-                    .or_else(|| Some(p.to_string_lossy().to_string()))
+                    .or_else(|| Some(crate::path::display_path(p)))
             })
             .unwrap_or_default()
     } else {
