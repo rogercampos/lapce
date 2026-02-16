@@ -19,6 +19,7 @@ use crate::{
     editor::location::{EditorLocation, EditorPosition},
     keypress::KeyPressFocus,
     main_split::MainSplitData,
+    resizable_container::resizable_container,
     text_input::TextInputBuilder,
     workspace_data::{CommonData, Focus, WorkspaceData},
 };
@@ -197,7 +198,7 @@ fn go_to_line_content(workspace_data: Rc<WorkspaceData>) -> impl View {
 
     let go_data = data.clone();
 
-    stack((
+    let content = stack((
         container(container(input).style(move |s| {
             let config = config.get();
             s.width_full()
@@ -249,11 +250,12 @@ fn go_to_line_content(workspace_data: Rc<WorkspaceData>) -> impl View {
     .style(move |s| {
         let config = config.get();
         s.flex_col()
-            .width(300.0)
-            .max_width_pct(LapceLayout::MODAL_MAX_PCT)
+            .size_full()
             .border(1.0)
             .border_radius(LapceLayout::BORDER_RADIUS)
             .border_color(config.color(LapceColor::LAPCE_BORDER))
             .background(config.color(LapceColor::PALETTE_BACKGROUND))
-    })
+    });
+
+    resizable_container(300.0, 120.0, 200.0, 80.0, content)
 }

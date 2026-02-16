@@ -33,6 +33,7 @@ use crate::{
     editor::location::EditorLocation,
     keypress::KeyPressFocus,
     main_split::MainSplitData,
+    resizable_container::resizable_container,
     text_input::TextInputBuilder,
     workspace_data::{CommonData, Focus, WorkspaceData},
 };
@@ -348,7 +349,7 @@ fn recent_files_content(workspace_data: Rc<WorkspaceData>) -> impl View {
     let duplicates =
         create_memo(move |_| duplicate_filenames(&filtered_items.get()));
 
-    stack((
+    let content = stack((
         recent_files_input(data.clone(), config, focus),
         scroll({
             let data = data.clone();
@@ -408,7 +409,7 @@ fn recent_files_content(workspace_data: Rc<WorkspaceData>) -> impl View {
         .style(|s| {
             s.width_full()
                 .min_height(0.0)
-                .max_height(400.0)
+                .flex_grow(1.0)
                 .set(PropagatePointerWheel, false)
         }),
         text("No recent files").style(move |s| {
@@ -426,13 +427,14 @@ fn recent_files_content(workspace_data: Rc<WorkspaceData>) -> impl View {
     .style(move |s| {
         let config = config.get();
         s.flex_col()
-            .width(500.0)
-            .max_width_pct(LapceLayout::MODAL_MAX_PCT)
+            .size_full()
             .border(1.0)
             .border_radius(LapceLayout::BORDER_RADIUS)
             .border_color(config.color(LapceColor::LAPCE_BORDER))
             .background(config.color(LapceColor::PALETTE_BACKGROUND))
-    })
+    });
+
+    resizable_container(500.0, 450.0, 300.0, 200.0, content)
 }
 
 #[cfg(test)]

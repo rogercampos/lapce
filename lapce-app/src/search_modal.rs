@@ -37,6 +37,7 @@ use crate::{
     global_search::GlobalSearchData,
     keypress::KeyPressFocus,
     main_split::MainSplitData,
+    resizable_container::resizable_container,
     text_input::TextInputBuilder,
     workspace_data::{CommonData, Focus, WorkspaceData},
 };
@@ -418,7 +419,7 @@ fn search_modal_content(workspace_data: Rc<WorkspaceData>) -> impl View {
     let item_height = 26.0;
     let input_buffer = data.input_editor.doc().buffer;
 
-    stack((
+    let content = stack((
         // Header: Search input
         search_modal_input(data.clone(), config, focus),
         // Body: results list + preview (fixed size via flex_grow)
@@ -438,15 +439,20 @@ fn search_modal_content(workspace_data: Rc<WorkspaceData>) -> impl View {
     .style(move |s| {
         let config = config.get();
         s.flex_col()
-            .width(LapceLayout::DEFAULT_WINDOW_WIDTH as f32)
-            .height(LapceLayout::DEFAULT_WINDOW_HEIGHT as f32)
-            .max_width_pct(LapceLayout::MODAL_MAX_PCT)
-            .max_height_pct(LapceLayout::MODAL_MAX_PCT)
+            .size_full()
             .border(1.0)
             .border_radius(LapceLayout::BORDER_RADIUS)
             .border_color(config.color(LapceColor::LAPCE_BORDER))
             .background(config.color(LapceColor::PALETTE_BACKGROUND))
-    })
+    });
+
+    resizable_container(
+        LapceLayout::DEFAULT_WINDOW_WIDTH,
+        LapceLayout::DEFAULT_WINDOW_HEIGHT,
+        400.0,
+        300.0,
+        content,
+    )
 }
 
 fn search_modal_input(

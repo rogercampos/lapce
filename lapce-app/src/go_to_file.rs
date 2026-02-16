@@ -36,6 +36,7 @@ use crate::{
     focus_text::focus_text,
     keypress::KeyPressFocus,
     main_split::MainSplitData,
+    resizable_container::resizable_container,
     text_input::TextInputBuilder,
     workspace::LapceWorkspace,
     workspace_data::{CommonData, Focus, WorkspaceData},
@@ -465,8 +466,10 @@ fn go_to_file_content(workspace_data: Rc<WorkspaceData>) -> impl View {
     let run_id = data.run_id;
     let filter_text = data.filter_text.read_only();
     let item_height = 25.0;
+    let palette_width = config.get_untracked().ui.palette_width() as f64;
+    let initial_height = (layout_rect.get_untracked().height() * 0.45).round();
 
-    stack((
+    let content = stack((
         go_to_file_input(data.clone(), config, focus),
         scroll({
             let data = data.clone();
@@ -510,6 +513,7 @@ fn go_to_file_content(workspace_data: Rc<WorkspaceData>) -> impl View {
         .style(|s| {
             s.width_full()
                 .min_height(0.0)
+                .flex_grow(1.0)
                 .set(PropagatePointerWheel, false)
         }),
         text("No matching results").style(move |s| {
@@ -526,14 +530,14 @@ fn go_to_file_content(workspace_data: Rc<WorkspaceData>) -> impl View {
     .style(move |s| {
         let config = config.get();
         s.flex_col()
-            .width(config.ui.palette_width() as f64)
-            .max_width_pct(LapceLayout::MODAL_MAX_PCT)
-            .max_height((layout_rect.get().height() * 0.45).round() as f32)
+            .size_full()
             .border(1.0)
             .border_radius(LapceLayout::BORDER_RADIUS)
             .border_color(config.color(LapceColor::LAPCE_BORDER))
             .background(config.color(LapceColor::PALETTE_BACKGROUND))
-    })
+    });
+
+    resizable_container(palette_width, initial_height, 300.0, 200.0, content)
 }
 
 fn go_to_file_input(

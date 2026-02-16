@@ -14,6 +14,7 @@ use crate::{
     command::{CommandExecuted, CommandKind},
     config::{LapceConfig, color::LapceColor, layout::LapceLayout},
     keypress::KeyPressFocus,
+    resizable_container::resizable_container,
     web_link::web_link,
     workspace_data::{Focus, WorkspaceData},
 };
@@ -105,7 +106,7 @@ pub fn about_popup(workspace_data: Rc<WorkspaceData>) -> impl View {
         about_data.visible,
         move || close_data.close(),
         move || {
-            stack((
+            let content = stack((
                 svg(move || (config.get()).logo_svg()).style(move |s| {
                     s.size(logo_size, logo_size)
                         .color(config.get().color(LapceColor::EDITOR_FOREGROUND))
@@ -164,13 +165,16 @@ pub fn about_popup(workspace_data: Rc<WorkspaceData>) -> impl View {
                 let config = config.get();
                 s.flex_col()
                     .items_center()
+                    .size_full()
                     .padding_vert(25.0)
                     .padding_horiz(100.0)
                     .border(1.0)
                     .border_radius(LapceLayout::BORDER_RADIUS)
                     .border_color(config.color(LapceColor::LAPCE_BORDER))
                     .background(config.color(LapceColor::PANEL_BACKGROUND))
-            })
+            });
+
+            resizable_container(350.0, 400.0, 250.0, 300.0, content)
         },
     )
     .debug_name("About Popup")
