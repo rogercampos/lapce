@@ -407,6 +407,7 @@ impl ResizableStack {
                     offset,
                     Style::new()
                         .width(new_width)
+                        .flex_basis(new_width)
                         .min_width(20.)
                         .apply_if(!is_last, |s| s.max_width(new_width))
                         .apply_if(is_last, |s| s.flex_grow(1.)),
@@ -423,6 +424,7 @@ impl ResizableStack {
                     offset,
                     Style::new()
                         .width(next_width)
+                        .flex_basis(next_width)
                         .min_width(20.)
                         .apply_if(!is_last, |s| s.max_width(next_width))
                         .apply_if(is_last, |s| s.flex_grow(1.)),
@@ -456,6 +458,7 @@ impl ResizableStack {
                     offset,
                     Style::new()
                         .height(new_height)
+                        .flex_basis(new_height)
                         .min_height(20.)
                         .apply_if(!is_last, |s| s.max_height(new_height))
                         .apply_if(is_last, |s| s.flex_grow(1.)),
@@ -472,6 +475,7 @@ impl ResizableStack {
                     offset,
                     Style::new()
                         .height(next_height)
+                        .flex_basis(next_height)
                         .min_height(20.)
                         .apply_if(!is_last, |s| s.max_height(next_height))
                         .apply_if(is_last, |s| s.flex_grow(1.)),

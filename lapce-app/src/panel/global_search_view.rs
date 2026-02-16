@@ -5,7 +5,10 @@ use floem::{
     event::EventListener,
     reactive::{ReadSignal, RwSignal, SignalGet, SignalUpdate, create_rw_signal},
     style::{CursorStyle, Display},
-    views::{Decorators, container, scroll, stack, svg, virtual_stack},
+    views::{
+        Decorators, container, resizable::resizable, scroll, stack, svg,
+        virtual_stack,
+    },
 };
 
 use super::position::PanelPosition;
@@ -38,11 +41,13 @@ pub fn global_search_panel(
     let has_preview = global_search.has_preview;
     let preview_focused = global_search.preview_focused;
 
-    stack((
+    resizable((
         search_result(workspace, global_search, internal_command, config).style(
             move |s| {
-                let w = if has_preview.get() { 50.0 } else { 100.0 };
-                s.width_pct(w).height_pct(100.0)
+                s.height_pct(100.0)
+                    .min_width(0)
+                    .flex_basis(0)
+                    .flex_grow(1.0)
             },
         ),
         search_preview_editor(workspace_data, config, has_preview, preview_focused),
@@ -292,12 +297,14 @@ fn search_preview_editor(
         }),
     )
     .style(move |s| {
-        s.width_pct(50.0).height_pct(100.0).min_width(0.0).display(
-            if has_preview.get() {
+        s.height_pct(100.0)
+            .min_width(0)
+            .flex_basis(0)
+            .flex_grow(1.0)
+            .display(if has_preview.get() {
                 Display::Flex
             } else {
                 Display::None
-            },
-        )
+            })
     })
 }
