@@ -104,7 +104,7 @@ fn search_result(
                             .style(move |s| {
                                 let config = config.get();
                                 let size = config.ui.icon_size() as f32;
-                                s.margin_left(10.0)
+                                s.margin_left(16.0)
                                     .margin_right(6.0)
                                     .size(size, size)
                                     .min_size(size, size)
@@ -198,7 +198,7 @@ fn search_result(
                                             start,
                                             end,
                                         ));
-                                    s.margin_left(10.0 + icon_size + 6.0)
+                                    s.margin_left(16.0 + icon_size + 6.0)
                                         .apply_if(is_selected, |s| {
                                             s.background(config.color(
                                                 LapceColor::PALETTE_CURRENT_BACKGROUND,

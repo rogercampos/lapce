@@ -403,7 +403,7 @@ pub fn panel_container_view(
                     .height_pct(100.0)
                     .background(config.color(LapceColor::PANEL_BACKGROUND))
             })
-            .border_radius(6.0)
+            .border_radius(10.0)
             .color(config.color(LapceColor::PANEL_FOREGROUND))
     })
     .debug_name(format!("{:?} Panel Container View", position))

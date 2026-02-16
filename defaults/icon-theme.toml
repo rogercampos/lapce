@@ -75,8 +75,8 @@ name = "Lapce Codicons"
 "item.opened" = "chevron-down.svg"
 "item.closed" = "chevron-right.svg"
 
-"directory.closed" = "folder.svg"
-"directory.opened" = "folder-opened.svg"
+"directory.closed" = "folder-filled.svg"
+"directory.opened" = "folder-filled-opened.svg"
 
 "panel.restore" = "chevron-down.svg"
 "panel.maximise" = "chevron-right.svg"

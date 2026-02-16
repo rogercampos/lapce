@@ -4,7 +4,6 @@
 name = "Lapce Dark"
 
 [ui]
-font-family = ""
 font-size = 13
 header-height = 35
 status-height = 25
@@ -23,7 +22,7 @@ magenta = "#C678DD"
 orange = "#D19A66"
 purple = "#C678DD"
 red = "#E06C75"
-white = "#ABB2BF"
+white = "#DDE1E8"
 yellow = "#E5C07B"
 
 primary-background = "$black"
@@ -31,7 +30,7 @@ primary-background = "$black"
 secondary-background = "#21252B"
 shell-background = "#21252B"
 shell-background-top = "#2244AA"
-current-background = "#2C313A"
+current-background = "#214283"
 text = "$white"
 dim-text = "#5C6370"
 

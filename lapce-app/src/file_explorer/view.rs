@@ -169,6 +169,8 @@ fn file_node_text_view(data: FileExplorerData, node: FileNodeViewData) -> impl V
                     .style(move |s| {
                         s.height(ui_line_height.get())
                             .color(file_node_text_color(config))
+                            .font_bold()
+                            .font_size(config.get().ui.font_size() as f32 + 1.0)
                             .padding_right(5.0)
                             .selectable(false)
                     }),
@@ -180,6 +182,7 @@ fn file_node_text_view(data: FileExplorerData, node: FileNodeViewData) -> impl V
                                         .get()
                                         .color(LapceColor::PANEL_FOREGROUND_DIM),
                                 )
+                                .font_size(config.get().ui.font_size() as f32 - 1.0)
                                 .selectable(false)
                         },
                     ),
@@ -194,6 +197,7 @@ fn file_node_text_view(data: FileExplorerData, node: FileNodeViewData) -> impl V
                     .style(move |s| {
                         s.height(ui_line_height.get())
                             .color(file_node_text_color(config))
+                            .font_size(config.get().ui.font_size() as f32 + 1.0)
                             .selectable(false)
                     }),
                 )
@@ -342,7 +346,7 @@ fn file_explorer_view(data: FileExplorerData) -> impl View {
                         };
                         s.size(size, size)
                             .flex_shrink(0.0)
-                            .margin_left(10.0)
+                            .margin_left(4.0)
                             .color(color)
                     }),
                     {
@@ -392,7 +396,9 @@ fn file_explorer_view(data: FileExplorerData) -> impl View {
                     move |s| {
                         s.padding_right(15.0)
                             .min_width_full()
-                            .padding_left((level * 10) as f32)
+                            .padding_left((level * 16) as f32)
+                            .margin_horiz(4.0)
+                            .border_radius(4.0)
                             .align_items(AlignItems::Center)
                             .hover(|s| {
                                 s.background(

@@ -1185,7 +1185,7 @@ pub(super) fn main_split(workspace_data: Rc<WorkspaceData>) -> impl View {
             let is_hidden = panel.panel_bottom_maximized(true)
                 && panel.is_container_shown(&PanelContainerPosition::Bottom, true);
             s.background(config.color(LapceColor::EDITOR_BACKGROUND))
-                .border_radius(6.0)
+                .border_radius(10.0)
                 .apply_if(is_hidden, |s| s.display(Display::None))
                 .width_full()
                 .flex_grow(1.0)
