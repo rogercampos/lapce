@@ -15,7 +15,7 @@ use lsp_types::{DiagnosticRelatedInformation, DiagnosticSeverity};
 use super::{data::PanelSection, position::PanelPosition, view::PanelBuilder};
 use crate::{
     command::InternalCommand,
-    config::{LapceConfig, color::LapceColor, icon::LapceIcons},
+    config::{LapceConfig, color::LapceColor, icon::LapceIcons, layout::LapceLayout},
     doc::{DiagnosticData, EditorDiagnostic},
     editor::location::{EditorLocation, EditorPosition},
     listener::Listener,
@@ -77,7 +77,7 @@ fn problem_section(
                     )
                 },
             )
-            .style(|s| s.flex_col().width_pct(100.0).line_height(1.8)),
+            .style(|s| s.flex_col().width_pct(100.0).line_height(LapceLayout::UI_LINE_HEIGHT as f32)),
         )
         .style(|s| s.absolute().size_pct(100.0, 100.0))
     })

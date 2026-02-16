@@ -12,7 +12,7 @@ use lapce_core::{command::FocusCommand, meta::VERSION};
 
 use crate::{
     command::{CommandExecuted, CommandKind},
-    config::{LapceConfig, color::LapceColor},
+    config::{LapceConfig, color::LapceColor, layout::LapceLayout},
     keypress::KeyPressFocus,
     web_link::web_link,
     workspace_data::{Focus, WorkspaceData},
@@ -167,7 +167,7 @@ pub fn about_popup(workspace_data: Rc<WorkspaceData>) -> impl View {
                     .padding_vert(25.0)
                     .padding_horiz(100.0)
                     .border(1.0)
-                    .border_radius(6.0)
+                    .border_radius(LapceLayout::BORDER_RADIUS)
                     .border_color(config.color(LapceColor::LAPCE_BORDER))
                     .background(config.color(LapceColor::PANEL_BACKGROUND))
             })
@@ -218,7 +218,7 @@ pub fn exclusive_popup<V: View + 'static>(
             config
                 .get()
                 .color(LapceColor::LAPCE_DROPDOWN_SHADOW)
-                .multiply_alpha(0.5),
+                .multiply_alpha(LapceLayout::SHADOW_ALPHA),
         )
     })
 }

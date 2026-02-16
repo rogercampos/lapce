@@ -8,7 +8,7 @@ use floem::{
     views::{Decorators, container, label, svg, tooltip},
 };
 
-use crate::config::{LapceConfig, color::LapceColor};
+use crate::config::{LapceConfig, color::LapceColor, layout::LapceLayout};
 
 pub fn not_clickable_icon<S: std::fmt::Display + 'static>(
     icon: impl Fn() -> &'static str + 'static,
@@ -71,7 +71,7 @@ pub fn clickable_icon_base(
     .style(move |s| {
         let config = config.get();
         s.padding(4.0)
-            .border_radius(6.0)
+            .border_radius(LapceLayout::BORDER_RADIUS)
             .border(1.0)
             .border_color(Color::TRANSPARENT)
             .apply_if(active_fn(), |s| {

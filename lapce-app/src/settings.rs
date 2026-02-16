@@ -25,7 +25,7 @@ use crate::{
     command::CommandExecuted,
     config::{
         DropdownInfo, LapceConfig, color::LapceColor, core::CoreConfig,
-        editor::EditorConfig, icon::LapceIcons, ui::UIConfig,
+        editor::EditorConfig, icon::LapceIcons, layout::LapceLayout, ui::UIConfig,
     },
     keypress::KeyPressFocus,
     main_split::Editors,
@@ -338,7 +338,7 @@ pub fn settings_view(editors: Editors, common: Rc<CommonData>) -> impl View {
         .style(move |s| {
             s.flex_col()
                 .width_pct(100.0)
-                .line_height(1.8)
+                .line_height(LapceLayout::UI_LINE_HEIGHT as f32)
                 .font_size(config.get().ui.font_size() as f32 + 1.0)
         })
     };
@@ -365,7 +365,7 @@ pub fn settings_view(editors: Editors, common: Rc<CommonData>) -> impl View {
                     .keyboard_navigable()
                     .style(move |s| {
                         s.width_pct(100.0)
-                            .border_radius(6.0)
+                            .border_radius(LapceLayout::BORDER_RADIUS)
                             .border(1.0)
                             .border_color(
                                 config.get().color(LapceColor::LAPCE_BORDER),
@@ -518,9 +518,12 @@ fn settings_item_view(
                 text_input_view
                     .keyboard_navigable()
                     .style(move |s| {
-                        s.width(300.0).border(1.0).border_radius(6.0).border_color(
-                            config.get().color(LapceColor::LAPCE_BORDER),
-                        )
+                        s.width(300.0)
+                            .border(1.0)
+                            .border_radius(LapceLayout::BORDER_RADIUS)
+                            .border_color(
+                                config.get().color(LapceColor::LAPCE_BORDER),
+                            )
                     })
                     .into_any()
             } else if let SettingsValue::Dropdown(dropdown) = &item.value {
@@ -566,14 +569,14 @@ fn settings_item_view(
                 .text_ellipsis()
                 .min_width(0.0)
                 .max_width_pct(100.0)
-                .line_height(1.8)
+                .line_height(LapceLayout::UI_LINE_HEIGHT as f32)
                 .font_size(config.get().ui.font_size() as f32 + 1.0)
         }),
         stack((
             label(move || item.description.clone()).style(move |s| {
                 s.min_width(0.0)
                     .max_width_pct(100.0)
-                    .line_height(1.8)
+                    .line_height(LapceLayout::UI_LINE_HEIGHT as f32)
                     .apply_if(is_ticked.is_some(), |s| {
                         s.margin_left(config.get().ui.font_size() as f32 + 8.0)
                     })
@@ -600,7 +603,9 @@ fn settings_item_view(
                 container(
                     stack((
                         checkbox(move || checked.get(), config),
-                        label(|| " ".to_string()).style(|s| s.line_height(1.8)),
+                        label(|| " ".to_string()).style(|s| {
+                            s.line_height(LapceLayout::UI_LINE_HEIGHT as f32)
+                        }),
                     ))
                     .style(|s| s.items_center()),
                 )
@@ -746,9 +751,9 @@ fn dropdown_view(
             .cursor(CursorStyle::Pointer)
             .border_color(config.get().color(LapceColor::LAPCE_BORDER))
             .border(1.0)
-            .border_radius(6.0)
+            .border_radius(LapceLayout::BORDER_RADIUS)
             .width(250.0)
-            .line_height(1.8)
+            .line_height(LapceLayout::UI_LINE_HEIGHT as f32)
     })
     .keyboard_navigable()
     .on_event_stop(EventListener::FocusGained, move |_| {
@@ -859,7 +864,7 @@ fn dropdown_scroll(
         };
 
         s.width(250.0)
-            .line_height(1.8)
+            .line_height(LapceLayout::UI_LINE_HEIGHT as f32)
             .font_size(config.ui.font_size() as f32)
             .font_family(config.ui.font_family.clone())
             .color(config.color(LapceColor::EDITOR_FOREGROUND))
@@ -868,7 +873,7 @@ fn dropdown_scroll(
                 s.background(config.color(LapceColor::LAPCE_SCROLL_BAR))
             })
             .border(1)
-            .border_radius(6.0)
+            .border_radius(LapceLayout::BORDER_RADIUS)
             .border_color(config.color(LapceColor::LAPCE_BORDER))
             .box_shadow_blur(3.0)
             .box_shadow_color(config.color(LapceColor::LAPCE_DROPDOWN_SHADOW))

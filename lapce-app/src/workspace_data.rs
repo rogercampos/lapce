@@ -53,7 +53,7 @@ use crate::{
         LapceWorkbenchCommand, WindowCommand,
     },
     completion::{CompletionData, CompletionStatus},
-    config::LapceConfig,
+    config::{LapceConfig, layout::LapceLayout},
     db::LapceDb,
     doc::DocContent,
     editor::location::{EditorLocation, EditorPosition},
@@ -316,7 +316,9 @@ impl WorkspaceData {
             let attrs = Attrs::new()
                 .family(&family)
                 .font_size(config.ui.font_size() as f32)
-                .line_height(LineHeightValue::Normal(1.8));
+                .line_height(LineHeightValue::Normal(
+                    LapceLayout::UI_LINE_HEIGHT as f32,
+                ));
             let attrs_list = AttrsList::new(attrs);
             text_layout.set_text("W", attrs_list, None);
             text_layout.size().height

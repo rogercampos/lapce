@@ -46,7 +46,9 @@ use tracing_subscriber::{filter::Targets, reload::Handle};
 use crate::{
     about, alert,
     command::{InternalCommand, LapceWorkbenchCommand},
-    config::{LapceConfig, color::LapceColor, watcher::ConfigWatcher},
+    config::{
+        LapceConfig, color::LapceColor, layout::LapceLayout, watcher::ConfigWatcher,
+    },
     db::LapceDb,
     editor::location::{EditorLocation, EditorPosition},
     go_to_file, go_to_line,
@@ -188,7 +190,10 @@ impl AppData {
                 })
             })
             .unwrap_or_else(|| {
-                self.default_window_config().size(Size::new(800.0, 600.0))
+                self.default_window_config().size(Size::new(
+                    LapceLayout::DEFAULT_WINDOW_WIDTH,
+                    LapceLayout::DEFAULT_WINDOW_HEIGHT,
+                ))
             });
         let config = if cfg!(target_os = "macos")
             || self.config.get_untracked().core.custom_titlebar
@@ -291,7 +296,15 @@ impl AppData {
             let (size, mut pos) = db
                 .get_window()
                 .map(|i| (i.size, i.pos))
-                .unwrap_or_else(|_| (Size::new(800.0, 600.0), Point::new(0.0, 0.0)));
+                .unwrap_or_else(|_| {
+                    (
+                        Size::new(
+                            LapceLayout::DEFAULT_WINDOW_WIDTH,
+                            LapceLayout::DEFAULT_WINDOW_HEIGHT,
+                        ),
+                        Point::new(0.0, 0.0),
+                    )
+                });
 
             for dir in dirs {
                 let workspace_type = LapceWorkspaceType::Local;
@@ -365,7 +378,10 @@ impl AppData {
 
         if initial_windows == 0 {
             let mut info = db.get_window().unwrap_or_else(|_| WindowInfo {
-                size: Size::new(800.0, 600.0),
+                size: Size::new(
+                    LapceLayout::DEFAULT_WINDOW_WIDTH,
+                    LapceLayout::DEFAULT_WINDOW_HEIGHT,
+                ),
                 pos: Point::ZERO,
                 maximised: false,
                 tabs: TabsInfo {
@@ -694,7 +710,7 @@ fn empty_workspace_view(workspace_data: Rc<WorkspaceData>) -> impl View {
                     let config = config.get();
                     s.padding_horiz(20.0)
                         .padding_vert(10.0)
-                        .border_radius(6.0)
+                        .border_radius(LapceLayout::BORDER_RADIUS)
                         .color(
                             config
                                 .color(LapceColor::LAPCE_BUTTON_PRIMARY_FOREGROUND),

@@ -22,7 +22,9 @@ use super::{data::FileExplorerData, node::FileNodeVirtualList};
 use crate::{
     app::clickable_icon,
     command::InternalCommand,
-    config::{LapceConfig, color::LapceColor, icon::LapceIcons},
+    config::{
+        LapceConfig, color::LapceColor, icon::LapceIcons, layout::LapceLayout,
+    },
     doc::DocContent,
     editor_tab::{EditorTabChild, EditorTabData},
     panel::{
@@ -254,7 +256,7 @@ fn file_node_input_view(data: FileExplorerData, err: Option<String>) -> Containe
                 .height(ui_line_height.get())
                 .padding(0.0)
                 .margin(0.0)
-                .border_radius(6.0)
+                .border_radius(LapceLayout::BORDER_RADIUS)
                 .border(1.0)
                 .border_color(config.get().color(LapceColor::LAPCE_BORDER))
         });
@@ -462,7 +464,11 @@ fn file_explorer_view(data: FileExplorerData) -> impl View {
         .item_size_fixed(move || ui_line_height.get())
         .style(|s| s.absolute().flex_col().min_width_full()),
     )
-    .style(|s| s.absolute().size_full().line_height(1.8))
+    .style(|s| {
+        s.absolute()
+            .size_full()
+            .line_height(LapceLayout::UI_LINE_HEIGHT as f32)
+    })
     .on_secondary_click_stop(move |_| {
         if let Naming::None = naming.get_untracked() {
             if let Some(path) = &secondary_click_data.common.workspace.path {
@@ -593,6 +599,10 @@ fn open_editors_view(workspace_data: Rc<WorkspaceData>) -> impl View {
         )
         .style(|s| s.flex_col().width_pct(100.0)),
     )
-    .style(|s| s.absolute().size_full().line_height(1.8))
+    .style(|s| {
+        s.absolute()
+            .size_full()
+            .line_height(LapceLayout::UI_LINE_HEIGHT as f32)
+    })
     .debug_name("Open Editors")
 }

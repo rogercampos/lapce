@@ -27,7 +27,7 @@ use crate::{
         CommandExecuted, CommandKind, InternalCommand, LapceCommand,
         LapceWorkbenchCommand,
     },
-    config::{LapceConfig, color::LapceColor},
+    config::{LapceConfig, color::LapceColor, layout::LapceLayout},
     editor::view::editor_container_view,
     editor::{
         EditorData, EditorViewKind,
@@ -438,12 +438,12 @@ fn search_modal_content(workspace_data: Rc<WorkspaceData>) -> impl View {
     .style(move |s| {
         let config = config.get();
         s.flex_col()
-            .width(800.0)
-            .height(600.0)
-            .max_width_pct(80.0)
-            .max_height_pct(80.0)
+            .width(LapceLayout::DEFAULT_WINDOW_WIDTH as f32)
+            .height(LapceLayout::DEFAULT_WINDOW_HEIGHT as f32)
+            .max_width_pct(LapceLayout::MODAL_MAX_PCT)
+            .max_height_pct(LapceLayout::MODAL_MAX_PCT)
             .border(1.0)
-            .border_radius(6.0)
+            .border_radius(LapceLayout::BORDER_RADIUS)
             .border_color(config.color(LapceColor::LAPCE_BORDER))
             .background(config.color(LapceColor::PALETTE_BACKGROUND))
     })

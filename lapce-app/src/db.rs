@@ -11,6 +11,7 @@ use sha2::{Digest, Sha256};
 
 use crate::{
     app::{AppData, AppInfo},
+    config::layout::LapceLayout,
     doc::DocInfo,
     window::{WindowData, WindowInfo},
     workspace::{LapceWorkspace, WorkspaceInfo},
@@ -264,10 +265,10 @@ impl LapceDb {
         let mut info: AppInfo = serde_json::from_str(&info)?;
         for window in info.windows.iter_mut() {
             if window.size.width < 10.0 {
-                window.size.width = 800.0;
+                window.size.width = LapceLayout::DEFAULT_WINDOW_WIDTH;
             }
             if window.size.height < 10.0 {
-                window.size.height = 600.0;
+                window.size.height = LapceLayout::DEFAULT_WINDOW_HEIGHT;
             }
         }
         Ok(info)
@@ -277,10 +278,10 @@ impl LapceDb {
         let info = std::fs::read_to_string(self.folder.join(WINDOW))?;
         let mut info: WindowInfo = serde_json::from_str(&info)?;
         if info.size.width < 10.0 {
-            info.size.width = 800.0;
+            info.size.width = LapceLayout::DEFAULT_WINDOW_WIDTH;
         }
         if info.size.height < 10.0 {
-            info.size.height = 600.0;
+            info.size.height = LapceLayout::DEFAULT_WINDOW_HEIGHT;
         }
         Ok(info)
     }
@@ -405,8 +406,14 @@ mod tests {
         });
         std::fs::write(db.folder.join(APP), json.to_string()).unwrap();
         let info = db.get_app().unwrap();
-        assert_eq!(info.windows[0].size.width, 800.0);
-        assert_eq!(info.windows[0].size.height, 600.0);
+        assert_eq!(
+            info.windows[0].size.width,
+            LapceLayout::DEFAULT_WINDOW_WIDTH
+        );
+        assert_eq!(
+            info.windows[0].size.height,
+            LapceLayout::DEFAULT_WINDOW_HEIGHT
+        );
     }
 
     #[test]
@@ -423,7 +430,10 @@ mod tests {
         std::fs::write(db.folder.join(APP), json.to_string()).unwrap();
         let info = db.get_app().unwrap();
         assert_eq!(info.windows[0].size.width, 1024.0);
-        assert_eq!(info.windows[0].size.height, 600.0);
+        assert_eq!(
+            info.windows[0].size.height,
+            LapceLayout::DEFAULT_WINDOW_HEIGHT
+        );
     }
 
     #[test]
@@ -456,8 +466,14 @@ mod tests {
         });
         std::fs::write(db.folder.join(APP), json.to_string()).unwrap();
         let info = db.get_app().unwrap();
-        assert_eq!(info.windows[0].size.width, 800.0);
-        assert_eq!(info.windows[0].size.height, 600.0);
+        assert_eq!(
+            info.windows[0].size.width,
+            LapceLayout::DEFAULT_WINDOW_WIDTH
+        );
+        assert_eq!(
+            info.windows[0].size.height,
+            LapceLayout::DEFAULT_WINDOW_HEIGHT
+        );
     }
 
     #[test]
@@ -481,8 +497,14 @@ mod tests {
         });
         std::fs::write(db.folder.join(APP), json.to_string()).unwrap();
         let info = db.get_app().unwrap();
-        assert_eq!(info.windows[0].size.width, 800.0);
-        assert_eq!(info.windows[0].size.height, 600.0);
+        assert_eq!(
+            info.windows[0].size.width,
+            LapceLayout::DEFAULT_WINDOW_WIDTH
+        );
+        assert_eq!(
+            info.windows[0].size.height,
+            LapceLayout::DEFAULT_WINDOW_HEIGHT
+        );
         assert_eq!(info.windows[1].size.width, 1920.0);
         assert_eq!(info.windows[1].size.height, 1080.0);
     }
@@ -498,8 +520,8 @@ mod tests {
         });
         std::fs::write(db.folder.join(WINDOW), json.to_string()).unwrap();
         let info = db.get_window().unwrap();
-        assert_eq!(info.size.width, 800.0);
-        assert_eq!(info.size.height, 600.0);
+        assert_eq!(info.size.width, LapceLayout::DEFAULT_WINDOW_WIDTH);
+        assert_eq!(info.size.height, LapceLayout::DEFAULT_WINDOW_HEIGHT);
     }
 
     #[test]

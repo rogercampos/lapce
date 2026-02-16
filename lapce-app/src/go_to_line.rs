@@ -14,7 +14,7 @@ use lapce_xi_rope::Rope;
 use crate::{
     about::exclusive_popup,
     command::{CommandExecuted, CommandKind, InternalCommand, LapceCommand},
-    config::color::LapceColor,
+    config::{color::LapceColor, layout::LapceLayout},
     editor::EditorData,
     editor::location::{EditorLocation, EditorPosition},
     keypress::KeyPressFocus,
@@ -250,9 +250,9 @@ fn go_to_line_content(workspace_data: Rc<WorkspaceData>) -> impl View {
         let config = config.get();
         s.flex_col()
             .width(300.0)
-            .max_width_pct(80.0)
+            .max_width_pct(LapceLayout::MODAL_MAX_PCT)
             .border(1.0)
-            .border_radius(6.0)
+            .border_radius(LapceLayout::BORDER_RADIUS)
             .border_color(config.color(LapceColor::LAPCE_BORDER))
             .background(config.color(LapceColor::PALETTE_BACKGROUND))
     })

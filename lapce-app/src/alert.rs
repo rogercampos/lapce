@@ -13,7 +13,9 @@ use floem::{
 };
 
 use crate::{
-    config::{LapceConfig, color::LapceColor, icon::LapceIcons},
+    config::{
+        LapceConfig, color::LapceColor, icon::LapceIcons, layout::LapceLayout,
+    },
     workspace_data::CommonData,
 };
 
@@ -99,7 +101,7 @@ pub fn alert_box(alert_data: AlertBoxData) -> impl View {
                                     .font_size((config.ui.font_size() + 1) as f32)
                                     .line_height(1.6)
                                     .border(1.0)
-                                    .border_radius(6.0)
+                                    .border_radius(LapceLayout::BORDER_RADIUS)
                                     .border_color(
                                         config.color(LapceColor::LAPCE_BORDER),
                                     )
@@ -131,7 +133,7 @@ pub fn alert_box(alert_data: AlertBoxData) -> impl View {
                             .font_size((config.ui.font_size() + 1) as f32)
                             .line_height(1.5)
                             .border(1.0)
-                            .border_radius(6.0)
+                            .border_radius(LapceLayout::BORDER_RADIUS)
                             .border_color(config.color(LapceColor::LAPCE_BORDER))
                             .hover(|s| {
                                 s.cursor(CursorStyle::Pointer).background(
@@ -154,7 +156,7 @@ pub fn alert_box(alert_data: AlertBoxData) -> impl View {
             s.padding(20.0)
                 .width(250.0)
                 .border(1.0)
-                .border_radius(6.0)
+                .border_radius(LapceLayout::BORDER_RADIUS)
                 .border_color(config.color(LapceColor::LAPCE_BORDER))
                 .color(config.color(LapceColor::EDITOR_FOREGROUND))
                 .background(config.color(LapceColor::PANEL_BACKGROUND))
@@ -171,7 +173,7 @@ pub fn alert_box(alert_data: AlertBoxData) -> impl View {
                 config
                     .get()
                     .color(LapceColor::LAPCE_DROPDOWN_SHADOW)
-                    .multiply_alpha(0.5),
+                    .multiply_alpha(LapceLayout::SHADOW_ALPHA),
             )
     })
     .debug_name("Alert Box")

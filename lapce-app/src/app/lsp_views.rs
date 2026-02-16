@@ -23,7 +23,9 @@ use lsp_types::{CompletionItemKind, MessageType, ShowMessageParams};
 
 use crate::{
     code_action::CodeActionStatus,
-    config::{LapceConfig, color::LapceColor, icon::LapceIcons},
+    config::{
+        LapceConfig, color::LapceColor, icon::LapceIcons, layout::LapceLayout,
+    },
     focus_text::focus_text,
     markdown::MarkdownContent,
     text_input::TextInputBuilder,
@@ -62,10 +64,14 @@ pub(super) fn window_message_view(
                 }),
                 stack((
                     text(title.clone()).style(|s| {
-                        s.min_width(0.0).line_height(1.8).font_weight(Weight::BOLD)
+                        s.min_width(0.0)
+                            .line_height(LapceLayout::UI_LINE_HEIGHT as f32)
+                            .font_weight(Weight::BOLD)
                     }),
                     text(message.message.clone()).style(|s| {
-                        s.min_width(0.0).line_height(1.8).margin_top(5.0)
+                        s.min_width(0.0)
+                            .line_height(LapceLayout::UI_LINE_HEIGHT as f32)
+                            .margin_top(5.0)
                     }),
                 ))
                 .style(move |s| {
@@ -106,7 +112,7 @@ pub(super) fn window_message_view(
                     .items_start()
                     .padding(10.0)
                     .border(1.0)
-                    .border_radius(6.0)
+                    .border_radius(LapceLayout::BORDER_RADIUS)
                     .border_color(config.color(LapceColor::LAPCE_BORDER))
                     .background(config.color(LapceColor::PANEL_BACKGROUND))
                     .apply_if(i > 0, |s| s.margin_top(10.0))
@@ -140,7 +146,7 @@ pub(super) fn window_message_view(
         )
         .style(|s| {
             s.width(360.0)
-                .max_width_pct(80.0)
+                .max_width_pct(LapceLayout::MODAL_MAX_PCT)
                 .padding(10.0)
                 .height_full()
         }),
@@ -230,7 +236,7 @@ pub(super) fn hover(workspace_data: Rc<WorkspaceData>) -> impl View {
                     .margin_top(origin.y as f32)
                     .max_height(300.0)
                     .border(1.0)
-                    .border_radius(6.0)
+                    .border_radius(LapceLayout::BORDER_RADIUS)
                     .border_color(config.color(LapceColor::LAPCE_BORDER))
                     .background(config.color(LapceColor::PANEL_BACKGROUND))
                     .set(PropagatePointerWheel, false)
@@ -358,7 +364,7 @@ pub(super) fn completion(workspace_data: Rc<WorkspaceData>) -> impl View {
             .background(config.color(LapceColor::COMPLETION_BACKGROUND))
             .font_family(config.editor.font_family.clone())
             .font_size(config.editor.font_size() as f32)
-            .border_radius(6.0)
+            .border_radius(LapceLayout::BORDER_RADIUS)
     })
     .debug_name("Completion Layer")
 }
@@ -394,8 +400,8 @@ pub(super) fn code_action(workspace_data: Rc<WorkspaceData>) -> impl View {
                             .align_items(Some(AlignItems::Center))
                             .min_width(0.0)
                             .width_full()
-                            .line_height(1.8)
-                            .border_radius(6.0)
+                            .line_height(LapceLayout::UI_LINE_HEIGHT as f32)
+                            .border_radius(LapceLayout::BORDER_RADIUS)
                             .cursor(CursorStyle::Pointer)
                             .apply_if(active.get() == i, |s| {
                                 s.background(
@@ -443,7 +449,7 @@ pub(super) fn code_action(workspace_data: Rc<WorkspaceData>) -> impl View {
         .margin_left(origin.x as f32)
         .margin_top(origin.y as f32)
         .background(config.get().color(LapceColor::COMPLETION_BACKGROUND))
-        .border_radius(6.0)
+        .border_radius(LapceLayout::BORDER_RADIUS)
     })
     .debug_name("Code Action Layer")
 }
@@ -466,7 +472,7 @@ pub(super) fn rename(workspace_data: Rc<WorkspaceData>) -> impl View {
             s.font_family(config.editor.font_family.clone())
                 .font_size(config.editor.font_size() as f32)
                 .border(1.0)
-                .border_radius(6.0)
+                .border_radius(LapceLayout::BORDER_RADIUS)
                 .border_color(config.color(LapceColor::LAPCE_BORDER))
                 .background(config.color(LapceColor::EDITOR_BACKGROUND))
         }),
@@ -483,7 +489,7 @@ pub(super) fn rename(workspace_data: Rc<WorkspaceData>) -> impl View {
             .margin_left(origin.x as f32)
             .margin_top(origin.y as f32)
             .background(config.get().color(LapceColor::PANEL_BACKGROUND))
-            .border_radius(6.0)
+            .border_radius(LapceLayout::BORDER_RADIUS)
             .padding(6.0)
     })
     .debug_name("Rename Layer")

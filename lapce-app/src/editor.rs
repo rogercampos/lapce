@@ -48,7 +48,7 @@ use self::location::{EditorLocation, EditorPosition};
 use crate::{
     command::{CommandKind, InternalCommand, LapceCommand, LapceWorkbenchCommand},
     completion::CompletionStatus,
-    config::LapceConfig,
+    config::{LapceConfig, layout::LapceLayout},
     db::LapceDb,
     doc::{Doc, DocContent},
     editor_tab::EditorTabChild,
@@ -2814,10 +2814,12 @@ fn parse_hover_resp(
 ) -> Vec<MarkdownContent> {
     match hover.contents {
         HoverContents::Scalar(text) => match text {
-            MarkedString::String(text) => parse_markdown(&text, 1.8, config),
+            MarkedString::String(text) => {
+                parse_markdown(&text, LapceLayout::UI_LINE_HEIGHT, config)
+            }
             MarkedString::LanguageString(code) => parse_markdown(
                 &format!("```{}\n{}\n```", code.language, code.value),
-                1.8,
+                LapceLayout::UI_LINE_HEIGHT,
                 config,
             ),
         },
@@ -2832,8 +2834,12 @@ fn parse_hover_resp(
             })
             .unwrap_or_default(),
         HoverContents::Markup(content) => match content.kind {
-            MarkupKind::PlainText => from_plaintext(&content.value, 1.8, config),
-            MarkupKind::Markdown => parse_markdown(&content.value, 1.8, config),
+            MarkupKind::PlainText => {
+                from_plaintext(&content.value, LapceLayout::UI_LINE_HEIGHT, config)
+            }
+            MarkupKind::Markdown => {
+                parse_markdown(&content.value, LapceLayout::UI_LINE_HEIGHT, config)
+            }
         },
     }
 }

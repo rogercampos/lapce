@@ -9,7 +9,10 @@ use floem::{
 };
 use lapce_core::buffer::rope_text::RopeText;
 
-use crate::{config::color::LapceColor, editor::EditorData};
+use crate::{
+    config::{color::LapceColor, layout::LapceLayout},
+    editor::EditorData,
+};
 
 pub fn text_area(
     editor: EditorData,
@@ -114,7 +117,7 @@ pub fn text_area(
     .style(move |s| {
         let config = config.get();
         s.border(1.0)
-            .border_radius(6.0)
+            .border_radius(LapceLayout::BORDER_RADIUS)
             .border_color(config.color(LapceColor::LAPCE_BORDER))
             .background(config.color(LapceColor::EDITOR_BACKGROUND))
     })

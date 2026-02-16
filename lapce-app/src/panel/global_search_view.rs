@@ -11,7 +11,9 @@ use floem::{
 use super::position::PanelPosition;
 use crate::{
     command::InternalCommand,
-    config::{LapceConfig, color::LapceColor, icon::LapceIcons},
+    config::{
+        LapceConfig, color::LapceColor, icon::LapceIcons, layout::LapceLayout,
+    },
     editor::location::{EditorLocation, EditorPosition},
     editor::view::editor_container_view,
     focus_text::focus_text,
@@ -250,7 +252,7 @@ fn search_result(
             .item_size_fn(|(_, match_data): &(PathBuf, SearchMatchData)| {
                 match_data.height()
             })
-            .style(|s| s.flex_col().min_width_pct(100.0).line_height(1.8))
+            .style(|s| s.flex_col().min_width_pct(100.0).line_height(LapceLayout::UI_LINE_HEIGHT as f32))
         })
         .style(|s| s.absolute().size_pct(100.0, 100.0))
     })

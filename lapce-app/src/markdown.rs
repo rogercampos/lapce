@@ -7,7 +7,7 @@ use lsp_types::MarkedString;
 use pulldown_cmark::{CodeBlockKind, CowStr, Event, Options, Parser, Tag};
 use smallvec::SmallVec;
 
-use crate::config::{LapceConfig, color::LapceColor};
+use crate::config::{LapceConfig, color::LapceColor, layout::LapceLayout};
 
 /// Represents a rendered block of markdown content. The parser breaks markdown into
 /// these blocks so the view layer can lay them out vertically -- each Text block is
@@ -322,14 +322,16 @@ pub fn from_marked_string(
     config: &LapceConfig,
 ) -> Vec<MarkdownContent> {
     match text {
-        MarkedString::String(text) => parse_markdown(&text, 1.8, config),
+        MarkedString::String(text) => {
+            parse_markdown(&text, LapceLayout::UI_LINE_HEIGHT, config)
+        }
         // This is a short version of a code block
         MarkedString::LanguageString(code) => {
             // TODO: We could simply construct the MarkdownText directly
             // Simply construct the string as if it was written directly
             parse_markdown(
                 &format!("```{}\n{}\n```", code.language, code.value),
-                1.8,
+                LapceLayout::UI_LINE_HEIGHT,
                 config,
             )
         }

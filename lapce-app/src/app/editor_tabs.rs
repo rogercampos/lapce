@@ -28,7 +28,9 @@ use floem::{
 
 use crate::{
     command::InternalCommand,
-    config::{LapceConfig, color::LapceColor, icon::LapceIcons},
+    config::{
+        LapceConfig, color::LapceColor, icon::LapceIcons, layout::LapceLayout,
+    },
     editor::view::editor_container_view,
     editor_tab::{EditorTabChild, EditorTabData},
     id::{EditorTabId, SplitId},
@@ -260,7 +262,7 @@ pub(super) fn editor_tab_header(
                 .dragging_style(move |s| {
                     let config = config.get();
                     s.border(1.0)
-                        .border_radius(6.0)
+                        .border_radius(LapceLayout::BORDER_RADIUS)
                         .background(
                             config
                                 .color(LapceColor::PANEL_BACKGROUND)
@@ -296,7 +298,7 @@ pub(super) fn editor_tab_header(
                             config
                                 .get()
                                 .color(LapceColor::LAPCE_TAB_ACTIVE_UNDERLINE)
-                                .multiply_alpha(0.5),
+                                .multiply_alpha(LapceLayout::SHADOW_ALPHA),
                         )
                 })
                 .debug_name("Active Tab Indicator"),
@@ -318,14 +320,16 @@ pub(super) fn editor_tab_header(
                 .items_center()
                 .justify_center()
                 .cursor(CursorStyle::Pointer)
-                .border_radius(6.0)
+                .border_radius(LapceLayout::BORDER_RADIUS)
                 .margin_vert(2.0)
                 .margin_horiz(2.0)
                 .border(1.0)
                 .border_color(Color::TRANSPARENT)
                 .apply_if(is_active, |s| {
                     s.background(accent.multiply_alpha(0.15))
-                        .border_color(accent.multiply_alpha(0.5))
+                        .border_color(
+                            accent.multiply_alpha(LapceLayout::SHADOW_ALPHA),
+                        )
                         .color(config.color(LapceColor::LAPCE_TAB_ACTIVE_FOREGROUND))
                 })
                 .apply_if(!is_active, |s| {

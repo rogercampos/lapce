@@ -32,7 +32,7 @@ use lapce_core::{
 use lapce_xi_rope::Rope;
 
 use crate::{
-    config::{LapceConfig, color::LapceColor},
+    config::{LapceConfig, color::LapceColor, layout::LapceLayout},
     doc::Doc,
     editor::{DocSignal, EditorData, view::editor_style},
     keypress::KeyPressFocus,
@@ -217,7 +217,13 @@ fn text_input_full<T: KeyPressFocus + 'static>(
                         cursor_line.p1.x - viewport.x0,
                         cursor_line.p1.y - viewport.y0,
                     );
-                set_ime_cursor_area(origin, Size::new(800.0, 600.0));
+                set_ime_cursor_area(
+                    origin,
+                    Size::new(
+                        LapceLayout::DEFAULT_WINDOW_WIDTH,
+                        LapceLayout::DEFAULT_WINDOW_HEIGHT,
+                    ),
+                );
             }
         });
     }
@@ -417,7 +423,7 @@ impl TextInput {
             self.style
                 .color()
                 .unwrap_or(Color::BLACK)
-                .multiply_alpha(0.5),
+                .multiply_alpha(LapceLayout::SHADOW_ALPHA),
         );
         placeholder_text_layout.set_text(
             &self.placeholder,

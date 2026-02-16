@@ -33,6 +33,7 @@ pub mod core;
 pub mod editor;
 pub mod icon;
 pub mod icon_theme;
+pub mod layout;
 pub mod svg;
 pub mod ui;
 pub mod watcher;

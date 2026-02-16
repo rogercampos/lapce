@@ -31,7 +31,7 @@ use nucleo::Utf32Str;
 use crate::{
     about::exclusive_popup,
     command::{CommandExecuted, CommandKind, InternalCommand, LapceCommand},
-    config::{LapceConfig, color::LapceColor},
+    config::{LapceConfig, color::LapceColor, layout::LapceLayout},
     editor::EditorData,
     focus_text::focus_text,
     keypress::KeyPressFocus,
@@ -527,10 +527,10 @@ fn go_to_file_content(workspace_data: Rc<WorkspaceData>) -> impl View {
         let config = config.get();
         s.flex_col()
             .width(config.ui.palette_width() as f64)
-            .max_width_pct(80.0)
+            .max_width_pct(LapceLayout::MODAL_MAX_PCT)
             .max_height((layout_rect.get().height() * 0.45).round() as f32)
             .border(1.0)
-            .border_radius(6.0)
+            .border_radius(LapceLayout::BORDER_RADIUS)
             .border_color(config.color(LapceColor::LAPCE_BORDER))
             .background(config.color(LapceColor::PALETTE_BACKGROUND))
     })

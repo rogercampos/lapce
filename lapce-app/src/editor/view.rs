@@ -48,6 +48,7 @@ use lapce_xi_rope::find::CaseMatching;
 use lsp_types::CodeLens;
 
 use super::{DocSignal, EditorData, gutter::editor_gutter_view};
+use crate::config::layout::LapceLayout;
 use crate::{
     app::clickable_icon,
     command::InternalCommand,
@@ -243,7 +244,13 @@ pub fn editor_view(
                 let viewport = editor_viewport.get();
                 let pos = window_origin
                     + (point_below.x - viewport.x0, point_below.y - viewport.y0);
-                set_ime_cursor_area(pos, Size::new(800.0, 600.0));
+                set_ime_cursor_area(
+                    pos,
+                    Size::new(
+                        LapceLayout::DEFAULT_WINDOW_WIDTH,
+                        LapceLayout::DEFAULT_WINDOW_HEIGHT,
+                    ),
+                );
             }
         }
     });
@@ -1237,7 +1244,7 @@ fn editor_gutter_code_lens_view(
     .style(move |s| {
         let config = config.get();
         s.padding(4.0)
-            .border_radius(6.0)
+            .border_radius(LapceLayout::BORDER_RADIUS)
             .hover(|s| {
                 s.cursor(CursorStyle::Pointer)
                     .background(config.color(LapceColor::PANEL_HOVERED_BACKGROUND))
@@ -1296,7 +1303,7 @@ fn editor_gutter_folding_view(
     .style(move |s| {
         let config = config.get();
         s.padding(4.0)
-            .border_radius(6.0)
+            .border_radius(LapceLayout::BORDER_RADIUS)
             .hover(|s| {
                 s.cursor(CursorStyle::Pointer)
                     .background(config.color(LapceColor::PANEL_HOVERED_BACKGROUND))
@@ -1463,7 +1470,7 @@ fn editor_gutter_code_actions(
         .style(move |s| {
             let config = config.get();
             s.padding(4.0)
-                .border_radius(6.0)
+                .border_radius(LapceLayout::BORDER_RADIUS)
                 .hover(|s| {
                     s.cursor(CursorStyle::Pointer).background(
                         config.color(LapceColor::PANEL_HOVERED_BACKGROUND),
@@ -1907,7 +1914,7 @@ fn search_editor_view(
         s.width(200.0)
             .items_center()
             .border(1.0)
-            .border_radius(6.0)
+            .border_radius(LapceLayout::BORDER_RADIUS)
             .border_color(config.color(LapceColor::LAPCE_BORDER))
             .background(config.color(LapceColor::EDITOR_BACKGROUND))
     })
@@ -1949,7 +1956,7 @@ fn replace_editor_view(
         s.width(200.0)
             .items_center()
             .border(1.0)
-            .border_radius(6.0)
+            .border_radius(LapceLayout::BORDER_RADIUS)
             .border_color(config.color(LapceColor::LAPCE_BORDER))
             .background(config.color(LapceColor::EDITOR_BACKGROUND))
     })
@@ -2113,7 +2120,7 @@ fn find_view(
             let config = config.get();
             s.margin_right(50.0)
                 .background(config.color(LapceColor::PANEL_BACKGROUND))
-                .border_radius(6.0)
+                .border_radius(LapceLayout::BORDER_RADIUS)
                 .border(1.0)
                 .border_color(config.color(LapceColor::LAPCE_BORDER))
                 .padding_vert(4.0)

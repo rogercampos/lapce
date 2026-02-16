@@ -23,7 +23,9 @@ use super::{
 };
 use crate::{
     app::{clickable_icon, clickable_icon_base},
-    config::{LapceConfig, color::LapceColor, icon::LapceIcons},
+    config::{
+        LapceConfig, color::LapceColor, icon::LapceIcons, layout::LapceLayout,
+    },
     file_explorer::view::file_explorer_panel,
     workspace_data::WorkspaceData,
 };
@@ -369,7 +371,7 @@ pub fn panel_container_view(
             ))
             .style(move |s| s.size_full().apply_if(!is_bottom, |s| s.flex_col())),
         )
-        .style(move |s| s.size_full().border_radius(6.0)),
+        .style(move |s| s.size_full().border_radius(LapceLayout::BORDER_RADIUS)),
         resize_drag_view(position),
     ))
     .on_resize(move |rect| {
