@@ -28,6 +28,9 @@ enum FocusTextState {
     /// Byte indices into the text where fuzzy match highlights should be drawn.
     /// These come from the nucleo fuzzy matcher and are rendered in bold + focus_color.
     FocusIndices(Vec<usize>),
+    /// Pre-resolved syntax color spans: (start_byte, end_byte, color).
+    /// Applied as base colors before focus highlights are overlaid on top.
+    SyntaxColors(Vec<(usize, usize, Color)>),
 }
 
 pub fn focus_text(
@@ -58,6 +61,53 @@ pub fn focus_text(
         text_layout: None,
         focus_color: Color::BLACK,
         focus_indices: Vec::new(),
+        syntax_colors: Vec::new(),
+        text_node: None,
+        available_text: None,
+        available_width: None,
+        available_text_layout: None,
+        style: Default::default(),
+    }
+}
+
+/// Like `focus_text`, but also accepts syntax highlighting color spans.
+/// The `syntax_colors` closure returns `Vec<(start_byte, end_byte, Color)>` which
+/// are applied as base text colors before the focus match highlighting is overlaid.
+pub fn focus_text_with_syntax(
+    text: impl Fn() -> String + 'static,
+    focus_indices: impl Fn() -> Vec<usize> + 'static,
+    focus_color: impl Fn() -> Color + 'static,
+    syntax_colors: impl Fn() -> Vec<(usize, usize, Color)> + 'static,
+) -> FocusText {
+    let id = ViewId::new();
+
+    create_effect(move |_| {
+        let new_text = text();
+        id.update_state(FocusTextState::Text(new_text));
+    });
+
+    create_effect(move |_| {
+        let focus_color = focus_color();
+        id.update_state(FocusTextState::FocusColor(focus_color));
+    });
+
+    create_effect(move |_| {
+        let focus_indices = focus_indices();
+        id.update_state(FocusTextState::FocusIndices(focus_indices));
+    });
+
+    create_effect(move |_| {
+        let colors = syntax_colors();
+        id.update_state(FocusTextState::SyntaxColors(colors));
+    });
+
+    FocusText {
+        id,
+        text: "".to_string(),
+        text_layout: None,
+        focus_color: Color::BLACK,
+        focus_indices: Vec::new(),
+        syntax_colors: Vec::new(),
         text_node: None,
         available_text: None,
         available_width: None,
@@ -78,6 +128,8 @@ pub struct FocusText {
     text_layout: Option<TextLayout>,
     focus_color: Color,
     focus_indices: Vec<usize>,
+    /// Syntax highlighting color spans: (start_byte, end_byte, color).
+    syntax_colors: Vec<(usize, usize, Color)>,
     text_node: Option<NodeId>,
     /// Truncated version of text (with "..." suffix) when the full text exceeds available_width.
     available_text: Option<String>,
@@ -89,6 +141,60 @@ pub struct FocusText {
 }
 
 impl FocusText {
+    /// Build an AttrsList with syntax colors as the base layer and focus highlights on top.
+    fn build_attrs_list(
+        &self,
+        text: &str,
+        attrs: Attrs,
+        truncated: bool,
+    ) -> AttrsList {
+        let mut attrs_list = AttrsList::new(attrs.clone());
+        let text_len = text.len();
+
+        // Layer 1: syntax colors (base)
+        for &(start, end, color) in &self.syntax_colors {
+            if start >= text_len {
+                continue;
+            }
+            let end = end.min(text_len);
+            if start < end {
+                attrs_list.add_span(start..end, attrs.clone().color(color));
+            }
+        }
+
+        // Layer 2: focus highlights on top. For each focus index, find the
+        // syntax color covering that position (if any) and apply bold + that
+        // color so we don't lose syntax highlighting. Falls back to focus_color
+        // when no syntax color covers the position.
+        for &i_start in &self.focus_indices {
+            if truncated && i_start + 3 > text_len {
+                break;
+            }
+            let i_end = self
+                .text
+                .char_indices()
+                .find(|(i, _)| *i == i_start)
+                .map(|(_, c)| c.len_utf8() + i_start);
+            let i_end = if let Some(i_end) = i_end {
+                i_end
+            } else {
+                continue;
+            };
+            let syntax_color = self
+                .syntax_colors
+                .iter()
+                .find(|(s, e, _)| i_start >= *s && i_start < *e)
+                .map(|(_, _, c)| *c);
+            let color = syntax_color.unwrap_or(self.focus_color);
+            attrs_list.add_span(
+                i_start..i_end,
+                attrs.clone().color(color).weight(Weight::BOLD),
+            );
+        }
+
+        attrs_list
+    }
+
     fn set_text_layout(&mut self) {
         let mut attrs =
             Attrs::new().color(self.style.color().unwrap_or(Color::BLACK));
@@ -107,31 +213,12 @@ impl FocusText {
             attrs = attrs.line_height(line_height);
         }
 
-        let mut attrs_list = AttrsList::new(attrs.clone());
-
-        for &i_start in &self.focus_indices {
-            let i_end = self
-                .text
-                .char_indices()
-                .find(|(i, _)| *i == i_start)
-                .map(|(_, c)| c.len_utf8() + i_start);
-            let i_end = if let Some(i_end) = i_end {
-                i_end
-            } else {
-                continue;
-            };
-            attrs_list.add_span(
-                i_start..i_end,
-                attrs.clone().color(self.focus_color).weight(Weight::BOLD),
-            );
-        }
+        let attrs_list = self.build_attrs_list(&self.text, attrs.clone(), false);
         let mut text_layout = TextLayout::new();
         text_layout.set_text(&self.text, attrs_list, None);
         self.text_layout = Some(text_layout);
 
         if let Some(new_text) = self.available_text.as_ref() {
-            let new_text_len = new_text.len();
-
             let mut attrs =
                 Attrs::new().color(self.style.color().unwrap_or(Color::BLACK));
             if let Some(font_size) = self.style.font_size() {
@@ -146,27 +233,7 @@ impl FocusText {
                 attrs = attrs.family(font_family);
             }
 
-            let mut attrs_list = AttrsList::new(attrs.clone());
-
-            for &i_start in &self.focus_indices {
-                if i_start + 3 > new_text_len {
-                    break;
-                }
-                let i_end = self
-                    .text
-                    .char_indices()
-                    .find(|(i, _)| *i == i_start)
-                    .map(|(_, c)| c.len_utf8() + i_start);
-                let i_end = if let Some(i_end) = i_end {
-                    i_end
-                } else {
-                    continue;
-                };
-                attrs_list.add_span(
-                    i_start..i_end,
-                    attrs.clone().color(self.focus_color).weight(Weight::BOLD),
-                );
-            }
+            let attrs_list = self.build_attrs_list(new_text, attrs, true);
             let mut text_layout = TextLayout::new();
             text_layout.set_text(new_text, attrs_list, None);
             self.available_text_layout = Some(text_layout);
@@ -194,6 +261,9 @@ impl View for FocusText {
                 }
                 FocusTextState::FocusIndices(indices) => {
                     self.focus_indices = indices;
+                }
+                FocusTextState::SyntaxColors(colors) => {
+                    self.syntax_colors = colors;
                 }
             }
             self.set_text_layout();

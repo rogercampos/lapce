@@ -20,9 +20,10 @@ use crate::{
     editor::location::{EditorLocation, EditorPosition},
     editor::view::editor_container_view,
     file_icon::file_icon_svg,
-    focus_text::focus_text,
+    focus_text::focus_text_with_syntax,
     global_search::{GlobalSearchData, SearchTreeRow, SearchTreeVirtualList},
     listener::Listener,
+    main_split::MainSplitData,
     workspace_data::WorkspaceData,
 };
 
@@ -63,6 +64,7 @@ fn search_result(
     let selected_index = global_search_data.selected_index;
     let selected_match = global_search_data.selected_match;
     let internal_command = global_search_data.common.internal_command;
+    let main_split = global_search_data.main_split.clone();
 
     container({
         scroll({
@@ -71,6 +73,7 @@ fn search_result(
                 move |row| row.key(),
                 move |row| {
                     let gs = global_search_data.clone();
+                    let ms = main_split.clone();
                     search_tree_row_view(
                         row,
                         gs,
@@ -79,6 +82,7 @@ fn search_result(
                         selected_index,
                         selected_match,
                         internal_command,
+                        ms,
                     )
                 },
             )
@@ -103,6 +107,7 @@ fn search_tree_row_view(
     selected_index: RwSignal<Option<usize>>,
     selected_match: RwSignal<Option<(PathBuf, usize, usize, usize)>>,
     internal_command: Listener<InternalCommand>,
+    main_split: MainSplitData,
 ) -> Box<dyn View> {
     match row {
         SearchTreeRow::Folder {
@@ -262,10 +267,12 @@ fn search_tree_row_view(
             let click_path = full_path.clone();
             let double_click_path = full_path.clone();
             let selected_path = full_path.clone();
+            let syntax_path = full_path.clone();
             let line_number = search_match.line;
             let start = search_match.start;
             let end = search_match.end;
             let line_content = search_match.line_content.clone();
+            let syntax_line_content = search_match.line_content.clone();
             let click_gs = global_search.clone();
             let row_key = format!(
                 "match:{}:{}:{}:{}",
@@ -274,9 +281,8 @@ fn search_tree_row_view(
                 search_match.start,
                 search_match.end
             );
-
             Box::new(
-                focus_text(
+                focus_text_with_syntax(
                     move || {
                         let config = config.get();
                         let content = if config.ui.trim_search_results_whitespace {
@@ -302,6 +308,40 @@ fn search_tree_row_view(
                             .collect()
                     },
                     move || config.get().color(LapceColor::EDITOR_FOCUS),
+                    move || {
+                        let config = config.get();
+                        let trim = config.ui.trim_search_results_whitespace;
+                        let prefix_len = line_number.to_string().len() + 2;
+                        let trim_offset = if trim {
+                            syntax_line_content.len()
+                                - syntax_line_content.trim_start().len()
+                        } else {
+                            0
+                        };
+
+                        // Eagerly load the doc (triggers async file read if not cached)
+                        let (doc, _new) =
+                            main_split.get_doc(syntax_path.clone(), None);
+                        // Track cache_rev so we re-run when syntax becomes available
+                        let _rev = doc.cache_rev.get();
+                        let line_styles =
+                            doc.line_style(line_number.saturating_sub(1));
+                        line_styles
+                            .iter()
+                            .filter_map(|ls| {
+                                let color = ls
+                                    .style
+                                    .fg_color
+                                    .as_ref()
+                                    .and_then(|name| config.style_color(name))?;
+                                let s = ls.start.saturating_sub(trim_offset)
+                                    + prefix_len;
+                                let e =
+                                    ls.end.saturating_sub(trim_offset) + prefix_len;
+                                if s < e { Some((s, e, color)) } else { None }
+                            })
+                            .collect()
+                    },
                 )
                 .on_click_stop(move |_| {
                     click_gs.preview_focused.set(false);
