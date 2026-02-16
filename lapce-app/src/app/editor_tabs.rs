@@ -3,7 +3,10 @@ use std::{rc::Rc, sync::Arc};
 use floem::{
     IntoView, View,
     event::{Event, EventListener, EventPropagation},
-    peniko::kurbo::{Point, Rect, Size},
+    peniko::{
+        Color,
+        kurbo::{Point, Rect, Size},
+    },
     reactive::{
         ReadSignal, RwSignal, SignalGet, SignalUpdate, SignalWith, create_memo,
         create_rw_signal,
@@ -25,9 +28,7 @@ use floem::{
 
 use crate::{
     command::InternalCommand,
-    config::{
-        LapceConfig, color::LapceColor, icon::LapceIcons, ui::TabSeparatorHeight,
-    },
+    config::{LapceConfig, color::LapceColor, icon::LapceIcons},
     editor::view::editor_container_view,
     editor_tab::{EditorTabChild, EditorTabData},
     id::{EditorTabId, SplitId},
@@ -42,13 +43,11 @@ use super::{clickable_icon, tooltip_tip};
 
 pub(super) fn editor_tab_header(
     workspace_data: Rc<WorkspaceData>,
-    active_editor_tab: ReadSignal<Option<EditorTabId>>,
     editor_tab: RwSignal<EditorTabData>,
     dragging: RwSignal<Option<(RwSignal<usize>, EditorTabId)>>,
 ) -> impl View {
     let main_split = workspace_data.main_split.clone();
     let editors = workspace_data.main_split.editors;
-    let focus = workspace_data.common.focus;
     let config = workspace_data.common.config;
     let internal_command = workspace_data.common.internal_command;
     let editor_tab_id =
@@ -68,15 +67,6 @@ pub(super) fn editor_tab_header(
     let key = |(_, _, child): &(RwSignal<usize>, RwSignal<Rect>, EditorTabChild)| {
         child.id()
     };
-    let is_focused = move || {
-        if let Focus::Workbench = focus.get() {
-            editor_tab.with_untracked(|e| Some(e.editor_tab_id))
-                == active_editor_tab.get()
-        } else {
-            false
-        }
-    };
-
     let view_fn = move |(i, layout_rect, child): (
         RwSignal<usize>,
         RwSignal<Rect>,
@@ -86,6 +76,7 @@ pub(super) fn editor_tab_header(
         let child_for_mouse_close = child.clone();
         let child_for_mouse_close_2 = child.clone();
         let main_split = main_split.clone();
+        let tab_hovered = create_rw_signal(false);
         let child_view = {
             let info = child.view_info(editors, config);
             let hovered = create_rw_signal(false);
@@ -128,33 +119,52 @@ pub(super) fn editor_tab_header(
                 },
             );
 
-            let tab_close_button = clickable_icon(
-                move || {
-                    if hovered.get() || info.with(|info| info.is_pristine) {
+            let tab_close_button = container(
+                svg(move || {
+                    let icon = if hovered.get() || info.with(|info| info.is_pristine)
+                    {
                         LapceIcons::CLOSE
                     } else {
                         LapceIcons::UNSAVED
-                    }
-                },
-                move || {
-                    let editor_tab_id =
-                        editor_tab.with_untracked(|t| t.editor_tab_id);
-                    internal_command.send(InternalCommand::EditorTabChildClose {
-                        editor_tab_id,
-                        child: child_for_close.clone(),
-                    });
-                },
-                || false,
-                || false,
-                || "Close",
-                config,
+                    };
+                    config.get().ui_svg(icon)
+                })
+                .style(move |s| {
+                    let config = config.get();
+                    let size = config.ui.icon_size() as f32 - 2.0;
+                    let is_active = editor_tab_active.get() == i.get();
+                    let is_tab_hovered = tab_hovered.get();
+                    let visible = is_active || is_tab_hovered;
+                    s.size(size, size)
+                        .apply_if(!visible, |s| s.color(Color::TRANSPARENT))
+                        .apply_if(visible, |s| {
+                            s.color(config.color(LapceColor::LAPCE_ICON_ACTIVE))
+                        })
+                }),
             )
+            .on_click_stop(move |_| {
+                let editor_tab_id = editor_tab.with_untracked(|t| t.editor_tab_id);
+                internal_command.send(InternalCommand::EditorTabChildClose {
+                    editor_tab_id,
+                    child: child_for_close.clone(),
+                });
+            })
             .on_event_stop(EventListener::PointerDown, |_| {})
             .on_event_stop(EventListener::PointerEnter, move |_| {
                 hovered.set(true);
             })
             .on_event_stop(EventListener::PointerLeave, move |_| {
                 hovered.set(false);
+            })
+            .style(move |s| {
+                s.padding(2.0)
+                    .border_radius(4.0)
+                    .cursor(CursorStyle::Pointer)
+                    .hover(|s| {
+                        s.background(
+                            config.get().color(LapceColor::PANEL_HOVERED_BACKGROUND),
+                        )
+                    })
             });
 
             stack((
@@ -193,18 +203,11 @@ pub(super) fn editor_tab_header(
             .style(move |s| {
                 s.items_center()
                     .justify_center()
-                    .border_left(0.0)
-                    .border_right(1.0)
-                    .border_color(config.get().color(LapceColor::LAPCE_BORDER))
                     .padding_horiz(6.)
+                    .padding_vert(3.)
                     .gap(6.)
                     .grid()
                     .grid_template_columns(vec![auto(), fr(1.), auto()])
-                    .apply_if(
-                        config.get().ui.tab_separator_height
-                            == TabSeparatorHeight::Full,
-                        |s| s.height_full(),
-                    )
             })
         };
 
@@ -268,27 +271,6 @@ pub(super) fn editor_tab_header(
                 .style(|s| s.align_items(Some(AlignItems::Center)).flex_grow(1.0)),
             empty()
                 .style(move |s| {
-                    s.size_full()
-                        .border_bottom(if editor_tab_active.get() == i.get() {
-                            2.0
-                        } else {
-                            0.0
-                        })
-                        .border_color(config.get().color(if is_focused() {
-                            LapceColor::LAPCE_TAB_ACTIVE_UNDERLINE
-                        } else {
-                            LapceColor::LAPCE_TAB_INACTIVE_UNDERLINE
-                        }))
-                })
-                .style(|s| {
-                    s.absolute()
-                        .padding_horiz(3.0)
-                        .size_full()
-                        .pointer_events_none()
-                })
-                .debug_name("Drop Indicator"),
-            empty()
-                .style(move |s| {
                     let i = i.get();
                     let drag_over_left = drag_over_left.get();
                     s.absolute()
@@ -322,15 +304,34 @@ pub(super) fn editor_tab_header(
         .on_resize(move |rect| {
             layout_rect.set(rect);
         })
+        .on_event_cont(EventListener::PointerEnter, move |_| {
+            tab_hovered.set(true);
+        })
+        .on_event_cont(EventListener::PointerLeave, move |_| {
+            tab_hovered.set(false);
+        })
         .style(move |s| {
             let config = config.get();
-            s.height_full()
-                .flex_col()
+            let is_active = editor_tab_active.get() == i.get();
+            let accent = config.color(LapceColor::LAPCE_TAB_ACTIVE_UNDERLINE);
+            s.flex_col()
                 .items_center()
                 .justify_center()
                 .cursor(CursorStyle::Pointer)
-                .apply_if(i.get() == 0, |s| s.border_top_left_radius(6.0))
-                .hover(|s| s.background(config.color(LapceColor::HOVER_BACKGROUND)))
+                .border_radius(6.0)
+                .margin_vert(2.0)
+                .margin_horiz(2.0)
+                .border(1.0)
+                .border_color(Color::TRANSPARENT)
+                .apply_if(is_active, |s| {
+                    s.background(accent.multiply_alpha(0.15))
+                        .border_color(accent.multiply_alpha(0.5))
+                })
+                .apply_if(!is_active, |s| {
+                    s.hover(|s| {
+                        s.background(config.color(LapceColor::HOVER_BACKGROUND))
+                    })
+                })
         })
         .debug_name("Tab and Active Indicator")
         .on_event_stop(EventListener::DragOver, move |event| {
@@ -383,7 +384,7 @@ pub(super) fn editor_tab_header(
                         }
                     })
                     .debug_name("Horizontal Tab Stack")
-                    .style(|s| s.height_full().items_center())
+                    .style(|s| s.height_full().items_center().padding_left(4.0))
             })
             .on_scroll(move |rect| {
                 scroll_offset.set(rect);
@@ -486,12 +487,7 @@ pub(super) fn editor_tab_header(
         let config = config.get();
         s.items_center()
             .max_width_full()
-            .border_bottom(1.0)
-            .border_color(config.color(LapceColor::LAPCE_BORDER))
-            .background(config.color(LapceColor::PANEL_BACKGROUND))
-            .height(config.ui.header_height() as i32)
-            .border_top_left_radius(6.0)
-            .border_top_right_radius(6.0)
+            .height((config.ui.header_height() + 8) as i32)
     })
     .debug_name("Editor Tab Header")
 }
@@ -597,12 +593,7 @@ pub(super) fn editor_tab(
     let tab_size = create_rw_signal(Size::ZERO);
     let drag_over: RwSignal<Option<DragOverPosition>> = create_rw_signal(None);
     stack((
-        editor_tab_header(
-            workspace_data.clone(),
-            active_editor_tab,
-            editor_tab,
-            dragging,
-        ),
+        editor_tab_header(workspace_data.clone(), editor_tab, dragging),
         stack((
             editor_tab_content(
                 workspace_data.clone(),
