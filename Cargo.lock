@@ -2627,6 +2627,7 @@ dependencies = [
  "floem",
  "fs_extra",
  "globset",
+ "human-sort",
  "im",
  "include_dir",
  "indexmap",

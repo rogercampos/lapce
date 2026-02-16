@@ -1,4 +1,10 @@
-use std::{ops::Range, path::PathBuf, rc::Rc};
+use std::{
+    collections::{BTreeMap, HashSet},
+    ops::Range,
+    path::{Path, PathBuf},
+    rc::Rc,
+    sync::Arc,
+};
 
 use floem::{
     ext_event::create_ext_action,
@@ -19,6 +25,7 @@ use crate::{
     },
     keypress::{KeyPressFocus, condition::Condition},
     main_split::MainSplitData,
+    workspace::LapceWorkspace,
     workspace_data::CommonData,
 };
 
@@ -33,17 +40,95 @@ pub struct SearchMatchData {
     pub line_height: Memo<f64>,
 }
 
-impl SearchMatchData {
-    /// The dynamic height used by the virtual_stack's `item_size_fn`. When collapsed,
-    /// only the file header row is counted. When expanded, each match adds one row.
-    pub fn height(&self) -> f64 {
-        let line_height = self.line_height.get();
-        let count = if self.expanded.get() {
-            self.matches.with(|m| m.len()) + 1
-        } else {
-            1
-        };
-        line_height * count as f64
+/// A single row in the flattened search tree for the virtual stack.
+#[derive(Clone, Debug, PartialEq)]
+pub enum SearchTreeRow {
+    Folder {
+        rel_path: PathBuf,
+        name: String,
+        expanded: bool,
+        match_count: usize,
+        level: usize,
+    },
+    File {
+        full_path: PathBuf,
+        name: String,
+        expanded: bool,
+        match_count: usize,
+        level: usize,
+    },
+    Match {
+        full_path: PathBuf,
+        search_match: SearchMatch,
+        level: usize,
+    },
+}
+
+impl SearchTreeRow {
+    /// Unique key for virtual_stack identity.
+    pub fn key(&self) -> String {
+        match self {
+            SearchTreeRow::Folder { rel_path, .. } => {
+                format!("folder:{}", rel_path.display())
+            }
+            SearchTreeRow::File { full_path, .. } => {
+                format!("file:{}", full_path.display())
+            }
+            SearchTreeRow::Match {
+                full_path,
+                search_match,
+                ..
+            } => {
+                format!(
+                    "match:{}:{}:{}:{}",
+                    full_path.display(),
+                    search_match.line,
+                    search_match.start,
+                    search_match.end
+                )
+            }
+        }
+    }
+}
+
+/// VirtualVector adapter for the flat search tree rows.
+pub struct SearchTreeVirtualList(pub Vec<SearchTreeRow>);
+
+impl VirtualVector<SearchTreeRow> for SearchTreeVirtualList {
+    fn total_len(&self) -> usize {
+        self.0.len()
+    }
+
+    fn slice(&mut self, range: Range<usize>) -> impl Iterator<Item = SearchTreeRow> {
+        let start = range.start.min(self.0.len());
+        let end = range.end.min(self.0.len());
+        self.0[start..end].to_vec().into_iter()
+    }
+}
+
+/// Internal tree node used during tree construction.
+enum TreeEntry {
+    Folder {
+        name: String,
+        children: BTreeMap<String, TreeEntry>,
+    },
+    File {
+        name: String,
+        full_path: PathBuf,
+        match_count: usize,
+        matches: Vec<SearchMatch>,
+    },
+}
+
+impl TreeEntry {
+    /// Recursively count all matches under this entry.
+    fn total_match_count(&self) -> usize {
+        match self {
+            TreeEntry::File { match_count, .. } => *match_count,
+            TreeEntry::Folder { children, .. } => {
+                children.values().map(|c| c.total_match_count()).sum()
+            }
+        }
     }
 }
 
@@ -52,7 +137,7 @@ impl SearchMatchData {
 /// order from the proxy. The `editor` is the panel's input editor, while both
 /// the modal and panel can call `set_pattern()` to programmatically trigger searches.
 /// `preview_editor` is the panel's side-by-side preview; the modal has its own.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct GlobalSearchData {
     pub editor: EditorData,
     /// Hierarchical results: file path -> per-file match data. IndexMap preserves
@@ -69,6 +154,23 @@ pub struct GlobalSearchData {
     /// the result list navigation. Set on click into the preview, cleared on
     /// list navigation (next/previous).
     pub preview_focused: RwSignal<bool>,
+    /// Set of collapsed folder paths (relative). Folders not in this set are expanded.
+    pub collapsed_folders: RwSignal<HashSet<PathBuf>>,
+    /// Set of collapsed file paths (absolute). Files not in this set are expanded.
+    pub collapsed_files: RwSignal<HashSet<PathBuf>>,
+    /// Flat list of visible rows derived from the folder tree. Used by the
+    /// panel's virtual_stack for rendering.
+    pub search_tree_rows: Memo<Vec<SearchTreeRow>>,
+    /// Currently selected row index into search_tree_rows for keyboard navigation.
+    pub selected_index: RwSignal<Option<usize>>,
+    /// Workspace reference for stripping path prefixes.
+    pub workspace: Arc<LapceWorkspace>,
+}
+
+impl std::fmt::Debug for GlobalSearchData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GlobalSearchData").finish()
+    }
 }
 
 impl KeyPressFocus for GlobalSearchData {
@@ -127,36 +229,6 @@ impl KeyPressFocus for GlobalSearchData {
     }
 }
 
-/// VirtualVector impl for the hierarchical results view. total_len counts all
-/// visible rows (file headers + expanded matches) for scroll height calculation.
-/// Note: slice() ignores the range and returns ALL results because the outer
-/// virtual_stack uses `item_size_fn` for variable-height items and needs the
-/// full list. The inner virtual_stack for each file's matches handles its own
-/// virtualization.
-impl VirtualVector<(PathBuf, SearchMatchData)> for GlobalSearchData {
-    fn total_len(&self) -> usize {
-        self.search_result.with(|result| {
-            result
-                .iter()
-                .map(|(_, data)| {
-                    if data.expanded.get() {
-                        data.matches.with(|m| m.len()) + 1
-                    } else {
-                        1
-                    }
-                })
-                .sum()
-        })
-    }
-
-    fn slice(
-        &mut self,
-        _range: Range<usize>,
-    ) -> impl Iterator<Item = (PathBuf, SearchMatchData)> {
-        self.search_result.get().into_iter()
-    }
-}
-
 impl GlobalSearchData {
     pub fn new(cx: Scope, main_split: MainSplitData) -> Self {
         let common = main_split.common.clone();
@@ -167,6 +239,42 @@ impl GlobalSearchData {
         let has_preview = cx.create_rw_signal(false);
         let selected_match = cx.create_rw_signal(None);
         let preview_focused = cx.create_rw_signal(false);
+        let collapsed_folders: RwSignal<HashSet<PathBuf>> =
+            cx.create_rw_signal(HashSet::new());
+        let collapsed_files: RwSignal<HashSet<PathBuf>> =
+            cx.create_rw_signal(HashSet::new());
+        let selected_index = cx.create_rw_signal(None);
+        let workspace = common.workspace.clone();
+
+        // Build the search_tree_rows Memo. Tracks: search_result, collapsed_folders,
+        // collapsed_files. Re-runs when results change or when any folder/file is
+        // toggled.
+        let search_tree_rows = {
+            let workspace = workspace.clone();
+            cx.create_memo(move |_| {
+                let results = search_result.get();
+                if results.is_empty() {
+                    return Vec::new();
+                }
+
+                let collapsed_f = collapsed_folders.get();
+                let collapsed_fi = collapsed_files.get();
+
+                let workspace_path = workspace.path.as_deref();
+                let tree = build_search_tree(&results, workspace_path);
+
+                let mut rows = Vec::new();
+                flatten_tree_entries(
+                    &tree,
+                    &collapsed_f,
+                    &collapsed_fi,
+                    0,
+                    &mut rows,
+                    &PathBuf::new(),
+                );
+                rows
+            })
+        };
 
         let global_search = Self {
             editor,
@@ -177,12 +285,15 @@ impl GlobalSearchData {
             has_preview,
             selected_match,
             preview_focused,
+            collapsed_folders,
+            collapsed_files,
+            search_tree_rows,
+            selected_index,
+            workspace,
         };
 
         // Reactive effect: whenever the editor buffer text changes, fire a new search
-        // request to the proxy. The proxy performs the actual file-system search in the
-        // background and sends results back via create_ext_action. This is debounce-free:
-        // every keystroke triggers a new search (the proxy handles cancellation of old ones).
+        // request to the proxy.
         {
             let global_search = global_search.clone();
             let buffer = global_search.editor.doc().buffer;
@@ -224,6 +335,7 @@ impl GlobalSearchData {
             cx.create_effect(move |_| {
                 let results = search_result.get();
                 global_search.selected_match.set(None);
+                global_search.selected_index.set(None);
                 if let Some((path, match_data)) = results.iter().next() {
                     if let Some(first) =
                         match_data.matches.get_untracked().iter().next().cloned()
@@ -235,6 +347,25 @@ impl GlobalSearchData {
                             first.end,
                         )));
                         global_search.preview_match(path.clone(), first.line);
+                        // Find the index of the first match row
+                        let rows = global_search.search_tree_rows.get_untracked();
+                        for (i, row) in rows.iter().enumerate() {
+                            if let SearchTreeRow::Match {
+                                full_path,
+                                search_match,
+                                ..
+                            } = row
+                            {
+                                if full_path == path
+                                    && search_match.line == first.line
+                                    && search_match.start == first.start
+                                    && search_match.end == first.end
+                                {
+                                    global_search.selected_index.set(Some(i));
+                                    break;
+                                }
+                            }
+                        }
                     } else {
                         global_search.has_preview.set(false);
                     }
@@ -277,84 +408,127 @@ impl GlobalSearchData {
         );
     }
 
-    /// Flattens the hierarchical results into a linear list of only the matches
-    /// that are currently visible (i.e., their parent file group is expanded).
-    /// This is needed for keyboard navigation (next/previous) through the results
-    /// because the navigation is linear even though the view is hierarchical.
-    fn visible_matches(&self) -> Vec<(PathBuf, usize, usize, usize)> {
-        self.search_result.with_untracked(|results| {
-            let mut flat = Vec::new();
-            for (path, data) in results.iter() {
-                if data.expanded.get_untracked() {
-                    data.matches.with_untracked(|matches| {
-                        for m in matches.iter() {
-                            flat.push((path.clone(), m.line, m.start, m.end));
-                        }
-                    });
-                }
+    /// Toggle expanded state for a folder path.
+    pub fn toggle_folder(&self, rel_path: &Path) {
+        self.collapsed_folders.update(|set| {
+            if !set.remove(rel_path) {
+                set.insert(rel_path.to_path_buf());
             }
-            flat
-        })
+        });
+    }
+
+    /// Toggle expanded state for a file path.
+    pub fn toggle_file(&self, full_path: &Path) {
+        self.collapsed_files.update(|set| {
+            if !set.remove(full_path) {
+                set.insert(full_path.to_path_buf());
+            }
+        });
     }
 
     fn next(&self) {
         self.preview_focused.set(false);
-        let flat = self.visible_matches();
-        if flat.is_empty() {
+        let rows = self.search_tree_rows.get_untracked();
+        if rows.is_empty() {
             return;
         }
-        let current = self.selected_match.get_untracked();
-        let next_idx = match &current {
-            Some(sel) => {
-                let pos = flat.iter().position(|m| m == sel);
-                match pos {
-                    Some(i) if i + 1 < flat.len() => i + 1,
-                    Some(_) => return,
-                    None => 0,
-                }
-            }
+        let current = self.selected_index.get_untracked();
+        let next_idx = match current {
+            Some(i) if i + 1 < rows.len() => i + 1,
+            Some(_) => return,
             None => 0,
         };
-        let next = flat[next_idx].clone();
-        self.selected_match.set(Some(next.clone()));
-        self.preview_match(next.0, next.1);
+        self.selected_index.set(Some(next_idx));
+        self.update_selection_from_row(&rows[next_idx]);
     }
 
     fn previous(&self) {
         self.preview_focused.set(false);
-        let flat = self.visible_matches();
-        if flat.is_empty() {
+        let rows = self.search_tree_rows.get_untracked();
+        if rows.is_empty() {
             return;
         }
-        let current = self.selected_match.get_untracked();
-        let prev_idx = match &current {
-            Some(sel) => {
-                let pos = flat.iter().position(|m| m == sel);
-                match pos {
-                    Some(i) if i > 0 => i - 1,
-                    Some(_) => return,
-                    None => 0,
-                }
-            }
+        let current = self.selected_index.get_untracked();
+        let prev_idx = match current {
+            Some(i) if i > 0 => i - 1,
+            Some(_) => return,
             None => 0,
         };
-        let prev = flat[prev_idx].clone();
-        self.selected_match.set(Some(prev.clone()));
-        self.preview_match(prev.0, prev.1);
+        self.selected_index.set(Some(prev_idx));
+        self.update_selection_from_row(&rows[prev_idx]);
     }
 
     fn select(&self) {
-        if let Some((path, line, _, _)) = self.selected_match.get_untracked() {
-            self.common
-                .internal_command
-                .send(InternalCommand::JumpToLocation {
-                    location: EditorLocation {
-                        path,
-                        position: Some(EditorPosition::Line(line.saturating_sub(1))),
-                        scroll_offset: None,
-                        same_editor_tab: false,
-                    },
+        let rows = self.search_tree_rows.get_untracked();
+        if let Some(idx) = self.selected_index.get_untracked() {
+            if let Some(row) = rows.get(idx) {
+                match row {
+                    SearchTreeRow::Folder { rel_path, .. } => {
+                        self.toggle_folder(rel_path);
+                    }
+                    SearchTreeRow::File { full_path, .. } => {
+                        self.toggle_file(full_path);
+                    }
+                    SearchTreeRow::Match {
+                        full_path,
+                        search_match,
+                        ..
+                    } => {
+                        self.common.internal_command.send(
+                            InternalCommand::JumpToLocation {
+                                location: EditorLocation {
+                                    path: full_path.clone(),
+                                    position: Some(EditorPosition::Line(
+                                        search_match.line.saturating_sub(1),
+                                    )),
+                                    scroll_offset: None,
+                                    same_editor_tab: false,
+                                },
+                            },
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// Update selected_match and preview based on the given row.
+    fn update_selection_from_row(&self, row: &SearchTreeRow) {
+        match row {
+            SearchTreeRow::Match {
+                full_path,
+                search_match,
+                ..
+            } => {
+                self.selected_match.set(Some((
+                    full_path.clone(),
+                    search_match.line,
+                    search_match.start,
+                    search_match.end,
+                )));
+                self.preview_match(full_path.clone(), search_match.line);
+            }
+            SearchTreeRow::File { full_path, .. } => {
+                // Preview the first match in this file
+                self.search_result.with_untracked(|results| {
+                    if let Some(data) = results.get(full_path) {
+                        if let Some(first) =
+                            data.matches.get_untracked().iter().next().cloned()
+                        {
+                            self.selected_match.set(Some((
+                                full_path.clone(),
+                                first.line,
+                                first.start,
+                                first.end,
+                            )));
+                            self.preview_match(full_path.clone(), first.line);
+                        }
+                    }
                 });
+            }
+            SearchTreeRow::Folder { .. } => {
+                // No preview change for folder rows
+            }
         }
     }
 
@@ -380,5 +554,154 @@ impl GlobalSearchData {
         self.editor
             .cursor()
             .update(|cursor| cursor.set_insert(Selection::region(0, pattern_len)));
+    }
+}
+
+/// Build a tree structure from flat search results, grouping files by directory.
+fn build_search_tree(
+    results: &IndexMap<PathBuf, SearchMatchData>,
+    workspace_path: Option<&Path>,
+) -> BTreeMap<String, TreeEntry> {
+    let mut root: BTreeMap<String, TreeEntry> = BTreeMap::new();
+
+    for (abs_path, match_data) in results.iter() {
+        let rel_path = if let Some(wp) = workspace_path {
+            abs_path.strip_prefix(wp).unwrap_or(abs_path)
+        } else {
+            abs_path.as_path()
+        };
+
+        let components: Vec<&str> = rel_path
+            .parent()
+            .map(|p| {
+                p.components()
+                    .map(|c| c.as_os_str().to_str().unwrap_or(""))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        let file_name = rel_path
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_string();
+
+        let matches_vec: Vec<SearchMatch> =
+            match_data.matches.get_untracked().iter().cloned().collect();
+        let match_count = matches_vec.len();
+
+        // Navigate to the correct folder in the tree
+        let mut current = &mut root;
+        for component in &components {
+            if component.is_empty() {
+                continue;
+            }
+            let entry = current.entry(component.to_string()).or_insert_with(|| {
+                TreeEntry::Folder {
+                    name: component.to_string(),
+                    children: BTreeMap::new(),
+                }
+            });
+            current = match entry {
+                TreeEntry::Folder { children, .. } => children,
+                _ => unreachable!(),
+            };
+        }
+
+        // Insert the file
+        current.insert(
+            file_name.clone(),
+            TreeEntry::File {
+                name: file_name,
+                full_path: abs_path.clone(),
+                match_count,
+                matches: matches_vec,
+            },
+        );
+    }
+
+    root
+}
+
+/// Sort tree entries: directories first, then files, with human-sort on names.
+fn sorted_keys(entries: &BTreeMap<String, TreeEntry>) -> Vec<String> {
+    let mut keys: Vec<String> = entries.keys().cloned().collect();
+    keys.sort_by(|a, b| {
+        let a_is_dir = matches!(entries.get(a), Some(TreeEntry::Folder { .. }));
+        let b_is_dir = matches!(entries.get(b), Some(TreeEntry::Folder { .. }));
+        match (a_is_dir, b_is_dir) {
+            (true, false) => std::cmp::Ordering::Less,
+            (false, true) => std::cmp::Ordering::Greater,
+            _ => human_sort::compare(&a.to_lowercase(), &b.to_lowercase()),
+        }
+    });
+    keys
+}
+
+/// Flatten the tree into a Vec<SearchTreeRow>, respecting expanded state.
+/// `parent_rel` accumulates the relative path for folder uniqueness.
+fn flatten_tree_entries(
+    entries: &BTreeMap<String, TreeEntry>,
+    collapsed_folders: &HashSet<PathBuf>,
+    collapsed_files: &HashSet<PathBuf>,
+    level: usize,
+    rows: &mut Vec<SearchTreeRow>,
+    parent_rel: &Path,
+) {
+    let keys = sorted_keys(entries);
+
+    for key in keys {
+        let entry = &entries[&key];
+        match entry {
+            TreeEntry::Folder { name, children } => {
+                let rel_path = parent_rel.join(name);
+                let expanded = !collapsed_folders.contains(&rel_path);
+
+                rows.push(SearchTreeRow::Folder {
+                    rel_path: rel_path.clone(),
+                    name: name.clone(),
+                    expanded,
+                    match_count: entry.total_match_count(),
+                    level,
+                });
+
+                if expanded {
+                    flatten_tree_entries(
+                        children,
+                        collapsed_folders,
+                        collapsed_files,
+                        level + 1,
+                        rows,
+                        &rel_path,
+                    );
+                }
+            }
+            TreeEntry::File {
+                name,
+                full_path,
+                match_count,
+                matches,
+            } => {
+                let expanded = !collapsed_files.contains(full_path);
+
+                rows.push(SearchTreeRow::File {
+                    full_path: full_path.clone(),
+                    name: name.clone(),
+                    expanded,
+                    match_count: *match_count,
+                    level,
+                });
+
+                if expanded {
+                    for m in matches {
+                        rows.push(SearchTreeRow::Match {
+                            full_path: full_path.clone(),
+                            search_match: m.clone(),
+                            level: level + 1,
+                        });
+                    }
+                }
+            }
+        }
     }
 }
