@@ -326,11 +326,13 @@ pub(super) fn editor_tab_header(
                 .apply_if(is_active, |s| {
                     s.background(accent.multiply_alpha(0.15))
                         .border_color(accent.multiply_alpha(0.5))
+                        .color(config.color(LapceColor::LAPCE_TAB_ACTIVE_FOREGROUND))
                 })
                 .apply_if(!is_active, |s| {
-                    s.hover(|s| {
-                        s.background(config.color(LapceColor::HOVER_BACKGROUND))
-                    })
+                    s.color(config.color(LapceColor::LAPCE_TAB_INACTIVE_FOREGROUND))
+                        .hover(|s| {
+                            s.background(config.color(LapceColor::HOVER_BACKGROUND))
+                        })
                 })
         })
         .debug_name("Tab and Active Indicator")

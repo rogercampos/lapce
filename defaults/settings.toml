@@ -82,7 +82,7 @@ default = {}
 
 [ui]
 scale = +1.0
-font-family = ""
+font-family = "sans-serif"
 font-size = 13
 icon-size = 0
 header-height = 36

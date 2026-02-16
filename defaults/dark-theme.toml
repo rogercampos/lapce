@@ -95,11 +95,11 @@ dim-text = "#5C6370"
 
 # tab
 "lapce.tab.active.background" = "$primary-background"
-"lapce.tab.active.foreground" = "$text"
+"lapce.tab.active.foreground" = "#FFFFFF"
 "lapce.tab.active.underline" = "#528BFF"
 
 "lapce.tab.inactive.background" = "$secondary-background"
-"lapce.tab.inactive.foreground" = "$text"
+"lapce.tab.inactive.foreground" = "#BFC5CE"
 "lapce.tab.inactive.underline" = "#528BFF77"
 
 "lapce.tab.separator" = ""

@@ -661,7 +661,7 @@ fn workbench(workspace_data: Rc<WorkspaceData>) -> impl View {
                     main_split_width.set(width);
                 }
             })
-            .style(|s| s.flex_grow(1.0).gap(6.0))
+            .style(|s| s.flex_grow(1.0).gap(4.0))
         },
         panel_container_view(workspace_data.clone(), PanelContainerPosition::Bottom),
         lsp_views::window_message_view(
@@ -675,7 +675,7 @@ fn workbench(workspace_data: Rc<WorkspaceData>) -> impl View {
             workbench_size.set(size);
         }
     })
-    .style(move |s| s.flex_col().size_full().padding(6.0).gap(6.0))
+    .style(move |s| s.flex_col().size_full().padding(6.0).gap(4.0))
     .debug_name("Workbench")
 }
 
