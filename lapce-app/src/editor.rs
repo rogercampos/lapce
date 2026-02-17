@@ -52,6 +52,7 @@ use crate::{
     db::LapceDb,
     doc::{Doc, DocContent},
     editor_tab::EditorTabChild,
+    find::{Find, FindProgress, FindResult},
     id::EditorTabId,
     inline_completion::{InlineCompletionItem, InlineCompletionStatus},
     keypress::{KeyPressFocus, condition::Condition},
@@ -180,7 +181,7 @@ pub type SnippetIndex = Vec<(usize, (usize, usize))>;
 /// `EditorData` is cheaply cloneable (all fields are signals or Rc) -- cloned instances
 /// share the same underlying reactive state. The `editor: Rc<Editor>` holds the floem
 /// editor which owns the cursor, viewport, text layout cache, and document reference.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct EditorData {
     pub scope: Scope,
     /// Which editor tab contains this editor. `None` for preview/local editors
@@ -197,13 +198,26 @@ pub struct EditorData {
     /// Whether the find/replace bar has keyboard focus (as opposed to the editor body).
     /// When true, typed characters are routed to the find/replace editors instead.
     pub find_focus: RwSignal<bool>,
+    pub find: Find,
+    pub find_result: FindResult,
+    pub find_editor_signal: RwSignal<Option<EditorData>>,
+    pub replace_editor_signal: RwSignal<Option<EditorData>>,
     pub editor: Rc<Editor>,
     /// Distinguishes normal (workbench) editors from preview editors. Preview editors
     /// skip sticky headers and don't steal focus on pointer_down.
     pub kind: RwSignal<EditorViewKind>,
     pub sticky_header_height: RwSignal<f64>,
+    pub mouse_hover_timer: RwSignal<TimerToken>,
     pub common: Rc<CommonData>,
     pub sticky_header_info: RwSignal<StickyHeaderInfo>,
+}
+
+impl std::fmt::Debug for EditorData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("EditorData")
+            .field("id", &self.id())
+            .finish()
+    }
 }
 
 impl PartialEq for EditorData {
@@ -233,9 +247,14 @@ impl EditorData {
             }),
             last_inline_find: cx.create_rw_signal(None),
             find_focus: cx.create_rw_signal(false),
+            find: Find::new(cx),
+            find_result: FindResult::new(cx),
+            find_editor_signal: cx.create_rw_signal(None),
+            replace_editor_signal: cx.create_rw_signal(None),
             editor: Rc::new(editor),
             kind: cx.create_rw_signal(EditorViewKind::Normal),
             sticky_header_height: cx.create_rw_signal(0.0),
+            mouse_hover_timer: cx.create_rw_signal(TimerToken::INVALID),
             common,
             sticky_header_info: cx.create_rw_signal(StickyHeaderInfo::default()),
         }
@@ -760,11 +779,11 @@ impl EditorData {
                 self.search();
             }
             FocusCommand::FocusFindEditor => {
-                self.common.find.replace_focus.set(false);
+                self.find.replace_focus.set(false);
             }
             FocusCommand::FocusReplaceEditor => {
-                if self.common.find.replace_active.get_untracked() {
-                    self.common.find.replace_focus.set(true);
+                if self.find.replace_active.get_untracked() {
+                    self.find.replace_focus.set(true);
                 }
             }
             FocusCommand::InlineCompletionSelect => {
@@ -1847,10 +1866,14 @@ impl EditorData {
             let (start, end) = buffer.select_word(offset);
             (buffer.slice_to_cow(start..end).to_string(), buffer.clone())
         });
-        self.common.internal_command.send(InternalCommand::Search {
-            pattern: Some(word),
-        });
-        let next = self.common.find.next(buffer.text(), offset, false, true);
+        if let Some(find_ed) = self.find_editor_signal.get_untracked() {
+            find_ed.doc().reload(Rope::from(word.as_str()), true);
+            let len = find_ed.doc().buffer.with_untracked(|b| b.len());
+            find_ed
+                .cursor()
+                .update(|c| c.set_insert(Selection::region(0, len)));
+        }
+        let next = self.find.next(buffer.text(), offset, false, true);
 
         if let Some((start, _end)) = next {
             self.run_move_command(
@@ -1867,7 +1890,7 @@ impl EditorData {
             .doc()
             .buffer
             .with_untracked(|buffer| buffer.text().clone());
-        let next = self.common.find.next(&text, offset, false, true);
+        let next = self.find.next(&text, offset, false, true);
 
         if let Some((start, _end)) = next {
             self.run_move_command(
@@ -1884,7 +1907,7 @@ impl EditorData {
             .doc()
             .buffer
             .with_untracked(|buffer| buffer.text().clone());
-        let next = self.common.find.next(&text, offset, true, true);
+        let next = self.find.next(&text, offset, true, true);
 
         if let Some((start, _end)) = next {
             self.run_move_command(
@@ -1898,7 +1921,7 @@ impl EditorData {
     fn replace_next(&self, text: &str) {
         let offset = self.cursor().with_untracked(|c| c.offset());
         let buffer = self.doc().buffer.with_untracked(|buffer| buffer.clone());
-        let next = self.common.find.next(buffer.text(), offset, false, true);
+        let next = self.find.next(buffer.text(), offset, false, true);
 
         if let Some((start, end)) = next {
             let selection = Selection::region(start, end);
@@ -1909,10 +1932,9 @@ impl EditorData {
     fn replace_all(&self, text: &str) {
         let offset = self.cursor().with_untracked(|c| c.offset());
 
-        self.doc().update_find();
+        self.update_find();
 
         let edits: Vec<(Selection, &str)> = self
-            .doc()
             .find_result
             .occurrences
             .get_untracked()
@@ -2058,7 +2080,7 @@ impl EditorData {
 
     #[instrument]
     pub fn clear_search(&self) {
-        self.common.find.visual.set(false);
+        self.find.visual.set(false);
         self.find_focus.set(false);
     }
 
@@ -2072,12 +2094,77 @@ impl EditorData {
             Some(pattern)
         };
 
-        self.common
-            .internal_command
-            .send(InternalCommand::Search { pattern });
-        self.common.find.visual.set(true);
+        if let Some(ref p) = pattern {
+            if let Some(find_ed) = self.find_editor_signal.get_untracked() {
+                find_ed.doc().reload(Rope::from(p.as_str()), true);
+                let len = find_ed.doc().buffer.with_untracked(|b| b.len());
+                find_ed
+                    .cursor()
+                    .update(|c| c.set_insert(Selection::region(0, len)));
+            }
+        }
+        self.find.visual.set(true);
         self.find_focus.set(true);
-        self.common.find.replace_focus.set(false);
+        self.find.replace_focus.set(false);
+    }
+
+    /// Execute the find search on the current document's full text.
+    /// Called from the paint path to update find results before rendering highlights.
+    pub fn update_find(&self) {
+        let find_rev = self.find.rev.get_untracked();
+        if self.find_result.find_rev.get_untracked() != find_rev {
+            if self.find.search_string.with_untracked(|search_string| {
+                search_string
+                    .as_ref()
+                    .map(|s| s.content.is_empty())
+                    .unwrap_or(true)
+            }) {
+                self.find_result.occurrences.set(Selection::new());
+            }
+            self.find_result.reset();
+            self.find_result.find_rev.set(find_rev);
+        }
+
+        if self.find_result.progress.get_untracked() != FindProgress::Started {
+            return;
+        }
+
+        let search = self.find.search_string.get_untracked();
+        let search = match search {
+            Some(search) => search,
+            None => return,
+        };
+        if search.content.is_empty() {
+            return;
+        }
+
+        self.find_result
+            .progress
+            .set(FindProgress::InProgress(Selection::new()));
+
+        let find_result = self.find_result.clone();
+        let send = create_ext_action(self.scope, move |occurrences: Selection| {
+            find_result.occurrences.set(occurrences);
+            find_result.progress.set(FindProgress::Ready);
+        });
+
+        let text = self.doc().buffer.with_untracked(|b| b.text().clone());
+        let case_matching = self.find.case_matching.get_untracked();
+        let whole_words = self.find.whole_words.get_untracked();
+        rayon::spawn(move || {
+            let mut occurrences = Selection::new();
+            Find::find(
+                &text,
+                &search,
+                0,
+                text.len(),
+                case_matching,
+                whole_words,
+                false,
+                &mut occurrences,
+            );
+            send(occurrences);
+        });
     }
 
     /// Handle a pointer-down event. This is the critical focus management entry point.
@@ -2279,7 +2366,7 @@ impl EditorData {
                     .with_untracked(|buffer| buffer.prev_code_boundary(offset));
 
                 let editor = self.clone();
-                let mouse_hover_timer = self.common.mouse_hover_timer;
+                let mouse_hover_timer = self.mouse_hover_timer;
                 let timer_token =
                     exec_after(Duration::from_millis(hover_delay), move |token| {
                         if mouse_hover_timer.try_get_untracked() == Some(token)
@@ -2290,7 +2377,7 @@ impl EditorData {
                     });
                 mouse_hover_timer.set(timer_token);
             } else {
-                self.common.mouse_hover_timer.set(TimerToken::INVALID);
+                self.mouse_hover_timer.set(TimerToken::INVALID);
             }
         }
     }
@@ -2302,7 +2389,7 @@ impl EditorData {
 
     #[instrument]
     pub fn pointer_leave(&self) {
-        self.common.mouse_hover_timer.set(TimerToken::INVALID);
+        self.mouse_hover_timer.set(TimerToken::INVALID);
     }
 
     #[instrument]
@@ -2448,8 +2535,7 @@ impl KeyPressFocus for EditorData {
     fn check_condition(&self, condition: Condition) -> bool {
         match condition {
             Condition::InputFocus => {
-                self.common.find.visual.get_untracked()
-                    && self.find_focus.get_untracked()
+                self.find.visual.get_untracked() && self.find_focus.get_untracked()
             }
             Condition::ListFocus => self.has_completions(),
             Condition::CompletionFocus => self.has_completions(),
@@ -2463,16 +2549,16 @@ impl KeyPressFocus for EditorData {
                 .content
                 .with_untracked(|content| !content.is_local()),
             Condition::SearchFocus => {
-                self.common.find.visual.get_untracked()
+                self.find.visual.get_untracked()
                     && self.find_focus.get_untracked()
-                    && !self.common.find.replace_focus.get_untracked()
+                    && !self.find.replace_focus.get_untracked()
             }
             Condition::ReplaceFocus => {
-                self.common.find.visual.get_untracked()
+                self.find.visual.get_untracked()
                     && self.find_focus.get_untracked()
-                    && self.common.find.replace_focus.get_untracked()
+                    && self.find.replace_focus.get_untracked()
             }
-            Condition::SearchActive => self.common.find.visual.get_untracked(),
+            Condition::SearchActive => self.find.visual.get_untracked(),
             _ => false,
         }
     }
@@ -2488,26 +2574,19 @@ impl KeyPressFocus for EditorData {
         count: Option<usize>,
         mods: Modifiers,
     ) -> CommandExecuted {
-        if self.common.find.visual.get_untracked() && self.find_focus.get_untracked()
-        {
+        if self.find.visual.get_untracked() && self.find_focus.get_untracked() {
             match &command.kind {
                 CommandKind::Edit(_) | CommandKind::Move(_) => {
-                    if self.common.find.replace_focus.get_untracked() {
-                        self.common.internal_command.send(
-                            InternalCommand::ReplaceEditorCommand {
-                                command: command.clone(),
-                                count,
-                                mods,
-                            },
-                        );
-                    } else {
-                        self.common.internal_command.send(
-                            InternalCommand::FindEditorCommand {
-                                command: command.clone(),
-                                count,
-                                mods,
-                            },
-                        );
+                    if self.find.replace_focus.get_untracked() {
+                        if let Some(replace_ed) =
+                            self.replace_editor_signal.get_untracked()
+                        {
+                            replace_ed.run_command(command, count, mods);
+                        }
+                    } else if let Some(find_ed) =
+                        self.find_editor_signal.get_untracked()
+                    {
+                        find_ed.run_command(command, count, mods);
                     }
                     return CommandExecuted::Yes;
                 }
@@ -2548,8 +2627,7 @@ impl KeyPressFocus for EditorData {
     }
 
     fn expect_char(&self) -> bool {
-        if self.common.find.visual.get_untracked() && self.find_focus.get_untracked()
-        {
+        if self.find.visual.get_untracked() && self.find_focus.get_untracked() {
             false
         } else {
             self.inline_find.with_untracked(|f| f.is_some())
@@ -2562,17 +2640,15 @@ impl KeyPressFocus for EditorData {
     /// Completion is triggered on non-whitespace input; inline completion updates
     /// on every character.
     fn receive_char(&self, c: &str) {
-        if self.common.find.visual.get_untracked() && self.find_focus.get_untracked()
-        {
+        if self.find.visual.get_untracked() && self.find_focus.get_untracked() {
             // find/replace editor receive char
-            if self.common.find.replace_focus.get_untracked() {
-                self.common.internal_command.send(
-                    InternalCommand::ReplaceEditorReceiveChar { s: c.to_string() },
-                );
-            } else {
-                self.common.internal_command.send(
-                    InternalCommand::FindEditorReceiveChar { s: c.to_string() },
-                );
+            if self.find.replace_focus.get_untracked() {
+                if let Some(replace_ed) = self.replace_editor_signal.get_untracked()
+                {
+                    replace_ed.receive_char(c);
+                }
+            } else if let Some(find_ed) = self.find_editor_signal.get_untracked() {
+                find_ed.receive_char(c);
             }
         } else {
             // normal editor receive char

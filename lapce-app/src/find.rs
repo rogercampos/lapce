@@ -162,10 +162,6 @@ impl Find {
             return;
         }
 
-        if !self.visual.get_untracked() {
-            self.visual.set(true);
-        }
-
         let is_regex = self.is_regex.get_untracked();
 
         let search_string_unchanged = self.search_string.with_untracked(|search| {

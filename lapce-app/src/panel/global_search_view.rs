@@ -24,7 +24,8 @@ use crate::{
     global_search::{GlobalSearchData, SearchTreeRow, SearchTreeVirtualList},
     listener::Listener,
     main_split::MainSplitData,
-    workspace_data::WorkspaceData,
+    panel::kind::PanelKind,
+    workspace_data::{Focus, WorkspaceData},
 };
 
 /// The search panel shows a 50/50 horizontal split: hierarchical results on the left,
@@ -437,6 +438,7 @@ fn search_preview_editor(
     preview_focused: RwSignal<bool>,
 ) -> impl View {
     let global_search = workspace_data.global_search.clone();
+    let focus = global_search.common.focus;
     let workspace = workspace_data.workspace.clone();
     let preview_editor = create_rw_signal(global_search.preview_editor.clone());
 
@@ -449,6 +451,7 @@ fn search_preview_editor(
         ))
         .on_event_cont(EventListener::PointerDown, move |_| {
             preview_focused.set(true);
+            focus.set(Focus::Panel(PanelKind::Search));
         })
         .style(move |s| {
             let config = config.get();

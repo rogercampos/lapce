@@ -1,9 +1,7 @@
 use std::{path::PathBuf, rc::Rc};
 
 pub use floem::views::editor::command::CommandExecuted;
-use floem::{
-    keyboard::Modifiers, peniko::kurbo::Vec2, views::editor::command::Command,
-};
+use floem::{peniko::kurbo::Vec2, views::editor::command::Command};
 use indexmap::IndexMap;
 use lapce_core::command::{
     EditCommand, FocusCommand, MotionModeCommand, MoveCommand,
@@ -430,25 +428,6 @@ pub enum InternalCommand {
         placeholder: String,
         start: usize,
         position: Position,
-    },
-    Search {
-        pattern: Option<String>,
-    },
-    FindEditorReceiveChar {
-        s: String,
-    },
-    ReplaceEditorReceiveChar {
-        s: String,
-    },
-    FindEditorCommand {
-        command: LapceCommand,
-        count: Option<usize>,
-        mods: Modifiers,
-    },
-    ReplaceEditorCommand {
-        command: LapceCommand,
-        count: Option<usize>,
-        mods: Modifiers,
     },
     FocusEditorTab {
         editor_tab_id: EditorTabId,

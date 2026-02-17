@@ -302,17 +302,17 @@ impl KeyPressFocus for SearchModalData {
         Mode::Insert
     }
 
-    /// The modal uses the same preview_focused pattern as GlobalSearchData:
-    /// when the preview editor is focused, report EditorFocus so editor keybindings
-    /// work. Otherwise report ListFocus for up/down/enter navigation and ModalFocus
-    /// so ESC closes the modal.
+    /// When the preview editor is focused, delegate to its check_condition
+    /// so that all editor features (completions, snippets, etc.) work.
+    /// ModalFocus is always reported so ESC can close/unfocus.
     fn check_condition(
         &self,
         condition: crate::keypress::condition::Condition,
     ) -> bool {
         use crate::keypress::condition::Condition;
         if self.preview_focused.get_untracked() {
-            matches!(condition, Condition::ModalFocus | Condition::EditorFocus)
+            condition == Condition::ModalFocus
+                || self.preview_editor.check_condition(condition)
         } else {
             matches!(condition, Condition::ListFocus | Condition::ModalFocus)
         }
@@ -342,6 +342,12 @@ impl KeyPressFocus for SearchModalData {
                 FocusCommand::ListNext => self.next(),
                 FocusCommand::ListPrevious => self.previous(),
                 FocusCommand::ListSelect => self.select(),
+                FocusCommand::Search
+                | FocusCommand::ClearSearch
+                | FocusCommand::FocusFindEditor
+                | FocusCommand::FocusReplaceEditor => {
+                    // Suppress find-related commands on preview editors
+                }
                 _ => {
                     if self.preview_focused.get_untracked() {
                         return self

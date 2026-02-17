@@ -15,7 +15,7 @@ use floem::{
 use indexmap::IndexMap;
 use lapce_core::{command::FocusCommand, selection::Selection};
 use lapce_rpc::proxy::{ProxyResponse, SearchMatch};
-use lapce_xi_rope::Rope;
+use lapce_xi_rope::{Rope, find::CaseMatching};
 
 use crate::{
     command::{CommandExecuted, CommandKind, InternalCommand},
@@ -172,6 +172,12 @@ pub struct GlobalSearchData {
     /// True while the search modal is open. Prevents live search results from
     /// propagating to the panel.
     pub modal_active: RwSignal<bool>,
+    /// Own case_matching signal for global search (independent from per-editor find).
+    pub case_matching: RwSignal<CaseMatching>,
+    /// Own whole_words signal for global search.
+    pub whole_words: RwSignal<bool>,
+    /// Own is_regex signal for global search.
+    pub is_regex: RwSignal<bool>,
 }
 
 impl std::fmt::Debug for GlobalSearchData {
@@ -181,13 +187,14 @@ impl std::fmt::Debug for GlobalSearchData {
 }
 
 impl KeyPressFocus for GlobalSearchData {
-    /// The preview_focused pattern: when the preview is focused we report
-    /// EditorFocus (not ListFocus) so arrow keys work as editor movement
-    /// rather than list navigation. PanelFocus is always reported so
-    /// panel-specific keybindings (like toggle maximize) still fire.
+    /// When the preview is focused, delegate to the preview editor's
+    /// check_condition so that all editor features (completions, snippets,
+    /// inline completion, etc.) work identically to a normal editor.
+    /// PanelFocus is always reported so panel-level keybindings still fire.
     fn check_condition(&self, condition: Condition) -> bool {
         if self.preview_focused.get_untracked() {
-            matches!(condition, Condition::PanelFocus | Condition::EditorFocus)
+            condition == Condition::PanelFocus
+                || self.preview_editor.check_condition(condition)
         } else {
             matches!(condition, Condition::PanelFocus | Condition::ListFocus)
         }
@@ -200,6 +207,20 @@ impl KeyPressFocus for GlobalSearchData {
         mods: Modifiers,
     ) -> CommandExecuted {
         if self.preview_focused.get_untracked() {
+            // Block find-related commands on preview editors — the find bar
+            // is hidden for previews, so these would just set invisible state
+            // and confuse subsequent character routing.
+            if let CommandKind::Focus(cmd) = &command.kind {
+                match cmd {
+                    FocusCommand::Search
+                    | FocusCommand::ClearSearch
+                    | FocusCommand::FocusFindEditor
+                    | FocusCommand::FocusReplaceEditor => {
+                        return CommandExecuted::Yes;
+                    }
+                    _ => {}
+                }
+            }
             return self.preview_editor.run_command(command, count, mods);
         }
         match &command.kind {
@@ -254,6 +275,9 @@ impl GlobalSearchData {
         let workspace = common.workspace.clone();
         let panel_search_result = cx.create_rw_signal(IndexMap::new());
         let modal_active = cx.create_rw_signal(false);
+        let case_matching = cx.create_rw_signal(CaseMatching::CaseInsensitive);
+        let whole_words = cx.create_rw_signal(false);
+        let is_regex = cx.create_rw_signal(false);
 
         // Build the search_tree_rows Memo from panel_search_result (not
         // search_result) so the bottom panel only updates when explicitly
@@ -301,6 +325,9 @@ impl GlobalSearchData {
             workspace,
             panel_search_result,
             modal_active,
+            case_matching,
+            whole_words,
+            is_regex,
         };
 
         // Reactive effect: whenever the editor buffer text changes, fire a new search
@@ -317,9 +344,10 @@ impl GlobalSearchData {
                     }
                     return;
                 }
-                let case_sensitive = global_search.common.find.case_sensitive(true);
-                let whole_word = global_search.common.find.whole_words.get();
-                let is_regex = global_search.common.find.is_regex.get();
+                let case_sensitive =
+                    matches!(global_search.case_matching.get(), CaseMatching::Exact);
+                let whole_word = global_search.whole_words.get();
+                let is_regex = global_search.is_regex.get();
                 let send = {
                     let global_search = global_search.clone();
                     create_ext_action(cx, move |result| {

@@ -7,7 +7,7 @@ use std::{
 
 use floem::{
     ViewId,
-    action::{TimerToken, open_file, remove_overlay},
+    action::{open_file, remove_overlay},
     ext_event::create_ext_action,
     file::FileDialogOptions,
     keyboard::Modifiers,
@@ -58,7 +58,6 @@ use crate::{
     doc::DocContent,
     editor::location::{EditorLocation, EditorPosition},
     file_explorer::data::FileExplorerData,
-    find::Find,
     global_search::GlobalSearchData,
     go_to_file::GoToFileData,
     go_to_line::GoToLineData,
@@ -123,7 +122,6 @@ pub struct CommonData {
     pub inline_completion: RwSignal<InlineCompletionData>,
     pub hover: HoverData,
     pub register: RwSignal<Register>,
-    pub find: Find,
     pub workbench_size: RwSignal<Size>,
     pub window_origin: RwSignal<Point>,
     pub internal_command: Listener<InternalCommand>,
@@ -133,7 +131,6 @@ pub struct CommonData {
     pub view_id: RwSignal<ViewId>,
     pub ui_line_height: Memo<f64>,
     pub config: ReadSignal<Arc<LapceConfig>>,
-    pub mouse_hover_timer: RwSignal<TimerToken>,
     // the current focused view which will receive keyboard events
     pub keyboard_focus: RwSignal<Option<ViewId>>,
     pub window_common: Rc<WindowCommonData>,
@@ -305,7 +302,6 @@ impl WorkspaceData {
 
         let register = cx.create_rw_signal(Register::default());
         let view_id = cx.create_rw_signal(ViewId::new());
-        let find = Find::new(cx);
 
         let ui_line_height = cx.create_memo(move |_| {
             let config = config.get();
@@ -333,7 +329,6 @@ impl WorkspaceData {
             inline_completion,
             hover,
             register,
-            find,
             internal_command,
             lapce_command,
             workbench_command,
@@ -342,7 +337,6 @@ impl WorkspaceData {
             ui_line_height,
             workbench_size: cx.create_rw_signal(Size::ZERO),
             config,
-            mouse_hover_timer: cx.create_rw_signal(TimerToken::INVALID),
             window_origin: cx.create_rw_signal(Point::ZERO),
             keyboard_focus: cx.create_rw_signal(None),
             window_common: window_common.clone(),
@@ -1294,33 +1288,6 @@ impl WorkspaceData {
                 start,
             } => {
                 self.rename.start(path, placeholder, start, position);
-            }
-            InternalCommand::Search { pattern } => {
-                self.main_split.set_find_pattern(pattern);
-            }
-            InternalCommand::FindEditorReceiveChar { s } => {
-                self.main_split.find_editor.receive_char(&s);
-            }
-            InternalCommand::ReplaceEditorReceiveChar { s } => {
-                self.main_split.replace_editor.receive_char(&s);
-            }
-            InternalCommand::FindEditorCommand {
-                command,
-                count,
-                mods,
-            } => {
-                self.main_split
-                    .find_editor
-                    .run_command(&command, count, mods);
-            }
-            InternalCommand::ReplaceEditorCommand {
-                command,
-                count,
-                mods,
-            } => {
-                self.main_split
-                    .replace_editor
-                    .run_command(&command, count, mods);
             }
             InternalCommand::FocusEditorTab { editor_tab_id } => {
                 self.main_split.active_editor_tab.set(Some(editor_tab_id));

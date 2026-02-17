@@ -46,7 +46,7 @@ use lapce_core::{
     mode::MotionMode,
     register::Register,
     rope_text_pos::RopeTextPosition,
-    selection::{InsertDrift, Selection},
+    selection::Selection,
     style::line_styles,
     syntax::{BracketParser, Syntax, edit::SyntaxEdit},
     word::{CharClassification, WordCursor, get_char_property},
@@ -72,7 +72,6 @@ use crate::{
     command::{CommandKind, LapceCommand},
     config::{LapceConfig, color::LapceColor},
     editor::{EditorData, compute_screen_lines, gutter::FoldingRanges},
-    find::{Find, FindProgress, FindResult},
     keypress::KeyPressFocus,
     main_split::Editors,
     panel::kind::PanelKind,
@@ -215,8 +214,6 @@ pub struct Doc {
 
     pub preedit: PreeditData,
 
-    pub find_result: FindResult,
-
     /// The diagnostics for the document
     pub diagnostics: DiagnosticData,
 
@@ -259,7 +256,6 @@ impl Doc {
             loaded: cx.create_rw_signal(loaded),
             sticky_headers: Rc::new(RefCell::new(HashMap::new())),
             code_actions: cx.create_rw_signal(im::HashMap::new()),
-            find_result: FindResult::new(cx),
             preedit: PreeditData::new(cx),
             editors,
             common,
@@ -386,10 +382,6 @@ impl Doc {
     /// Set the syntax highlighting this document should use.
     pub fn set_language(&self, language: LapceLanguage) {
         self.syntax.set(Syntax::from_language(language));
-    }
-
-    pub fn find(&self) -> &Find {
-        &self.common.find
     }
 
     /// Whether or not the underlying buffer is loaded
@@ -572,7 +564,6 @@ impl Doc {
                 self.update_inlay_hints(delta);
                 self.update_diagnostics(delta);
                 self.update_completion_lens(delta);
-                self.update_find_result(delta);
                 if let DocContent::File { path, .. } = self.content.get_untracked() {
                     self.common.proxy.update(
                         path,
@@ -622,7 +613,6 @@ impl Doc {
             self.check_auto_save();
             self.get_inlay_hints();
             self.get_pull_diagnostics();
-            self.find_result.reset();
             self.get_semantic_styles();
             self.do_bracket_colorization();
             self.clear_code_actions();
@@ -1160,74 +1150,6 @@ impl Doc {
             .with_untracked(|b| b.offset_to_line_col(new_offset));
 
         self.completion_pos.set(new_pos);
-    }
-
-    fn update_find_result(&self, delta: &RopeDelta) {
-        self.find_result.occurrences.update(|s| {
-            *s = s.apply_delta(delta, true, InsertDrift::Default);
-        })
-    }
-
-    pub fn update_find(&self) {
-        let find_rev = self.common.find.rev.get_untracked();
-        if self.find_result.find_rev.get_untracked() != find_rev {
-            if self
-                .common
-                .find
-                .search_string
-                .with_untracked(|search_string| {
-                    search_string
-                        .as_ref()
-                        .map(|s| s.content.is_empty())
-                        .unwrap_or(true)
-                })
-            {
-                self.find_result.occurrences.set(Selection::new());
-            }
-            self.find_result.reset();
-            self.find_result.find_rev.set(find_rev);
-        }
-
-        if self.find_result.progress.get_untracked() != FindProgress::Started {
-            return;
-        }
-
-        let search = self.common.find.search_string.get_untracked();
-        let search = match search {
-            Some(search) => search,
-            None => return,
-        };
-        if search.content.is_empty() {
-            return;
-        }
-
-        self.find_result
-            .progress
-            .set(FindProgress::InProgress(Selection::new()));
-
-        let find_result = self.find_result.clone();
-        let send = create_ext_action(self.scope, move |occurrences: Selection| {
-            find_result.occurrences.set(occurrences);
-            find_result.progress.set(FindProgress::Ready);
-        });
-
-        let text = self.buffer.with_untracked(|b| b.text().clone());
-        let case_matching = self.common.find.case_matching.get_untracked();
-        let whole_words = self.common.find.whole_words.get_untracked();
-        rayon::spawn(move || {
-            let mut occurrences = Selection::new();
-            Find::find(
-                &text,
-                &search,
-                0,
-                text.len(),
-                case_matching,
-                whole_words,
-                true,
-                &mut occurrences,
-            );
-            send(occurrences);
-        });
     }
 
     /// Get the sticky headers for a particular line, creating them if necessary.

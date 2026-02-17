@@ -14,10 +14,7 @@ use floem::{
     views::editor::id::EditorId,
 };
 use itertools::Itertools;
-use lapce_core::{
-    buffer::rope_text::RopeText, command::FocusCommand, cursor::Cursor,
-    selection::Selection, syntax::Syntax,
-};
+use lapce_core::{command::FocusCommand, cursor::Cursor, syntax::Syntax};
 use lapce_rpc::{
     buffer::BufferId, core::FileChanged, plugin::PluginId, proxy::ProxyResponse,
 };
@@ -411,9 +408,6 @@ pub struct MainSplitData {
     pub diagnostics: RwSignal<im::HashMap<PathBuf, DiagnosticData>>,
     /// Derived signal: the editor in the active tab of the active editor tab pane.
     pub active_editor: Memo<Option<EditorData>>,
-    /// Dedicated editors for the find/replace bar (local editors, not in any tab).
-    pub find_editor: EditorData,
-    pub replace_editor: EditorData,
     /// Global navigation history for back/forward jumping across all splits.
     pub locations: RwSignal<im::Vector<EditorLocation>>,
     pub current_location: RwSignal<usize>,
@@ -446,8 +440,6 @@ impl MainSplitData {
         let locations = cx.create_rw_signal(im::Vector::new());
         let current_location = cx.create_rw_signal(0);
         let diagnostics = cx.create_rw_signal(im::HashMap::new());
-        let find_editor = editors.make_local(cx, common.clone());
-        let replace_editor = editors.make_local(cx, common.clone());
 
         // Derived signal that reactively computes the currently active editor
         // by walking: active_editor_tab -> its active child -> EditorData.
@@ -468,18 +460,6 @@ impl MainSplitData {
             Some(editor)
         });
 
-        // Sync the find editor's text content to the Find state whenever it changes.
-        // This reactive effect means typing in the find bar automatically updates
-        // the search pattern used for in-editor highlighting.
-        {
-            let buffer = find_editor.doc().buffer;
-            let find = common.find.clone();
-            cx.create_effect(move |_| {
-                let content = buffer.with(|buffer| buffer.to_string());
-                find.set_find(&content);
-            });
-        }
-
         Self {
             scope: cx,
             root_split: SplitId::next(),
@@ -490,8 +470,6 @@ impl MainSplitData {
             docs,
             scratch_docs,
             active_editor,
-            find_editor,
-            replace_editor,
             diagnostics,
             locations,
             current_location,
@@ -1966,20 +1944,6 @@ impl MainSplitData {
                 });
             }
         }
-    }
-
-    pub fn set_find_pattern(&self, pattern: Option<String>) {
-        if let Some(pattern) = pattern {
-            self.find_editor.doc().reload(Rope::from(pattern), true);
-        }
-        let pattern_len = self
-            .find_editor
-            .doc()
-            .buffer
-            .with_untracked(|buffer| buffer.len());
-        self.find_editor
-            .cursor()
-            .update(|cursor| cursor.set_insert(Selection::region(0, pattern_len)));
     }
 
     pub fn open_settings(&self) {

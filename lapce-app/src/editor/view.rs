@@ -47,7 +47,7 @@ use lapce_rpc::plugin::PluginId;
 use lapce_xi_rope::find::CaseMatching;
 use lsp_types::CodeLens;
 
-use super::{DocSignal, EditorData, gutter::editor_gutter_view};
+use super::{DocSignal, EditorData, EditorViewKind, gutter::editor_gutter_view};
 use crate::config::layout::LapceLayout;
 use crate::{
     app::clickable_icon,
@@ -161,10 +161,10 @@ pub fn editor_view(
     });
 
     let hide_cursor = e_data.common.window_common.hide_cursor;
+    let find_result_occurrences = e_data.find_result.occurrences;
     create_effect(move |_| {
         hide_cursor.track();
-        let occurrences = doc.with(|doc| doc.find_result.occurrences);
-        occurrences.track();
+        find_result_occurrences.track();
         id.request_paint();
     });
 
@@ -339,7 +339,10 @@ impl EditorView {
     }
 
     fn paint_find(&self, cx: &mut PaintCx, screen_lines: &ScreenLines) {
-        let find_visual = self.editor.common.find.visual.get_untracked();
+        if !self.editor.kind.get_untracked().is_normal() {
+            return;
+        }
+        let find_visual = self.editor.find.visual.get_untracked();
         if !find_visual && self.editor.on_screen_find.with_untracked(|f| !f.active) {
             return;
         }
@@ -354,10 +357,9 @@ impl EditorView {
 
         let e_data = &self.editor;
         let ed = &e_data.editor;
-        let doc = e_data.doc();
 
         let config = self.editor.common.config;
-        let occurrences = doc.find_result.occurrences;
+        let occurrences = e_data.find_result.occurrences;
 
         let config = config.get_untracked();
         let line_height = config.editor.line_height() as f64;
@@ -372,10 +374,8 @@ impl EditorView {
         let start = ed.offset_of_line(min_line);
         let end = ed.offset_of_line(max_line + 1);
 
-        // TODO: The selection rect creation logic for find is quite similar to the version
-        // within insert cursor. It would be good to deduplicate it.
         if find_visual {
-            doc.update_find();
+            self.editor.update_find();
             for region in occurrences.with_untracked(|selection| {
                 selection.regions_in_range(start, end).to_vec()
             }) {
@@ -1170,10 +1170,31 @@ pub fn editor_container_view(
     let main_split = workspace_data.main_split.clone();
     let editors = main_split.editors;
     let scratch_docs = main_split.scratch_docs;
-    let find_editor = main_split.find_editor;
-    let replace_editor = main_split.replace_editor;
-    let replace_active = main_split.common.find.replace_active;
-    let replace_focus = main_split.common.find.replace_focus;
+
+    // Create per-editor find/replace editors
+    let editor_scope = editor.with_untracked(|ed| ed.scope);
+    let common = main_split.common.clone();
+    let find_ed = editors.make_local(editor_scope, common.clone());
+    let replace_ed = editors.make_local(editor_scope, common);
+
+    // Store them on the EditorData so command dispatch can reach them
+    editor.with_untracked(|ed_data| {
+        ed_data.find_editor_signal.set(Some(find_ed.clone()));
+        ed_data.replace_editor_signal.set(Some(replace_ed.clone()));
+    });
+
+    // Sync find editor text -> editor's Find state
+    {
+        let find_ed_buf = find_ed.doc().buffer;
+        let find = editor.with_untracked(|ed| ed.find.clone());
+        create_effect(move |_| {
+            let content = find_ed_buf.with(|buffer| buffer.to_string());
+            find.set_find(&content);
+        });
+    }
+
+    let replace_active = editor.with_untracked(|ed| ed.find.replace_active);
+    let replace_focus = editor.with_untracked(|ed| ed.find.replace_focus);
 
     let viewport = ed.viewport;
     let screen_lines = ed.screen_lines;
@@ -1194,11 +1215,6 @@ pub fn editor_container_view(
                 s.absolute()
                     .width_pct(100.0)
                     .height(sticky_header_height.get() as f32)
-                    // .box_shadow_blur(5.0)
-                    // .border_bottom(1.0)
-                    // .border_color(
-                    //     config.get_color(LapceColor::LAPCE_BORDER),
-                    // )
                     .apply_if(
                         !config.editor.sticky_header
                             || sticky_header_height.get() == 0.0
@@ -1208,12 +1224,13 @@ pub fn editor_container_view(
             }),
             find_view(
                 editor,
-                find_editor,
+                find_ed,
                 find_focus,
-                replace_editor,
+                replace_ed,
                 replace_active,
                 replace_focus,
                 is_active,
+                editor_view,
             )
             .debug_name("find view"),
         ))
@@ -1223,6 +1240,9 @@ pub fn editor_container_view(
         let editor = editor.get_untracked();
         editor.cancel_completion();
         editor.cancel_inline_completion();
+        // Clear find/replace editor refs
+        editor.find_editor_signal.set(None);
+        editor.replace_editor_signal.set(None);
         if editors.contains_untracked(editor_id) {
             // editor still exist, so it might be moved to a different editor tab
             return;
@@ -1869,13 +1889,13 @@ fn search_editor_view(
     find_focus: RwSignal<bool>,
     is_active: impl Fn(bool) -> bool + 'static + Copy,
     replace_focus: RwSignal<bool>,
+    find_visual: RwSignal<bool>,
+    case_matching: RwSignal<CaseMatching>,
+    whole_word: RwSignal<bool>,
+    is_regex: RwSignal<bool>,
 ) -> impl View {
     let config = find_editor.common.config;
-
-    let case_matching = find_editor.common.find.case_matching;
-    let whole_word = find_editor.common.find.whole_words;
-    let is_regex = find_editor.common.find.is_regex;
-    let visual = find_editor.common.find.visual;
+    let visual = find_visual;
 
     stack((
         TextInputBuilder::new()
@@ -1950,9 +1970,10 @@ fn replace_editor_view(
     replace_focus: RwSignal<bool>,
     is_active: impl Fn(bool) -> bool + 'static + Copy,
     find_focus: RwSignal<bool>,
+    find_visual: RwSignal<bool>,
 ) -> impl View {
     let config = replace_editor.common.config;
-    let visual = replace_editor.common.find.visual;
+    let visual = find_visual;
 
     stack((
         TextInputBuilder::new()
@@ -1994,10 +2015,16 @@ fn find_view(
     replace_active: RwSignal<bool>,
     replace_focus: RwSignal<bool>,
     is_active: impl Fn(bool) -> bool + 'static + Copy,
+    editor_view: RwSignal<EditorViewKind>,
 ) -> impl View {
     let common = find_editor.common.clone();
     let config = common.config;
-    let find_visual = common.find.visual;
+    let find_visual = editor.with_untracked(|ed| ed.find.visual);
+    let case_matching = editor.with_untracked(|ed| ed.find.case_matching);
+    let whole_word = editor.with_untracked(|ed| ed.find.whole_words);
+    let is_regex = editor.with_untracked(|ed| ed.find.is_regex);
+    let find_result_occurrences =
+        editor.with_untracked(|ed| ed.find_result.occurrences);
     let replace_doc = replace_editor.doc_signal();
     let focus = common.focus;
 
@@ -2009,8 +2036,7 @@ fn find_view(
         let editor = editor.get_untracked();
         let cursor = editor.cursor();
         let offset = cursor.with(|cursor| cursor.offset());
-        let occurrences = editor.doc_signal().get().find_result.occurrences;
-        occurrences.with(|occurrences| {
+        find_result_occurrences.with(|occurrences| {
             for (i, region) in occurrences.regions().iter().enumerate() {
                 if offset <= region.max() {
                     return (i + 1, occurrences.regions().len());
@@ -2045,6 +2071,10 @@ fn find_view(
                     find_focus,
                     is_active,
                     replace_focus,
+                    find_visual,
+                    case_matching,
+                    whole_word,
+                    is_regex,
                 ),
                 label(move || {
                     let (current, all) = find_pos.get();
@@ -2102,6 +2132,7 @@ fn find_view(
                     replace_focus,
                     is_active,
                     find_focus,
+                    find_visual,
                 ),
                 clickable_icon(
                     || LapceIcons::SEARCH_REPLACE,
@@ -2152,9 +2183,6 @@ fn find_view(
                 .flex_col()
         })
         .on_event_stop(EventListener::PointerDown, move |_| {
-            // Shift the editor tab focus to the editor the find search is attached to
-            // So that if you have two tabs open side-by-side (and thus two find views),
-            // clicking on one will shift the focus to the editor it's attached to
             let editor = editor.get_untracked();
             if let Some(editor_tab_id) = editor.editor_tab_id.get_untracked() {
                 editor
@@ -2163,10 +2191,6 @@ fn find_view(
                     .send(InternalCommand::FocusEditorTab { editor_tab_id });
             }
             focus.set(Focus::Workbench);
-            // Request focus on the app view, as our current method of dispatching pointer events
-            // is from the app_view to the actual editor. That's also why this stops the pointer
-            // event is stopped here, as otherwise our default handling would make it go through to
-            // the editor.
             common
                 .window_common
                 .app_view_id
@@ -2179,6 +2203,8 @@ fn find_view(
             .margin_top(-1.0)
             .width_pct(100.0)
             .justify_end()
-            .apply_if(!find_visual.get(), |s| s.hide())
+            .apply_if(!find_visual.get() || !editor_view.get().is_normal(), |s| {
+                s.hide()
+            })
     })
 }
