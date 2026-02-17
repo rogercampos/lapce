@@ -928,16 +928,66 @@ pub fn launch() {
             "/../extra/fonts/DejaVu/DejaVuSansMono.ttf"
         ));
 
-        FONT_SYSTEM
-            .lock()
-            .db_mut()
-            .load_font_source(Source::Binary(Arc::new(FONT_DEJAVU_SANS_REGULAR)));
-        FONT_SYSTEM
-            .lock()
-            .db_mut()
-            .load_font_source(Source::Binary(Arc::new(
-                FONT_DEJAVU_SANS_MONO_REGULAR,
-            )));
+        macro_rules! inter_font {
+            ($path:literal) => {
+                include_bytes!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/../extra/fonts/Inter/",
+                    $path
+                ))
+            };
+        }
+
+        const INTER_THIN: &[u8] = inter_font!("Inter-Thin.ttf");
+        const INTER_THIN_ITALIC: &[u8] = inter_font!("Inter-ThinItalic.ttf");
+        const INTER_EXTRA_LIGHT: &[u8] = inter_font!("Inter-ExtraLight.ttf");
+        const INTER_EXTRA_LIGHT_ITALIC: &[u8] =
+            inter_font!("Inter-ExtraLightItalic.ttf");
+        const INTER_LIGHT: &[u8] = inter_font!("Inter-Light.ttf");
+        const INTER_LIGHT_ITALIC: &[u8] = inter_font!("Inter-LightItalic.ttf");
+        const INTER_REGULAR: &[u8] = inter_font!("Inter-Regular.ttf");
+        const INTER_ITALIC: &[u8] = inter_font!("Inter-Italic.ttf");
+        const INTER_MEDIUM: &[u8] = inter_font!("Inter-Medium.ttf");
+        const INTER_MEDIUM_ITALIC: &[u8] = inter_font!("Inter-MediumItalic.ttf");
+        const INTER_SEMI_BOLD: &[u8] = inter_font!("Inter-SemiBold.ttf");
+        const INTER_SEMI_BOLD_ITALIC: &[u8] =
+            inter_font!("Inter-SemiBoldItalic.ttf");
+        const INTER_BOLD: &[u8] = inter_font!("Inter-Bold.ttf");
+        const INTER_BOLD_ITALIC: &[u8] = inter_font!("Inter-BoldItalic.ttf");
+        const INTER_EXTRA_BOLD: &[u8] = inter_font!("Inter-ExtraBold.ttf");
+        const INTER_EXTRA_BOLD_ITALIC: &[u8] =
+            inter_font!("Inter-ExtraBoldItalic.ttf");
+        const INTER_BLACK: &[u8] = inter_font!("Inter-Black.ttf");
+        const INTER_BLACK_ITALIC: &[u8] = inter_font!("Inter-BlackItalic.ttf");
+
+        let mut font_db = FONT_SYSTEM.lock();
+        let db = font_db.db_mut();
+
+        db.load_font_source(Source::Binary(Arc::new(FONT_DEJAVU_SANS_REGULAR)));
+        db.load_font_source(Source::Binary(Arc::new(FONT_DEJAVU_SANS_MONO_REGULAR)));
+
+        for font_data in [
+            INTER_THIN,
+            INTER_THIN_ITALIC,
+            INTER_EXTRA_LIGHT,
+            INTER_EXTRA_LIGHT_ITALIC,
+            INTER_LIGHT,
+            INTER_LIGHT_ITALIC,
+            INTER_REGULAR,
+            INTER_ITALIC,
+            INTER_MEDIUM,
+            INTER_MEDIUM_ITALIC,
+            INTER_SEMI_BOLD,
+            INTER_SEMI_BOLD_ITALIC,
+            INTER_BOLD,
+            INTER_BOLD_ITALIC,
+            INTER_EXTRA_BOLD,
+            INTER_EXTRA_BOLD_ITALIC,
+            INTER_BLACK,
+            INTER_BLACK_ITALIC,
+        ] {
+            db.load_font_source(Source::Binary(Arc::new(font_data)));
+        }
     }
 
     let stdin = std::io::stdin();
