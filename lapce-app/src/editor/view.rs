@@ -2007,6 +2007,50 @@ fn replace_editor_view(
     })
 }
 
+fn replace_button(
+    icon: &'static str,
+    text: &'static str,
+    on_click: impl Fn() + 'static,
+    config: ReadSignal<Arc<LapceConfig>>,
+) -> impl View {
+    stack((
+        svg(move || config.get().ui_svg(icon)).style(move |s| {
+            let config = config.get();
+            let size = config.ui.icon_size() as f32;
+            s.size(size, size)
+                .color(config.color(LapceColor::LAPCE_ICON_ACTIVE))
+        }),
+        label(move || text).style(move |s| {
+            let config = config.get();
+            s.margin_left(4.0)
+                .font_size(config.ui.font_size() as f32 - 1.0)
+                .selectable(false)
+                .color(config.color(LapceColor::EDITOR_FOREGROUND))
+        }),
+    ))
+    .style(move |s| {
+        let config = config.get();
+        s.items_center()
+            .padding_horiz(6.0)
+            .padding_vert(2.0)
+            .border_radius(LapceLayout::BORDER_RADIUS)
+            .border(1.0)
+            .border_color(config.color(LapceColor::LAPCE_BORDER))
+            .hover(|s| {
+                s.cursor(CursorStyle::Pointer)
+                    .background(config.color(LapceColor::PANEL_HOVERED_BACKGROUND))
+            })
+            .active(|s| {
+                s.background(
+                    config.color(LapceColor::PANEL_HOVERED_ACTIVE_BACKGROUND),
+                )
+            })
+    })
+    .on_click_stop(move |_| {
+        on_click();
+    })
+}
+
 fn find_view(
     editor: RwSignal<EditorData>,
     find_editor: EditorData,
@@ -2049,23 +2093,6 @@ fn find_view(
     container(
         stack((
             stack((
-                clickable_icon(
-                    move || {
-                        if replace_active.get() {
-                            LapceIcons::ITEM_OPENED
-                        } else {
-                            LapceIcons::ITEM_CLOSED
-                        }
-                    },
-                    move || {
-                        replace_active.update(|active| *active = !*active);
-                    },
-                    move || false,
-                    || false,
-                    || "Toggle Replace",
-                    config,
-                )
-                .style(|s| s.padding_horiz(6.0)),
                 search_editor_view(
                     find_editor,
                     find_focus,
@@ -2121,11 +2148,6 @@ fn find_view(
             ))
             .style(|s| s.items_center()),
             stack((
-                empty().style(move |s| {
-                    let config = config.get();
-                    let width = config.ui.icon_size() as f32 + 10.0 + 6.0 * 2.0;
-                    s.width(width)
-                }),
                 replace_editor_view(
                     replace_editor,
                     replace_active,
@@ -2134,23 +2156,24 @@ fn find_view(
                     find_focus,
                     find_visual,
                 ),
-                clickable_icon(
-                    || LapceIcons::SEARCH_REPLACE,
+                replace_button(
+                    LapceIcons::SEARCH_REPLACE,
+                    "Replace",
                     move || {
                         let text = replace_doc
                             .get_untracked()
                             .buffer
                             .with_untracked(|b| b.to_string());
-                        editor.get_untracked().replace_next(&text);
+                        let ed = editor.get_untracked();
+                        ed.replace_next(&text);
+                        ed.search_forward(Modifiers::empty());
                     },
-                    move || false,
-                    || false,
-                    || "Replace Next",
                     config,
                 )
                 .style(|s| s.padding_left(6.0)),
-                clickable_icon(
-                    || LapceIcons::SEARCH_REPLACE_ALL,
+                replace_button(
+                    LapceIcons::SEARCH_REPLACE_ALL,
+                    "Replace All",
                     move || {
                         let text = replace_doc
                             .get_untracked()
@@ -2158,9 +2181,6 @@ fn find_view(
                             .with_untracked(|b| b.to_string());
                         editor.get_untracked().replace_all(&text);
                     },
-                    move || false,
-                    || false,
-                    || "Replace All",
                     config,
                 )
                 .style(|s| s.padding_left(6.0)),

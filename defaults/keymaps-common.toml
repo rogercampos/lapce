@@ -210,6 +210,11 @@ command = "focus_find_editor"
 when = "replace_focus"
 
 [[keymaps]]
+key = "enter"
+command = "replace_next"
+when = "replace_focus"
+
+[[keymaps]]
 key = "shift+enter"
 command = "search_backward"
 when = "search_focus"

@@ -64,6 +64,10 @@ key = "meta+f"
 command = "search"
 
 [[keymaps]]
+key = "meta+r"
+command = "search_and_replace"
+
+[[keymaps]]
 key = "meta+shift+f"
 command = "toggle_search_focus"
 

@@ -778,6 +778,15 @@ impl EditorData {
             FocusCommand::Search => {
                 self.search();
             }
+            FocusCommand::SearchAndReplace => {
+                self.search_and_replace();
+            }
+            FocusCommand::ReplaceNext => {
+                self.replace_next_and_advance();
+            }
+            FocusCommand::ReplaceAll => {
+                self.replace_all_from_command();
+            }
             FocusCommand::FocusFindEditor => {
                 self.find.replace_focus.set(false);
             }
@@ -1921,11 +1930,16 @@ impl EditorData {
     fn replace_next(&self, text: &str) {
         let offset = self.cursor().with_untracked(|c| c.offset());
         let buffer = self.doc().buffer.with_untracked(|buffer| buffer.clone());
-        let next = self.find.next(buffer.text(), offset, false, true);
+        // Use saturating_sub(1) so find.next() includes a match starting exactly
+        // at the cursor position (find.next requires start > offset).
+        let next =
+            self.find
+                .next(buffer.text(), offset.saturating_sub(1), false, true);
 
         if let Some((start, end)) = next {
             let selection = Selection::region(start, end);
             self.do_edit(&selection, &[(selection.clone(), text)]);
+            self.find.rev.update(|rev| *rev += 1);
         }
     }
 
@@ -1944,6 +1958,22 @@ impl EditorData {
             .collect();
         if !edits.is_empty() {
             self.do_edit(&Selection::caret(offset), &edits);
+            self.find.rev.update(|rev| *rev += 1);
+        }
+    }
+
+    fn replace_next_and_advance(&self) {
+        if let Some(replace_ed) = self.replace_editor_signal.get_untracked() {
+            let text = replace_ed.doc().buffer.with_untracked(|b| b.to_string());
+            self.replace_next(&text);
+            self.search_forward(Modifiers::empty());
+        }
+    }
+
+    fn replace_all_from_command(&self) {
+        if let Some(replace_ed) = self.replace_editor_signal.get_untracked() {
+            let text = replace_ed.doc().buffer.with_untracked(|b| b.to_string());
+            self.replace_all(&text);
         }
     }
 
@@ -2105,6 +2135,32 @@ impl EditorData {
         }
         self.find.visual.set(true);
         self.find_focus.set(true);
+        self.find.replace_active.set(false);
+        self.find.replace_focus.set(false);
+    }
+
+    #[instrument]
+    fn search_and_replace(&self) {
+        let pattern = self.word_at_cursor();
+
+        let pattern = if pattern.contains('\n') || pattern.is_empty() {
+            None
+        } else {
+            Some(pattern)
+        };
+
+        if let Some(ref p) = pattern {
+            if let Some(find_ed) = self.find_editor_signal.get_untracked() {
+                find_ed.doc().reload(Rope::from(p.as_str()), true);
+                let len = find_ed.doc().buffer.with_untracked(|b| b.len());
+                find_ed
+                    .cursor()
+                    .update(|c| c.set_insert(Selection::region(0, len)));
+            }
+        }
+        self.find.visual.set(true);
+        self.find_focus.set(true);
+        self.find.replace_active.set(true);
         self.find.replace_focus.set(false);
     }
 

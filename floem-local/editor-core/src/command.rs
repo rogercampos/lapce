@@ -428,6 +428,15 @@ pub enum FocusCommand {
     #[strum(message = "Search")]
     #[strum(serialize = "search")]
     Search,
+    #[strum(message = "Search and Replace")]
+    #[strum(serialize = "search_and_replace")]
+    SearchAndReplace,
+    #[strum(message = "Replace Next")]
+    #[strum(serialize = "replace_next")]
+    ReplaceNext,
+    #[strum(message = "Replace All")]
+    #[strum(serialize = "replace_all")]
+    ReplaceAll,
     #[strum(message = "Focus Replace Editor")]
     #[strum(serialize = "focus_replace_editor")]
     FocusReplaceEditor,
