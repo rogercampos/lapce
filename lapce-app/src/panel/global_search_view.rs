@@ -3,11 +3,14 @@ use std::{path::PathBuf, rc::Rc, sync::Arc};
 use floem::{
     View,
     event::EventListener,
-    reactive::{ReadSignal, RwSignal, SignalGet, SignalUpdate, create_rw_signal},
+    peniko::Color,
+    reactive::{
+        ReadSignal, RwSignal, SignalGet, SignalUpdate, SignalWith, create_rw_signal,
+    },
     style::{CursorStyle, Display},
     views::{
-        Decorators, container, label, resizable::resizable, scroll, stack, svg,
-        virtual_stack,
+        Decorators, container, dyn_stack, label, resizable::resizable, scroll,
+        stack, svg, virtual_stack,
     },
 };
 
@@ -25,33 +28,279 @@ use crate::{
     listener::Listener,
     main_split::MainSplitData,
     panel::kind::PanelKind,
+    search_tabs::SearchTabsData,
     workspace_data::{Focus, WorkspaceData},
 };
 
-/// The search panel shows a 50/50 horizontal split: hierarchical results on the left,
-/// preview editor on the right. Unlike the search modal (flat list + centered popup),
-/// this is a persistent bottom panel that groups results by file with collapsible
-/// file headers.
+/// The search panel shows a tab header bar at the top, with one tab per search query.
+/// Below the tab bar is a 50/50 horizontal split: hierarchical results on the left,
+/// preview editor on the right. The content area is driven by the active tab's
+/// GlobalSearchData.
 pub fn global_search_panel(
     workspace_data: Rc<WorkspaceData>,
     _position: PanelPosition,
 ) -> impl View {
-    let global_search = workspace_data.global_search.clone();
-    let config = global_search.common.config;
-    let has_preview = global_search.has_preview;
-    let preview_focused = global_search.preview_focused;
+    let search_tabs = workspace_data.search_tabs.clone();
+    let config = workspace_data.common.config;
 
-    resizable((
-        search_result(global_search, config).style(move |s| {
-            s.height_pct(100.0)
-                .min_width(0)
-                .flex_basis(0)
-                .flex_grow(1.0)
-        }),
-        search_preview_editor(workspace_data, config, has_preview, preview_focused),
+    stack((
+        // Tab header bar
+        search_tab_header(search_tabs.clone(), config),
+        // Content area: active tab's results + preview
+        search_tab_content(workspace_data, search_tabs, config),
     ))
-    .style(|s| s.absolute().size_pct(100.0, 100.0).flex_row())
+    .style(|s| s.absolute().size_pct(100.0, 100.0).flex_col())
     .debug_name("Global Search Panel")
+}
+
+/// Renders the horizontal tab header bar for search tabs.
+/// Styled to match editor tab headers (see `editor_tab_header()` in `app/editor_tabs.rs`).
+fn search_tab_header(
+    search_tabs: SearchTabsData,
+    config: ReadSignal<Arc<LapceConfig>>,
+) -> impl View {
+    let tabs = search_tabs.tabs;
+    let active_tab = search_tabs.active_tab;
+    let internal_command = search_tabs.common.internal_command;
+
+    stack((
+        // Scrollable tab list
+        scroll(
+            dyn_stack(
+                move || {
+                    let tabs_vec = tabs.get();
+                    tabs_vec
+                        .iter()
+                        .enumerate()
+                        .map(|(i, gs)| {
+                            let pattern = gs.pattern_text();
+                            (i, pattern)
+                        })
+                        .collect::<im::Vector<_>>()
+                },
+                move |(i, _)| *i,
+                move |(i, pattern)| {
+                    let search_tabs = search_tabs.clone();
+                    let close_command = internal_command;
+                    let tab_index = i;
+                    let tab_hovered = create_rw_signal(false);
+                    let close_hovered = create_rw_signal(false);
+                    let pattern_display = if pattern.len() > 30 {
+                        format!("{}...", &pattern[..27])
+                    } else {
+                        pattern.clone()
+                    };
+
+                    // Tab content: search icon + label + close button
+                    let tab_content = stack((
+                        // Search icon
+                        svg(move || config.get().ui_svg(LapceIcons::SEARCH)).style(
+                            move |s| {
+                                let config = config.get();
+                                let size = config.ui.icon_size() as f32;
+                                s.size(size, size).color(
+                                    config.color(LapceColor::LAPCE_ICON_ACTIVE),
+                                )
+                            },
+                        ),
+                        // Pattern text
+                        label(move || pattern_display.clone()).style(|s| {
+                            s.text_ellipsis().max_width(200.0).selectable(false)
+                        }),
+                        // Close button (X) — visible only when active or hovered
+                        container(
+                            svg(move || config.get().ui_svg(LapceIcons::CLOSE))
+                                .style(move |s| {
+                                    let config = config.get();
+                                    let size = config.ui.icon_size() as f32 - 2.0;
+                                    let is_active = active_tab.get() == tab_index;
+                                    let is_tab_hovered = tab_hovered.get();
+                                    let visible = is_active || is_tab_hovered;
+                                    s.size(size, size)
+                                        .apply_if(!visible, |s| {
+                                            s.color(Color::TRANSPARENT)
+                                        })
+                                        .apply_if(visible, |s| {
+                                            s.color(config.color(
+                                                LapceColor::LAPCE_ICON_ACTIVE,
+                                            ))
+                                        })
+                                }),
+                        )
+                        .on_click_stop(move |_| {
+                            close_command.send(InternalCommand::CloseSearchTab {
+                                index: tab_index,
+                            });
+                        })
+                        .on_event_stop(EventListener::PointerDown, |_| {})
+                        .on_event_stop(EventListener::PointerEnter, move |_| {
+                            close_hovered.set(true);
+                        })
+                        .on_event_stop(EventListener::PointerLeave, move |_| {
+                            close_hovered.set(false);
+                        })
+                        .style(move |s| {
+                            s.padding(2.0)
+                                .border_radius(4.0)
+                                .cursor(CursorStyle::Pointer)
+                                .hover(|s| {
+                                    s.background(
+                                        config.get().color(
+                                            LapceColor::PANEL_HOVERED_BACKGROUND,
+                                        ),
+                                    )
+                                })
+                        }),
+                    ))
+                    .style(|s| s.items_center().padding_horiz(6.).gap(6.));
+
+                    // Tab wrapper with editor tab styling
+                    tab_content
+                        .on_click_stop(move |_| {
+                            search_tabs.activate_tab(tab_index);
+                        })
+                        .on_event_cont(EventListener::PointerEnter, move |_| {
+                            tab_hovered.set(true);
+                        })
+                        .on_event_cont(EventListener::PointerLeave, move |_| {
+                            tab_hovered.set(false);
+                        })
+                        .style(move |s| {
+                            let config = config.get();
+                            let is_active = active_tab.get() == tab_index;
+                            let accent =
+                                config.color(LapceColor::LAPCE_TAB_ACTIVE_UNDERLINE);
+                            let h = (config.ui.header_height()) as f32 * 0.7;
+                            s.items_center()
+                                .height(h)
+                                .cursor(CursorStyle::Pointer)
+                                .border_radius(LapceLayout::BORDER_RADIUS)
+                                .margin_top(5.0)
+                                .margin_bottom(3.0)
+                                .margin_horiz(2.0)
+                                .border(1.0)
+                                .border_color(Color::TRANSPARENT)
+                                .apply_if(is_active, |s| {
+                                    s.background(accent.multiply_alpha(0.15))
+                                        .border_color(accent.multiply_alpha(
+                                            LapceLayout::SHADOW_ALPHA,
+                                        ))
+                                        .color(config.color(
+                                            LapceColor::LAPCE_TAB_ACTIVE_FOREGROUND,
+                                        ))
+                                })
+                                .apply_if(!is_active, |s| {
+                                    s.color(config.color(
+                                        LapceColor::LAPCE_TAB_INACTIVE_FOREGROUND,
+                                    ))
+                                    .hover(
+                                        |s| {
+                                            s.background(
+                                                config.color(
+                                                    LapceColor::HOVER_BACKGROUND,
+                                                ),
+                                            )
+                                        },
+                                    )
+                                })
+                        })
+                },
+            )
+            .style(|s| s.height_pct(100.0)),
+        )
+        .style(|s| s.flex_grow(1.0).min_width(0).height_pct(100.0)),
+        // Close all button
+        {
+            let internal_command = internal_command;
+            container(svg(move || config.get().ui_svg(LapceIcons::CLOSE)).style(
+                move |s| {
+                    let config = config.get();
+                    let size = config.ui.icon_size() as f32 - 2.0;
+                    s.size(size, size)
+                        .color(config.color(LapceColor::LAPCE_ICON_ACTIVE))
+                },
+            ))
+            .on_click_stop(move |_| {
+                internal_command.send(InternalCommand::CloseAllSearchTabs);
+            })
+            .style(move |s| {
+                s.padding(2.0)
+                    .border_radius(4.0)
+                    .margin_horiz(6.0)
+                    .cursor(CursorStyle::Pointer)
+                    .hover(|s| {
+                        s.background(
+                            config.get().color(LapceColor::PANEL_HOVERED_BACKGROUND),
+                        )
+                    })
+            })
+        },
+    ))
+    .style(move |s| {
+        let config = config.get();
+        let has_tabs = !tabs.with(|t| t.is_empty());
+        let h = (config.ui.header_height() + 8) as f32;
+        s.width_pct(100.0)
+            .items_center()
+            .max_width_full()
+            .padding_horiz(4.0)
+            .height(h)
+            .min_height(h)
+            .max_height(h)
+            .display(if has_tabs {
+                Display::Flex
+            } else {
+                Display::None
+            })
+    })
+}
+
+/// Renders the content area for the active search tab.
+fn search_tab_content(
+    workspace_data: Rc<WorkspaceData>,
+    search_tabs: SearchTabsData,
+    config: ReadSignal<Arc<LapceConfig>>,
+) -> impl View {
+    let tabs = search_tabs.tabs;
+    let active_tab = search_tabs.active_tab;
+
+    // We use a dynamic container that re-renders when the active tab changes.
+    // The key insight: we need to create the view reactively based on active_tab.
+    container(
+        dyn_stack(
+            move || {
+                let active = active_tab.get();
+                let tab_data = tabs.with(|t| t.get(active).cloned());
+                // Return a single-element vec if we have a tab, empty otherwise
+                tab_data.into_iter().collect::<Vec<_>>()
+            },
+            // Use the active tab index as key so we rebuild on tab switch
+            move |_| active_tab.get_untracked(),
+            move |gs| {
+                let has_preview = gs.has_preview;
+                let preview_focused = gs.preview_focused;
+
+                resizable((
+                    search_result(gs.clone(), config).style(move |s| {
+                        s.height_pct(100.0)
+                            .min_width(0)
+                            .flex_basis(0)
+                            .flex_grow(1.0)
+                    }),
+                    search_preview_editor(
+                        workspace_data.clone(),
+                        gs,
+                        config,
+                        has_preview,
+                        preview_focused,
+                    ),
+                ))
+                .style(|s| s.size_pct(100.0, 100.0).flex_row())
+            },
+        )
+        .style(|s| s.size_pct(100.0, 100.0)),
+    )
+    .style(|s| s.flex_grow(1.0).min_height(0).width_pct(100.0))
 }
 
 /// Renders the folder-tree search results using a single flat virtual_stack.
@@ -433,11 +682,11 @@ fn is_row_selected(
 /// keybindings (cursor movement, selection, etc.) while the preview is active.
 fn search_preview_editor(
     workspace_data: Rc<WorkspaceData>,
+    global_search: GlobalSearchData,
     config: ReadSignal<Arc<LapceConfig>>,
     has_preview: RwSignal<bool>,
     preview_focused: RwSignal<bool>,
 ) -> impl View {
-    let global_search = workspace_data.global_search.clone();
     let focus = global_search.common.focus;
     let workspace = workspace_data.workspace.clone();
     let preview_editor = create_rw_signal(global_search.preview_editor.clone());

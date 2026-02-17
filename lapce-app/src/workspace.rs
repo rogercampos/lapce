@@ -2,7 +2,9 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{main_split::SplitInfo, panel::data::PanelInfo};
+use crate::{
+    main_split::SplitInfo, panel::data::PanelInfo, search_tabs::SearchTabInfo,
+};
 
 /// The type of workspace connection. Currently only Local is supported.
 /// Remote workspace support was previously available but has been removed.
@@ -70,6 +72,10 @@ impl std::fmt::Display for LapceWorkspace {
 pub struct WorkspaceInfo {
     pub split: SplitInfo,
     pub panel: PanelInfo,
+    #[serde(default)]
+    pub search_tabs: Vec<SearchTabInfo>,
+    #[serde(default)]
+    pub active_search_tab: usize,
 }
 
 #[cfg(test)]

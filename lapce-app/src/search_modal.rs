@@ -41,6 +41,7 @@ use crate::{
     keypress::KeyPressFocus,
     main_split::MainSplitData,
     resizable_container::resizable_container,
+    search_tabs::SearchTabsData,
     text_input::TextInputBuilder,
     workspace_data::{CommonData, Focus, WorkspaceData},
 };
@@ -70,6 +71,7 @@ pub struct SearchModalData {
     /// Recomputed whenever search results change.
     pub flat_matches: Memo<Vec<FlatSearchMatch>>,
     pub global_search: GlobalSearchData,
+    pub search_tabs: SearchTabsData,
     pub main_split: MainSplitData,
     pub common: Rc<CommonData>,
     /// Controls whether keyboard input goes to the preview editor or the input/list.
@@ -87,6 +89,7 @@ impl SearchModalData {
         cx: Scope,
         main_split: MainSplitData,
         global_search: GlobalSearchData,
+        search_tabs: SearchTabsData,
         common: Rc<CommonData>,
     ) -> Self {
         let visible = cx.create_rw_signal(false);
@@ -180,6 +183,7 @@ impl SearchModalData {
             has_preview,
             flat_matches,
             global_search,
+            search_tabs,
             main_split,
             common,
             preview_focused,
@@ -289,7 +293,20 @@ impl SearchModalData {
     }
 
     pub fn open_full_results(&self) {
-        self.global_search.commit_results_to_panel();
+        let pattern = self
+            .input_editor
+            .doc()
+            .buffer
+            .with_untracked(|b| b.to_string());
+        if pattern.is_empty() {
+            return;
+        }
+        let case_matching = self.global_search.case_matching.get_untracked();
+        let whole_words = self.global_search.whole_words.get_untracked();
+        let is_regex = self.global_search.is_regex.get_untracked();
+
+        self.search_tabs
+            .new_tab(pattern, case_matching, whole_words, is_regex);
         self.close();
         self.common
             .internal_command

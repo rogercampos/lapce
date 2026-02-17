@@ -78,6 +78,7 @@ use crate::{
     rename::RenameData,
     replace_modal::ReplaceModalData,
     search_modal::SearchModalData,
+    search_tabs::SearchTabsData,
     tracing::*,
     window::WindowCommonData,
     workspace::{LapceWorkspace, LapceWorkspaceType, WorkspaceInfo},
@@ -162,6 +163,7 @@ pub struct WorkspaceData {
     pub code_lens: RwSignal<Option<ViewId>>,
     pub rename: RenameData,
     pub global_search: GlobalSearchData,
+    pub search_tabs: SearchTabsData,
     pub search_modal_data: SearchModalData,
     pub replace_modal_data: ReplaceModalData,
     pub about_data: AboutData,
@@ -415,10 +417,13 @@ impl WorkspaceData {
 
         let rename = RenameData::new(cx, main_split.editors, common.clone());
         let global_search = GlobalSearchData::new(cx, main_split.clone());
+        let search_tabs =
+            SearchTabsData::new(cx, main_split.clone(), common.clone());
         let search_modal_data = SearchModalData::new(
             cx,
             main_split.clone(),
             global_search.clone(),
+            search_tabs.clone(),
             common.clone(),
         );
         let replace_modal_data = ReplaceModalData::new(
@@ -446,6 +451,16 @@ impl WorkspaceData {
         );
         let alert_data = AlertBoxData::new(cx, common.clone());
 
+        // Restore search tabs from persisted workspace info
+        if let Some(info) = workspace_info.as_ref() {
+            if !info.search_tabs.is_empty() {
+                search_tabs.restore_from_info(
+                    info.search_tabs.clone(),
+                    info.active_search_tab,
+                );
+            }
+        }
+
         let workspace_data = Self {
             scope: cx,
             workspace_id: WorkspaceId::next(),
@@ -457,6 +472,7 @@ impl WorkspaceData {
             code_lens: cx.create_rw_signal(None),
             rename,
             global_search,
+            search_tabs,
             search_modal_data,
             replace_modal_data,
             about_data,
@@ -1361,6 +1377,12 @@ impl WorkspaceData {
             InternalCommand::TrackRecentFile { path } => {
                 self.track_recent_file(path);
             }
+            InternalCommand::CloseSearchTab { index } => {
+                self.search_tabs.close_tab(index);
+            }
+            InternalCommand::CloseAllSearchTabs => {
+                self.search_tabs.close_all_tabs();
+            }
         }
     }
 
@@ -1524,7 +1546,11 @@ impl WorkspaceData {
             Focus::GoToFile => Some(keypress.key_down(event, &self.go_to_file_data)),
             Focus::GoToLine => Some(keypress.key_down(event, &self.go_to_line_data)),
             Focus::Panel(PanelKind::Search) => {
-                Some(keypress.key_down(event, &self.global_search))
+                if let Some(active_search) = self.search_tabs.active_search() {
+                    Some(keypress.key_down(event, &active_search))
+                } else {
+                    None
+                }
             }
             _ => None,
         };
@@ -1559,6 +1585,8 @@ impl WorkspaceData {
         WorkspaceInfo {
             split: main_split_data.get_untracked().split_info(self),
             panel: self.panel.panel_info(),
+            search_tabs: self.search_tabs.tab_infos(),
+            active_search_tab: self.search_tabs.active_tab.get_untracked(),
         }
     }
 
@@ -1839,17 +1867,6 @@ impl WorkspaceData {
 
     pub fn show_panel(&self, kind: PanelKind) {
         self.panel.show_panel(&kind);
-        if kind == PanelKind::Search
-            && self.common.focus.get_untracked() == Focus::Workbench
-        {
-            let active_editor = self.main_split.active_editor.get_untracked();
-            let word = active_editor.map(|editor| editor.word_at_cursor());
-            if let Some(word) = word {
-                if !word.is_empty() {
-                    self.global_search.set_pattern(word);
-                }
-            }
-        }
         self.common.focus.set(Focus::Panel(kind));
     }
 

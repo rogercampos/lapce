@@ -610,6 +610,59 @@ impl GlobalSearchData {
             .cursor()
             .update(|cursor| cursor.set_insert(Selection::region(0, pattern_len)));
     }
+
+    /// Create a new GlobalSearchData for use as a search tab.
+    /// Pre-populates the editor with the given pattern and options,
+    /// then immediately triggers a search.
+    pub fn new_for_tab(
+        cx: Scope,
+        main_split: MainSplitData,
+        pattern: String,
+        case_matching: CaseMatching,
+        whole_words: bool,
+        is_regex: bool,
+    ) -> Self {
+        let gs = Self::new(cx, main_split);
+        gs.case_matching.set(case_matching);
+        gs.whole_words.set(whole_words);
+        gs.is_regex.set(is_regex);
+        // Setting the pattern triggers the reactive effect which fires the search
+        gs.set_pattern(pattern);
+        gs
+    }
+
+    /// Re-evaluate the search by re-firing the proxy search request
+    /// with the current pattern and options. Called when a tab becomes active.
+    pub fn re_evaluate(&self) {
+        let pattern = self.editor.doc().buffer.with_untracked(|b| b.to_string());
+        if pattern.is_empty() {
+            return;
+        }
+        let case_sensitive =
+            matches!(self.case_matching.get_untracked(), CaseMatching::Exact);
+        let whole_word = self.whole_words.get_untracked();
+        let is_regex = self.is_regex.get_untracked();
+        let global_search = self.clone();
+        let send = create_ext_action(self.common.scope, move |result| {
+            if let Ok(ProxyResponse::GlobalSearchResponse { matches }) = result {
+                global_search.update_matches(matches);
+            }
+        });
+        self.common.proxy.global_search(
+            pattern,
+            case_sensitive,
+            whole_word,
+            is_regex,
+            move |result| {
+                send(result);
+            },
+        );
+    }
+
+    /// Get the current pattern text from the editor buffer.
+    pub fn pattern_text(&self) -> String {
+        self.editor.doc().buffer.with_untracked(|b| b.to_string())
+    }
 }
 
 /// Build a tree structure from flat search results, grouping files by directory.

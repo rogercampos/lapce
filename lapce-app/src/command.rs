@@ -460,6 +460,10 @@ pub enum InternalCommand {
     TrackRecentFile {
         path: PathBuf,
     },
+    CloseSearchTab {
+        index: usize,
+    },
+    CloseAllSearchTabs,
 }
 
 #[derive(Clone)]

@@ -34,6 +34,7 @@ pub mod rename;
 pub mod replace_modal;
 pub mod resizable_container;
 pub mod search_modal;
+pub mod search_tabs;
 pub mod settings;
 pub mod snippet;
 pub mod status;
