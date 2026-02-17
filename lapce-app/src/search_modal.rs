@@ -4,7 +4,10 @@ use floem::{
     View,
     event::EventListener,
     keyboard::Modifiers,
-    peniko::kurbo::{Point, Size},
+    peniko::{
+        Color,
+        kurbo::{Point, Size},
+    },
     reactive::{
         Memo, ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith,
         create_rw_signal,
@@ -33,7 +36,7 @@ use crate::{
         EditorData, EditorViewKind,
         location::{EditorLocation, EditorPosition},
     },
-    focus_text::focus_text,
+    focus_text::focus_text_highlighted,
     global_search::GlobalSearchData,
     keypress::KeyPressFocus,
     main_split::MainSplitData,
@@ -157,9 +160,11 @@ impl SearchModalData {
         // Auto-close when focus changes away
         {
             let focus = common.focus;
+            let modal_active = global_search.modal_active;
             cx.create_effect(move |_| {
                 let f = focus.get();
                 if f != Focus::SearchModal && visible.get_untracked() {
+                    modal_active.set(false);
                     visible.set(false);
                 }
             });
@@ -207,11 +212,13 @@ impl SearchModalData {
             }
         }
 
+        self.global_search.modal_active.set(true);
         self.visible.set(true);
         self.common.focus.set(Focus::SearchModal);
     }
 
     pub fn close(&self) {
+        self.global_search.modal_active.set(false);
         self.visible.set(false);
         if self.common.focus.get_untracked() == Focus::SearchModal {
             self.common.focus.set(Focus::Workbench);
@@ -282,6 +289,7 @@ impl SearchModalData {
     }
 
     pub fn open_full_results(&self) {
+        self.global_search.commit_results_to_panel();
         self.close();
         self.common
             .internal_command
@@ -529,10 +537,14 @@ fn search_modal_body(
                             .to_string();
                         let location_label = format!("{}:{}", filename, line_number);
                         let line_content_for_trim = line_content.clone();
+                        let syntax_line_content =
+                            m.search_match.line_content.clone();
+                        let syntax_path = m.path.clone();
+                        let main_split = data.main_split.clone();
 
                         container(
                             stack((
-                                focus_text(
+                                focus_text_highlighted(
                                     move || {
                                         let config = config.get();
                                         if config.ui.trim_search_results_whitespace {
@@ -560,6 +572,52 @@ fn search_modal_body(
                                     move || {
                                         config.get().color(LapceColor::EDITOR_FOCUS)
                                     },
+                                    move || {
+                                        let config = config.get();
+                                        let trim =
+                                            config.ui.trim_search_results_whitespace;
+                                        let trim_offset = if trim {
+                                            syntax_line_content.len()
+                                                - syntax_line_content
+                                                    .trim_start()
+                                                    .len()
+                                        } else {
+                                            0
+                                        };
+
+                                        let (doc, _new) = main_split
+                                            .get_doc(syntax_path.clone(), None);
+                                        let _rev = doc.cache_rev.get();
+                                        let line_styles = doc.line_style(
+                                            line_number.saturating_sub(1),
+                                        );
+                                        line_styles
+                                            .iter()
+                                            .filter_map(|ls| {
+                                                let color = ls
+                                                    .style
+                                                    .fg_color
+                                                    .as_ref()
+                                                    .and_then(|name| {
+                                                        config.style_color(name)
+                                                    })?;
+                                                let s = ls
+                                                    .start
+                                                    .saturating_sub(trim_offset);
+                                                let e = ls
+                                                    .end
+                                                    .saturating_sub(trim_offset);
+                                                if s < e {
+                                                    Some((s, e, color))
+                                                } else {
+                                                    None
+                                                }
+                                            })
+                                            .collect()
+                                    },
+                                    Color::BLACK,
+                                    Color::from_rgb8(0xBB, 0xBB, 0x00),
+                                    item_height,
                                 )
                                 .style(|s| s.min_width(0.0)),
                                 container(text(""))

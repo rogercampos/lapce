@@ -2,7 +2,7 @@ use floem::{
     Renderer, View, ViewId,
     peniko::{
         Color,
-        kurbo::{Point, Rect},
+        kurbo::{Point, Rect, Size},
     },
     prop_extractor,
     reactive::create_effect,
@@ -62,6 +62,7 @@ pub fn focus_text(
         focus_color: Color::BLACK,
         focus_indices: Vec::new(),
         syntax_colors: Vec::new(),
+        focus_highlight: None,
         text_node: None,
         available_text: None,
         available_width: None,
@@ -108,6 +109,56 @@ pub fn focus_text_with_syntax(
         focus_color: Color::BLACK,
         focus_indices: Vec::new(),
         syntax_colors: Vec::new(),
+        focus_highlight: None,
+        text_node: None,
+        available_text: None,
+        available_width: None,
+        available_text_layout: None,
+        style: Default::default(),
+    }
+}
+
+/// Like `focus_text_with_syntax`, but highlights focus indices with a background color
+/// and specific text color instead of bold + syntax color.
+pub fn focus_text_highlighted(
+    text: impl Fn() -> String + 'static,
+    focus_indices: impl Fn() -> Vec<usize> + 'static,
+    focus_color: impl Fn() -> Color + 'static,
+    syntax_colors: impl Fn() -> Vec<(usize, usize, Color)> + 'static,
+    focus_text_color: Color,
+    focus_bg_color: Color,
+    row_height: f64,
+) -> FocusText {
+    let id = ViewId::new();
+
+    create_effect(move |_| {
+        let new_text = text();
+        id.update_state(FocusTextState::Text(new_text));
+    });
+
+    create_effect(move |_| {
+        let focus_color = focus_color();
+        id.update_state(FocusTextState::FocusColor(focus_color));
+    });
+
+    create_effect(move |_| {
+        let focus_indices = focus_indices();
+        id.update_state(FocusTextState::FocusIndices(focus_indices));
+    });
+
+    create_effect(move |_| {
+        let colors = syntax_colors();
+        id.update_state(FocusTextState::SyntaxColors(colors));
+    });
+
+    FocusText {
+        id,
+        text: "".to_string(),
+        text_layout: None,
+        focus_color: Color::BLACK,
+        focus_indices: Vec::new(),
+        syntax_colors: Vec::new(),
+        focus_highlight: Some((focus_text_color, focus_bg_color, row_height)),
         text_node: None,
         available_text: None,
         available_width: None,
@@ -130,6 +181,9 @@ pub struct FocusText {
     focus_indices: Vec<usize>,
     /// Syntax highlighting color spans: (start_byte, end_byte, color).
     syntax_colors: Vec<(usize, usize, Color)>,
+    /// When set, focus indices use (text_color, bg_color, row_height) with background
+    /// rectangles instead of bold + syntax/focus color.
+    focus_highlight: Option<(Color, Color, f64)>,
     text_node: Option<NodeId>,
     /// Truncated version of text (with "..." suffix) when the full text exceeds available_width.
     available_text: Option<String>,
@@ -162,10 +216,7 @@ impl FocusText {
             }
         }
 
-        // Layer 2: focus highlights on top. For each focus index, find the
-        // syntax color covering that position (if any) and apply bold + that
-        // color so we don't lose syntax highlighting. Falls back to focus_color
-        // when no syntax color covers the position.
+        // Layer 2: focus highlights on top.
         for &i_start in &self.focus_indices {
             if truncated && i_start + 3 > text_len {
                 break;
@@ -180,16 +231,22 @@ impl FocusText {
             } else {
                 continue;
             };
-            let syntax_color = self
-                .syntax_colors
-                .iter()
-                .find(|(s, e, _)| i_start >= *s && i_start < *e)
-                .map(|(_, _, c)| *c);
-            let color = syntax_color.unwrap_or(self.focus_color);
-            attrs_list.add_span(
-                i_start..i_end,
-                attrs.clone().color(color).weight(Weight::BOLD),
-            );
+            if let Some((text_color, _, _)) = self.focus_highlight {
+                // Highlight mode: use specified text color (bg painted in paint())
+                attrs_list.add_span(i_start..i_end, attrs.clone().color(text_color));
+            } else {
+                // Default mode: bold + syntax color (or focus_color fallback)
+                let syntax_color = self
+                    .syntax_colors
+                    .iter()
+                    .find(|(s, e, _)| i_start >= *s && i_start < *e)
+                    .map(|(_, _, c)| *c);
+                let color = syntax_color.unwrap_or(self.focus_color);
+                attrs_list.add_span(
+                    i_start..i_end,
+                    attrs.clone().color(color).weight(Weight::BOLD),
+                );
+            }
         }
 
         attrs_list
@@ -361,10 +418,58 @@ impl View for FocusText {
         let text_node = self.text_node.unwrap();
         let location = self.id.taffy_layout(text_node).unwrap_or_default().location;
         let point = Point::new(location.x as f64, location.y as f64);
-        if let Some(text_layout) = self.available_text_layout.as_ref() {
-            cx.draw_text(text_layout, point);
+        let text_layout = if self.available_text_layout.is_some() {
+            self.available_text_layout.as_ref().unwrap()
         } else {
-            cx.draw_text(self.text_layout.as_ref().unwrap(), point);
+            self.text_layout.as_ref().unwrap()
+        };
+
+        // Paint background rectangles for focus indices when highlight mode is active
+        if let Some((_, bg_color, row_height)) = self.focus_highlight {
+            let truncated = self.available_text_layout.is_some();
+            let text_len = if truncated {
+                self.available_text.as_ref().map_or(0, |t| t.len())
+            } else {
+                self.text.len()
+            };
+            let text_height = text_layout.size().height;
+            let y_offset = -(row_height - text_height) / 2.0;
+
+            // Group consecutive focus indices into contiguous byte ranges
+            let mut ranges: Vec<(usize, usize)> = Vec::new();
+            for &i_start in &self.focus_indices {
+                if truncated && i_start + 3 > text_len {
+                    break;
+                }
+                let i_end = self
+                    .text
+                    .char_indices()
+                    .find(|(i, _)| *i == i_start)
+                    .map(|(_, c)| c.len_utf8() + i_start);
+                if let Some(i_end) = i_end {
+                    if let Some(last) = ranges.last_mut() {
+                        if i_start == last.1 {
+                            last.1 = i_end;
+                            continue;
+                        }
+                    }
+                    ranges.push((i_start, i_end));
+                }
+            }
+
+            for (range_start, range_end) in &ranges {
+                let start_pos = text_layout.hit_position(*range_start);
+                let end_pos = text_layout.hit_position(*range_end);
+                let rect = Rect::ZERO
+                    .with_size(Size::new(
+                        end_pos.point.x - start_pos.point.x,
+                        row_height,
+                    ))
+                    .with_origin(Point::new(start_pos.point.x + point.x, y_offset));
+                cx.fill(&rect, bg_color, 0.0);
+            }
         }
+
+        cx.draw_text(text_layout, point);
     }
 }

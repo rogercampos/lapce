@@ -165,6 +165,13 @@ pub struct GlobalSearchData {
     pub selected_index: RwSignal<Option<usize>>,
     /// Workspace reference for stripping path prefixes.
     pub workspace: Arc<LapceWorkspace>,
+    /// Separate result set for the bottom panel. Only updated when:
+    /// - Searching directly from the panel (modal not active), or
+    /// - "Open full results" is clicked from the modal.
+    pub panel_search_result: RwSignal<IndexMap<PathBuf, SearchMatchData>>,
+    /// True while the search modal is open. Prevents live search results from
+    /// propagating to the panel.
+    pub modal_active: RwSignal<bool>,
 }
 
 impl std::fmt::Debug for GlobalSearchData {
@@ -245,14 +252,16 @@ impl GlobalSearchData {
             cx.create_rw_signal(HashSet::new());
         let selected_index = cx.create_rw_signal(None);
         let workspace = common.workspace.clone();
+        let panel_search_result = cx.create_rw_signal(IndexMap::new());
+        let modal_active = cx.create_rw_signal(false);
 
-        // Build the search_tree_rows Memo. Tracks: search_result, collapsed_folders,
-        // collapsed_files. Re-runs when results change or when any folder/file is
-        // toggled.
+        // Build the search_tree_rows Memo from panel_search_result (not
+        // search_result) so the bottom panel only updates when explicitly
+        // committed, not during live modal typing.
         let search_tree_rows = {
             let workspace = workspace.clone();
             cx.create_memo(move |_| {
-                let results = search_result.get();
+                let results = panel_search_result.get();
                 if results.is_empty() {
                     return Vec::new();
                 }
@@ -290,6 +299,8 @@ impl GlobalSearchData {
             search_tree_rows,
             selected_index,
             workspace,
+            panel_search_result,
+            modal_active,
         };
 
         // Reactive effect: whenever the editor buffer text changes, fire a new search
@@ -301,6 +312,9 @@ impl GlobalSearchData {
                 let pattern = buffer.with(|buffer| buffer.to_string());
                 if pattern.is_empty() {
                     global_search.search_result.update(|r| r.clear());
+                    if !global_search.modal_active.get_untracked() {
+                        global_search.panel_search_result.update(|r| r.clear());
+                    }
                     return;
                 }
                 let case_sensitive = global_search.common.find.case_sensitive(true);
@@ -328,12 +342,12 @@ impl GlobalSearchData {
             });
         }
 
-        // Auto-preview first match when results change
+        // Auto-preview first match when panel results change
         {
             let global_search = global_search.clone();
-            let search_result = global_search.search_result;
+            let panel_search_result = global_search.panel_search_result;
             cx.create_effect(move |_| {
-                let results = search_result.get();
+                let results = panel_search_result.get();
                 global_search.selected_match.set(None);
                 global_search.selected_index.set(None);
                 if let Some((path, match_data)) = results.iter().next() {
@@ -384,28 +398,41 @@ impl GlobalSearchData {
     fn update_matches(&self, matches: IndexMap<PathBuf, Vec<SearchMatch>>) {
         let current = self.search_result.get_untracked();
 
-        self.search_result.set(
-            matches
-                .into_iter()
-                .map(|(path, matches)| {
-                    let match_data =
-                        current.get(&path).cloned().unwrap_or_else(|| {
-                            SearchMatchData {
-                                expanded: self.common.scope.create_rw_signal(true),
-                                matches: self
-                                    .common
-                                    .scope
-                                    .create_rw_signal(im::Vector::new()),
-                                line_height: self.common.ui_line_height,
-                            }
+        let new_results: IndexMap<PathBuf, SearchMatchData> = matches
+            .into_iter()
+            .map(|(path, matches)| {
+                let match_data =
+                    current
+                        .get(&path)
+                        .cloned()
+                        .unwrap_or_else(|| SearchMatchData {
+                            expanded: self.common.scope.create_rw_signal(true),
+                            matches: self
+                                .common
+                                .scope
+                                .create_rw_signal(im::Vector::new()),
+                            line_height: self.common.ui_line_height,
                         });
 
-                    match_data.matches.set(matches.into());
+                match_data.matches.set(matches.into());
 
-                    (path, match_data)
-                })
-                .collect(),
-        );
+                (path, match_data)
+            })
+            .collect();
+
+        self.search_result.set(new_results.clone());
+
+        // Only propagate to the panel when the modal is not driving the search
+        if !self.modal_active.get_untracked() {
+            self.panel_search_result.set(new_results);
+        }
+    }
+
+    /// Copy the current search results to the panel's result set.
+    /// Called when "Open full results" is clicked from the modal.
+    pub fn commit_results_to_panel(&self) {
+        let results = self.search_result.get_untracked();
+        self.panel_search_result.set(results);
     }
 
     /// Toggle expanded state for a folder path.
