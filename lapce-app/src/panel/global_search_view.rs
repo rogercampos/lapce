@@ -239,7 +239,7 @@ fn search_tab_header(
     .style(move |s| {
         let config = config.get();
         let has_tabs = !tabs.with(|t| t.is_empty());
-        let h = (config.ui.header_height() + 8) as f32;
+        let h = config.ui.header_height() as f32;
         s.width_pct(100.0)
             .items_center()
             .max_width_full()

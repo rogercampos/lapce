@@ -847,13 +847,13 @@ fn window(window_data: WindowData) -> impl View {
     .window_title(move || {
         let active = active();
         let workspaces = workspaces.get();
-        let workspace = workspaces
-            .get(active)
-            .or_else(|| workspaces.last())
-            .and_then(|(_, workspace)| workspace.workspace.display());
-        match workspace {
-            Some(workspace) => format!("{workspace} - Lapce"),
-            None => "Lapce".to_string(),
+        let entry = workspaces.get(active).or_else(|| workspaces.last());
+        let workspace_name = entry.and_then(|(_, ws)| ws.workspace.display());
+        let branch = entry.and_then(|(_, ws)| ws.git_branch.get());
+        match (workspace_name, branch) {
+            (Some(ws), Some(br)) => format!("{ws} [{br}] - Lapce"),
+            (Some(ws), None) => format!("{ws} - Lapce"),
+            _ => "Lapce".to_string(),
         }
     })
     .on_event_stop(EventListener::ImeEnabled, move |_| {

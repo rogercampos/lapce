@@ -67,10 +67,16 @@ impl ProxyHandler for Dispatcher {
                 self.file_watcher.notify(FileWatchNotifier::new(
                     self.core_rpc.clone(),
                     self.proxy_rpc.clone(),
+                    self.workspace.clone(),
                 ));
                 if let Some(workspace) = self.workspace.as_ref() {
                     self.file_watcher
                         .watch(workspace, true, WORKSPACE_EVENT_TOKEN);
+                }
+
+                if let Some(workspace) = self.workspace.as_ref() {
+                    let branch = read_git_branch(workspace);
+                    self.core_rpc.git_head_changed(branch);
                 }
 
                 let env =
@@ -951,6 +957,7 @@ impl Dispatcher {
 struct FileWatchNotifier {
     core_rpc: CoreRpcHandler,
     proxy_rpc: ProxyRpcHandler,
+    workspace: Option<PathBuf>,
     workspace_fs_change_handler: Arc<Mutex<Option<Sender<bool>>>>,
 }
 
@@ -961,10 +968,15 @@ impl Notify for FileWatchNotifier {
 }
 
 impl FileWatchNotifier {
-    fn new(core_rpc: CoreRpcHandler, proxy_rpc: ProxyRpcHandler) -> Self {
+    fn new(
+        core_rpc: CoreRpcHandler,
+        proxy_rpc: ProxyRpcHandler,
+        workspace: Option<PathBuf>,
+    ) -> Self {
         Self {
             core_rpc,
             proxy_rpc,
+            workspace,
             workspace_fs_change_handler: Arc::new(Mutex::new(None)),
         }
     }
@@ -1000,6 +1012,16 @@ impl FileWatchNotifier {
     }
 
     fn handle_workspace_fs_event(&self, event: notify::Event) {
+        if event.kind.is_modify() {
+            if let Some(workspace) = self.workspace.as_ref() {
+                let git_head = workspace.join(".git/HEAD");
+                if event.paths.iter().any(|p| p == &git_head) {
+                    let branch = read_git_branch(workspace);
+                    self.core_rpc.git_head_changed(branch);
+                }
+            }
+        }
+
         let explorer_change = match &event.kind {
             notify::EventKind::Create(_)
             | notify::EventKind::Remove(_)
@@ -1045,6 +1067,19 @@ impl FileWatchNotifier {
             }
         });
         *handler = Some(sender);
+    }
+}
+
+fn read_git_branch(workspace: &std::path::Path) -> Option<String> {
+    let head_path = workspace.join(".git/HEAD");
+    let content = fs::read_to_string(head_path).ok()?;
+    let content = content.trim();
+    if let Some(branch) = content.strip_prefix("ref: refs/heads/") {
+        Some(branch.to_string())
+    } else if content.len() >= 7 && content.chars().all(|c| c.is_ascii_hexdigit()) {
+        Some(content[..7].to_string())
+    } else {
+        None
     }
 }
 

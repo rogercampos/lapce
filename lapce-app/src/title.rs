@@ -21,6 +21,33 @@ use crate::{
     workspace_data::WorkspaceData,
 };
 
+fn center(
+    git_branch: RwSignal<Option<String>>,
+    config: ReadSignal<Arc<LapceConfig>>,
+) -> impl View {
+    let has_branch = move || git_branch.with(|b| b.is_some());
+    stack((
+        svg(move || config.get().ui_svg(LapceIcons::GIT_BRANCH)).style(move |s| {
+            let config = config.get();
+            s.size(14.0, 14.0)
+                .color(config.color(LapceColor::EDITOR_FOREGROUND))
+        }),
+        label(move || git_branch.with(|b| b.clone().unwrap_or_default())).style(
+            move |s| {
+                let config = config.get();
+                s.font_size(config.ui.font_size() as f32 - 1.0)
+                    .color(config.color(LapceColor::EDITOR_FOREGROUND))
+                    .margin_left(4.0)
+            },
+        ),
+    ))
+    .style(move |s| {
+        s.items_center()
+            .padding_horiz(8.0)
+            .apply_if(!has_branch(), |s| s.hide())
+    })
+}
+
 /// Left side of the title bar. On macOS, includes a 75px spacer for the native
 /// traffic-light window buttons. On other platforms, shows the Lapce logo and
 /// a hamburger menu. The remaining space is a drag area for moving the window.
@@ -180,6 +207,7 @@ pub fn title(workspace_data: Rc<WorkspaceData>) -> impl View {
     let window_maximized = workspace_data.common.window_common.window_maximized;
     let title_height = workspace_data.title_height;
     let update_in_progress = workspace_data.update_in_progress;
+    let git_branch = workspace_data.git_branch;
     let config = workspace_data.common.config;
     stack((
         left(
@@ -189,8 +217,8 @@ pub fn title(workspace_data: Rc<WorkspaceData>) -> impl View {
             current_workspace,
             config,
         ),
-        drag_window_area(empty())
-            .style(|s| s.height_pct(100.0).flex_basis(0.0).flex_grow(1.0)),
+        drag_window_area(center(git_branch, config))
+            .style(|s| s.height_pct(100.0).items_center().justify_center()),
         right(
             window_command,
             workbench_command,

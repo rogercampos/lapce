@@ -180,6 +180,7 @@ pub struct WorkspaceData {
     pub status_height: RwSignal<f64>,
     pub proxy: ProxyData,
     pub set_config: WriteSignal<Arc<LapceConfig>>,
+    pub git_branch: RwSignal<Option<String>>,
     pub update_in_progress: RwSignal<bool>,
     pub progresses: RwSignal<IndexMap<ProgressToken, WorkProgress>>,
     pub messages: RwSignal<Vec<(String, ShowMessageParams)>>,
@@ -496,6 +497,7 @@ impl WorkspaceData {
             status_height,
             proxy,
             set_config,
+            git_branch: cx.create_rw_signal(None),
             update_in_progress: cx.create_rw_signal(false),
             progresses: cx.create_rw_signal(IndexMap::new()),
             messages: cx.create_rw_signal(Vec::new()),
@@ -1520,6 +1522,9 @@ impl WorkspaceData {
                     }
                     _ => {}
                 }
+            }
+            CoreNotification::GitHeadChanged { head } => {
+                self.git_branch.set(head.clone());
             }
             CoreNotification::WorkspaceFileChange => {
                 self.file_explorer.reload();

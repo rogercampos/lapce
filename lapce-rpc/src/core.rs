@@ -60,6 +60,9 @@ pub enum CoreNotification {
         paths: Vec<PathObject>,
     },
     WorkspaceFileChange,
+    GitHeadChanged {
+        head: Option<String>,
+    },
     PublishDiagnostics {
         diagnostics: PublishDiagnosticsParams,
     },
@@ -188,6 +191,10 @@ impl CoreRpcHandler {
 
     pub fn workspace_file_change(&self) {
         self.notification(CoreNotification::WorkspaceFileChange);
+    }
+
+    pub fn git_head_changed(&self, head: Option<String>) {
+        self.notification(CoreNotification::GitHeadChanged { head });
     }
 
     pub fn open_file_changed(&self, path: PathBuf, content: FileChanged) {
