@@ -74,6 +74,13 @@ impl LapceColor {
     pub const EDITOR_DRAG_DROP_TAB_BACKGROUND: &'static str =
         "editor.drag_drop_tab_background";
 
+    pub const EDITOR_FIND_MATCH_BACKGROUND: &'static str =
+        "editor.find_match.background";
+    pub const EDITOR_FIND_CURRENT_MATCH_BACKGROUND: &'static str =
+        "editor.find_match.current.background";
+    pub const EDITOR_FIND_CURRENT_MATCH_BORDER: &'static str =
+        "editor.find_match.current.border";
+
     pub const INLAY_HINT_FOREGROUND: &'static str = "inlay_hint.foreground";
     pub const INLAY_HINT_BACKGROUND: &'static str = "inlay_hint.background";
 

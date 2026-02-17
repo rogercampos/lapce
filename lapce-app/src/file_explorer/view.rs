@@ -493,6 +493,7 @@ fn file_explorer_view(data: FileExplorerData) -> impl View {
             None
         }
     })
+    .scroll_style(|s| s.hide_bars(true))
 }
 
 fn open_editors_view(workspace_data: Rc<WorkspaceData>) -> impl View {

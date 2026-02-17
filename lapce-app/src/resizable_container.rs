@@ -48,8 +48,8 @@ pub fn resizable_container(
     ResizableContainer {
         id,
         cursor_style: CursorStyle::Default,
-        width: initial_width,
-        height: initial_height,
+        width: initial_width.max(min_width),
+        height: initial_height.max(min_height),
         min_width,
         min_height,
         drag: None,

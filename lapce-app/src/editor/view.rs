@@ -361,7 +361,13 @@ impl EditorView {
 
         let config = config.get_untracked();
         let line_height = config.editor.line_height() as f64;
-        let color = config.color(LapceColor::EDITOR_FOREGROUND);
+        let match_bg = config.color(LapceColor::EDITOR_FIND_MATCH_BACKGROUND);
+        let current_match_bg =
+            config.color(LapceColor::EDITOR_FIND_CURRENT_MATCH_BACKGROUND);
+        let current_match_border =
+            config.color(LapceColor::EDITOR_FIND_CURRENT_MATCH_BORDER);
+
+        let cursor_offset = self.editor.cursor().with_untracked(|c| c.offset());
 
         let start = ed.offset_of_line(min_line);
         let end = ed.offset_of_line(max_line + 1);
@@ -373,11 +379,16 @@ impl EditorView {
             for region in occurrences.with_untracked(|selection| {
                 selection.regions_in_range(start, end).to_vec()
             }) {
+                let is_current =
+                    cursor_offset >= region.min() && cursor_offset <= region.max();
                 self.paint_find_region(
                     cx,
                     ed,
                     &region,
-                    color,
+                    is_current,
+                    match_bg,
+                    current_match_bg,
+                    current_match_border,
                     screen_lines,
                     line_height,
                 );
@@ -387,11 +398,16 @@ impl EditorView {
         self.editor.on_screen_find.with_untracked(|find| {
             if find.active {
                 for region in &find.regions {
+                    let is_current = cursor_offset >= region.min()
+                        && cursor_offset <= region.max();
                     self.paint_find_region(
                         cx,
                         ed,
                         region,
-                        color,
+                        is_current,
+                        match_bg,
+                        current_match_bg,
+                        current_match_border,
                         screen_lines,
                         line_height,
                     );
@@ -405,7 +421,10 @@ impl EditorView {
         cx: &mut PaintCx,
         ed: &Editor,
         region: &SelRegion,
-        color: Color,
+        is_current: bool,
+        match_bg: Color,
+        current_match_bg: Color,
+        current_match_border: Color,
         screen_lines: &ScreenLines,
         line_height: f64,
     ) {
@@ -461,7 +480,12 @@ impl EditorView {
                 let rect = Size::new(x1 - x0, line_height)
                     .to_rect()
                     .with_origin(Point::new(x0, line_info.vline_y));
-                cx.stroke(&rect, color, &Stroke::new(1.0));
+                if is_current {
+                    cx.fill(&rect, current_match_bg, 0.0);
+                    cx.stroke(&rect, current_match_border, &Stroke::new(1.0));
+                } else {
+                    cx.fill(&rect, match_bg, 0.0);
+                }
             }
         }
     }
