@@ -61,6 +61,7 @@ use crate::{
     global_search::GlobalSearchData,
     go_to_file::GoToFileData,
     go_to_line::GoToLineData,
+    go_to_symbol::GoToSymbolData,
     hover::HoverData,
     id::WorkspaceId,
     inline_completion::InlineCompletionData,
@@ -100,6 +101,7 @@ pub enum Focus {
     ReplaceModal,
     GoToFile,
     GoToLine,
+    GoToSymbol,
     Panel(PanelKind),
 }
 
@@ -169,6 +171,7 @@ pub struct WorkspaceData {
     pub about_data: AboutData,
     pub go_to_file_data: GoToFileData,
     pub go_to_line_data: GoToLineData,
+    pub go_to_symbol_data: GoToSymbolData,
     pub recent_files: RwSignal<Vec<PathBuf>>,
     pub recent_files_data: RecentFilesData,
     pub alert_data: AlertBoxData,
@@ -442,6 +445,12 @@ impl WorkspaceData {
         );
         let go_to_line_data =
             GoToLineData::new(cx, main_split.clone(), common.clone());
+        let go_to_symbol_data = GoToSymbolData::new(
+            cx,
+            workspace.clone(),
+            main_split.clone(),
+            common.clone(),
+        );
         let recent_files = cx.create_rw_signal(Vec::<PathBuf>::new());
         let recent_files_data = RecentFilesData::new(
             cx,
@@ -478,6 +487,7 @@ impl WorkspaceData {
             about_data,
             go_to_file_data,
             go_to_line_data,
+            go_to_symbol_data,
             recent_files,
             recent_files_data,
             alert_data,
@@ -913,6 +923,9 @@ impl WorkspaceData {
                 self.main_split.show_env();
             }
 
+            GoToSymbol => {
+                self.go_to_symbol_data.open();
+            }
             // ==== UI ====
             RecentFiles => {
                 self.recent_files_data.open();
@@ -1545,6 +1558,9 @@ impl WorkspaceData {
             }
             Focus::GoToFile => Some(keypress.key_down(event, &self.go_to_file_data)),
             Focus::GoToLine => Some(keypress.key_down(event, &self.go_to_line_data)),
+            Focus::GoToSymbol => {
+                Some(keypress.key_down(event, &self.go_to_symbol_data))
+            }
             Focus::Panel(PanelKind::Search) => {
                 if let Some(active_search) = self.search_tabs.active_search() {
                     Some(keypress.key_down(event, &active_search))

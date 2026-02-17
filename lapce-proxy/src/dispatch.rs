@@ -839,6 +839,60 @@ impl ProxyHandler for Dispatcher {
                     },
                 );
             }
+            GetWorkspaceSymbols { path, query } => {
+                let proxy_rpc = self.proxy_rpc.clone();
+                self.lsp_rpc
+                    .workspace_symbol(&path, query, move |_, result| {
+                        let result = result.map(|response| {
+                            use lsp_types::WorkspaceSymbolResponse;
+                            let entries = match response {
+                                Some(WorkspaceSymbolResponse::Flat(symbols)) => {
+                                    symbols
+                                        .into_iter()
+                                        .map(|si| {
+                                            lapce_rpc::proxy::SymbolInformationEntry {
+                                                name: si.name,
+                                                kind: si.kind,
+                                                location: si.location,
+                                                container_name: si.container_name,
+                                            }
+                                        })
+                                        .collect()
+                                }
+                                Some(WorkspaceSymbolResponse::Nested(symbols)) => {
+                                    symbols
+                                        .into_iter()
+                                        .filter_map(|ws| {
+                                            let location = match ws.location {
+                                                lsp_types::OneOf::Left(loc) => loc,
+                                                lsp_types::OneOf::Right(wl) => {
+                                                    lsp_types::Location {
+                                                        uri: wl.uri,
+                                                        range: Default::default(),
+                                                    }
+                                                }
+                                            };
+                                            Some(
+                                                lapce_rpc::proxy::SymbolInformationEntry {
+                                                    name: ws.name,
+                                                    kind: ws.kind,
+                                                    location,
+                                                    container_name: ws
+                                                        .container_name,
+                                                },
+                                            )
+                                        })
+                                        .collect()
+                                }
+                                None => Vec::new(),
+                            };
+                            ProxyResponse::GetWorkspaceSymbolsResponse {
+                                symbols: entries,
+                            }
+                        });
+                        proxy_rpc.handle_response(id, result);
+                    });
+            }
             ReferencesResolve { items } => {
                 let items: Vec<FileLine> = items
                     .into_iter()

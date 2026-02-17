@@ -17,6 +17,7 @@ pub mod focus_text;
 pub mod global_search;
 pub mod go_to_file;
 pub mod go_to_line;
+pub mod go_to_symbol;
 pub mod hover;
 pub mod id;
 pub mod inline_completion;

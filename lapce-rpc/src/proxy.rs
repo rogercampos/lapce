@@ -49,6 +49,14 @@ pub struct SearchMatch {
     pub line_content: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SymbolInformationEntry {
+    pub name: String,
+    pub kind: lsp_types::SymbolKind,
+    pub location: lsp_types::Location,
+    pub container_name: Option<String>,
+}
+
 /// Messages from the UI to the proxy that expect a response. Serialized as
 /// tagged JSON: `{"method": "new_buffer", "params": {...}, "id": 42}`.
 /// Each variant maps to an LSP or file-system operation handled by the proxy.
@@ -199,6 +207,10 @@ pub enum ProxyRequest {
     ReferencesResolve {
         items: Vec<Location>,
     },
+    GetWorkspaceSymbols {
+        path: PathBuf,
+        query: String,
+    },
 }
 
 /// Fire-and-forget messages from the UI to the proxy (no response expected).
@@ -345,6 +357,9 @@ pub enum ProxyResponse {
     SaveResponse {},
     ReferencesResolveResponse {
         items: Vec<FileLine>,
+    },
+    GetWorkspaceSymbolsResponse {
+        symbols: Vec<SymbolInformationEntry>,
     },
 }
 
@@ -899,6 +914,15 @@ impl ProxyRpcHandler {
         f: impl ProxyCallback + 'static,
     ) {
         self.request_async(ProxyRequest::GetSelectionRange { path, positions }, f);
+    }
+
+    pub fn get_workspace_symbols(
+        &self,
+        path: PathBuf,
+        query: String,
+        f: impl ProxyCallback + 'static,
+    ) {
+        self.request_async(ProxyRequest::GetWorkspaceSymbols { path, query }, f);
     }
 }
 

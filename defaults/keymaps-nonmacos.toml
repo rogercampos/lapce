@@ -5,6 +5,10 @@ key = "ctrl+shift+n"
 command = "go_to_file"
 
 [[keymaps]]
+key = "ctrl+o"
+command = "go_to_symbol"
+
+[[keymaps]]
 key = "ctrl+e"
 command = "recent_files"
 

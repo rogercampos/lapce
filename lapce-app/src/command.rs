@@ -348,6 +348,10 @@ pub enum LapceWorkbenchCommand {
     #[strum(serialize = "go_to_location")]
     #[strum(message = "Go to Location")]
     GoToLocation,
+
+    #[strum(serialize = "go_to_symbol")]
+    #[strum(message = "Go to Symbol in Workspace")]
+    GoToSymbol,
 }
 
 /// Internal commands are sent between components via the internal_command Listener.

@@ -48,7 +48,7 @@ use lsp_types::{
     TextDocumentSyncClientCapabilities, TextEdit, Url,
     VersionedTextDocumentIdentifier, WindowClientCapabilities,
     WorkDoneProgressParams, WorkspaceClientCapabilities, WorkspaceEdit,
-    WorkspaceSymbolClientCapabilities,
+    WorkspaceSymbolClientCapabilities, WorkspaceSymbolParams,
     request::{
         CallHierarchyIncomingCalls, CallHierarchyPrepare, CodeActionRequest,
         CodeActionResolveRequest, CodeLensRequest, CodeLensResolve, Completion,
@@ -57,7 +57,7 @@ use lsp_types::{
         GotoTypeDefinitionParams, GotoTypeDefinitionResponse, HoverRequest,
         InlayHintRequest, InlineCompletionRequest, PrepareRenameRequest, References,
         Rename, Request, ResolveCompletionItem, SelectionRangeRequest,
-        SemanticTokensFullRequest, SignatureHelpRequest,
+        SemanticTokensFullRequest, SignatureHelpRequest, WorkspaceSymbolRequest,
     },
 };
 use parking_lot::Mutex;
@@ -784,6 +784,26 @@ impl LspRpcHandler {
             positions,
             work_done_progress_params: WorkDoneProgressParams::default(),
             partial_result_params: Default::default(),
+        };
+        self.send_lsp_request(path, method, params, cb);
+    }
+
+    pub fn workspace_symbol(
+        &self,
+        path: &Path,
+        query: String,
+        cb: impl FnOnce(
+            PluginId,
+            Result<Option<lsp_types::WorkspaceSymbolResponse>, RpcError>,
+        ) + Clone
+        + Send
+        + 'static,
+    ) {
+        let method = WorkspaceSymbolRequest::METHOD;
+        let params = WorkspaceSymbolParams {
+            query,
+            work_done_progress_params: WorkDoneProgressParams::default(),
+            partial_result_params: PartialResultParams::default(),
         };
         self.send_lsp_request(path, method, params, cb);
     }

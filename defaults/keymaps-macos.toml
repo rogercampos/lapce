@@ -5,6 +5,10 @@ key = "meta+shift+o"
 command = "go_to_file"
 
 [[keymaps]]
+key = "meta+o"
+command = "go_to_symbol"
+
+[[keymaps]]
 key = "meta+e"
 command = "recent_files"
 

@@ -47,7 +47,7 @@ use lsp_types::{
         InlayHintRequest, InlineCompletionRequest, PrepareRenameRequest, References,
         RegisterCapability, Rename, Request, ResolveCompletionItem,
         SelectionRangeRequest, SemanticTokensFullRequest, SignatureHelpRequest,
-        WorkDoneProgressCreate,
+        WorkDoneProgressCreate, WorkspaceSymbolRequest,
     },
 };
 use parking_lot::Mutex;
@@ -531,6 +531,15 @@ impl LspClient {
             CallHierarchyIncomingCalls::METHOD => {
                 self.server_capabilities.call_hierarchy_provider.is_some()
             }
+            WorkspaceSymbolRequest::METHOD => self
+                .server_capabilities
+                .workspace_symbol_provider
+                .as_ref()
+                .map(|w| match w {
+                    OneOf::Left(is_capable) => *is_capable,
+                    OneOf::Right(_) => true,
+                })
+                .unwrap_or(false),
             _ => false,
         }
     }
