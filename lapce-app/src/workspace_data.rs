@@ -76,6 +76,7 @@ use crate::{
     proxy::{ProxyData, new_proxy},
     recent_files::RecentFilesData,
     rename::RenameData,
+    replace_modal::ReplaceModalData,
     search_modal::SearchModalData,
     tracing::*,
     window::WindowCommonData,
@@ -95,6 +96,7 @@ pub enum Focus {
     AboutPopup,
     RecentFiles,
     SearchModal,
+    ReplaceModal,
     GoToFile,
     GoToLine,
     Panel(PanelKind),
@@ -161,6 +163,7 @@ pub struct WorkspaceData {
     pub rename: RenameData,
     pub global_search: GlobalSearchData,
     pub search_modal_data: SearchModalData,
+    pub replace_modal_data: ReplaceModalData,
     pub about_data: AboutData,
     pub go_to_file_data: GoToFileData,
     pub go_to_line_data: GoToLineData,
@@ -418,6 +421,12 @@ impl WorkspaceData {
             global_search.clone(),
             common.clone(),
         );
+        let replace_modal_data = ReplaceModalData::new(
+            cx,
+            main_split.clone(),
+            global_search.clone(),
+            common.clone(),
+        );
 
         let about_data = AboutData::new(cx, common.focus);
         let go_to_file_data = GoToFileData::new(
@@ -449,6 +458,7 @@ impl WorkspaceData {
             rename,
             global_search,
             search_modal_data,
+            replace_modal_data,
             about_data,
             go_to_file_data,
             go_to_line_data,
@@ -873,6 +883,9 @@ impl WorkspaceData {
             }
             SearchModalOpenFullResults => {
                 self.search_modal_data.open_full_results();
+            }
+            GlobalReplace => {
+                self.replace_modal_data.open();
             }
             FocusEditor => {
                 self.common.focus.set(Focus::Workbench);
@@ -1504,6 +1517,9 @@ impl WorkspaceData {
             }
             Focus::SearchModal => {
                 Some(keypress.key_down(event, &self.search_modal_data))
+            }
+            Focus::ReplaceModal => {
+                Some(keypress.key_down(event, &self.replace_modal_data))
             }
             Focus::GoToFile => Some(keypress.key_down(event, &self.go_to_file_data)),
             Focus::GoToLine => Some(keypress.key_down(event, &self.go_to_line_data)),

@@ -289,6 +289,10 @@ pub enum LapceWorkbenchCommand {
     #[strum(serialize = "search_modal_open_full_results")]
     SearchModalOpenFullResults,
 
+    #[strum(message = "Global Replace")]
+    #[strum(serialize = "global_replace")]
+    GlobalReplace,
+
     #[strum(serialize = "focus_editor")]
     FocusEditor,
 

@@ -24,6 +24,10 @@ command = "zoom_in"
 key = "ctrl+-"
 command = "zoom_out"
 
+[[keymaps]]
+key = "ctrl+shift+r"
+command = "global_replace"
+
 # --------------------------------- Basic editing ---------------------------------------
 
 [[keymaps]]

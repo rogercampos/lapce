@@ -72,6 +72,10 @@ key = "meta+shift+f"
 command = "toggle_search_focus"
 
 [[keymaps]]
+key = "meta+shift+r"
+command = "global_replace"
+
+[[keymaps]]
 key = "alt+right"
 command = "word_end_forward"
 

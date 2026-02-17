@@ -31,6 +31,7 @@ pub mod path;
 pub mod proxy;
 pub mod recent_files;
 pub mod rename;
+pub mod replace_modal;
 pub mod resizable_container;
 pub mod search_modal;
 pub mod settings;
