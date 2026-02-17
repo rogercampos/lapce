@@ -371,7 +371,12 @@ fn file_explorer_view(data: FileExplorerData) -> impl View {
                         })
                         .style(move |s| {
                             let config = config.get();
-                            let size = config.ui.icon_size() as f32;
+                            let base_size = config.ui.icon_size() as f32;
+                            let size = if is_dir {
+                                (base_size * 1.25).round()
+                            } else {
+                                base_size
+                            };
 
                             s.size(size, size)
                                 .flex_shrink(0.0)
