@@ -1,8 +1,11 @@
 pub struct LapceLayout {}
 
 impl LapceLayout {
-    /// Standard border radius used throughout the UI (modals, inputs, panels, etc.)
+    /// Standard border radius used throughout the UI (modals, inputs, buttons, etc.)
     pub const BORDER_RADIUS: f64 = 6.0;
+
+    /// Border radius for main panel containers (file explorer, search, bottom panel).
+    pub const PANEL_BORDER_RADIUS: f64 = 10.0;
 
     /// Line height multiplier for UI lists, panels, and non-editor text.
     /// Also used as the default line height for parsed markdown.
