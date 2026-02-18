@@ -674,7 +674,7 @@ fn workbench(workspace_data: Rc<WorkspaceData>) -> impl View {
                     main_split_width.set(width);
                 }
             })
-            .style(|s| s.flex_grow(1.0).gap(4.0))
+            .style(|s| s.flex_grow(1.0).gap(6.0))
         },
         panel_container_view(workspace_data.clone(), PanelContainerPosition::Bottom),
         lsp_views::window_message_view(
@@ -688,7 +688,7 @@ fn workbench(workspace_data: Rc<WorkspaceData>) -> impl View {
             workbench_size.set(size);
         }
     })
-    .style(move |s| s.flex_col().size_full().padding(6.0).gap(4.0))
+    .style(move |s| s.flex_col().size_full().padding(8.0).gap(6.0))
     .debug_name("Workbench")
 }
 
@@ -802,11 +802,12 @@ fn workspace_view(workspace_data: Rc<WorkspaceData>) -> impl View {
             let config = config.get();
             let scale = window_id.scale();
             let gradient = Gradient::new_linear(
-                Point::new(100.0 * scale, 0.0),
-                Point::new(900.0 * scale, -300.0 * scale),
+                Point::new(0.0, 0.0),
+                Point::new(1200.0 * scale, 900.0 * scale),
             )
             .with_stops([
                 (0.0, config.color(LapceColor::SHELL_BACKGROUND_TOP)),
+                (0.4, config.color(LapceColor::SHELL_BACKGROUND)),
                 (1.0, config.color(LapceColor::SHELL_BACKGROUND)),
             ]);
             s.size_full()
