@@ -1125,6 +1125,7 @@ fn replace_modal_preview_editor(
 ) -> impl View {
     let data = workspace_data.replace_modal_data.clone();
     let preview_focused = data.preview_focused;
+    let focus = workspace_data.common.focus;
     let workspace = workspace_data.workspace.clone();
     let preview_editor = create_rw_signal(data.preview_editor.clone());
 
@@ -1132,7 +1133,19 @@ fn replace_modal_preview_editor(
         container(editor_container_view(
             workspace_data,
             workspace,
-            |_tracked: bool| true,
+            move |tracked: bool| {
+                let f = if tracked {
+                    focus.get()
+                } else {
+                    focus.get_untracked()
+                };
+                let pf = if tracked {
+                    preview_focused.get()
+                } else {
+                    preview_focused.get_untracked()
+                };
+                f == Focus::ReplaceModal && pf
+            },
             preview_editor,
         ))
         .on_event_cont(EventListener::PointerDown, move |_| {

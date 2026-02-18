@@ -695,7 +695,19 @@ fn search_preview_editor(
         container(editor_container_view(
             workspace_data,
             workspace,
-            |_tracked: bool| true,
+            move |tracked: bool| {
+                let f = if tracked {
+                    focus.get()
+                } else {
+                    focus.get_untracked()
+                };
+                let pf = if tracked {
+                    preview_focused.get()
+                } else {
+                    preview_focused.get_untracked()
+                };
+                matches!(f, Focus::Panel(PanelKind::Search)) && pf
+            },
             preview_editor,
         ))
         .on_event_cont(EventListener::PointerDown, move |_| {
