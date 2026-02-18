@@ -150,6 +150,7 @@ impl FileExplorerData {
         };
         if data.common.workspace.path.is_some() {
             // only fill in the child files if there is open folder
+            tracing::info!("[file-explorer] Initial toggle_expand for {:?}", path);
             data.toggle_expand(&path);
         }
         data
@@ -196,6 +197,7 @@ impl FileExplorerData {
     }
 
     pub fn read_dir(&self, path: &Path) {
+        tracing::info!("[file-explorer] read_dir called for {:?}", path);
         self.read_dir_cb(path, |_| {});
     }
 
@@ -215,6 +217,29 @@ impl FileExplorerData {
         let send = {
             let path = path.to_path_buf();
             create_ext_action(self.common.scope, move |result| {
+                match &result {
+                    Ok(ProxyResponse::ReadDirResponse { items }) => {
+                        tracing::info!(
+                            "[file-explorer] ReadDir response received for {:?}: {} items",
+                            path,
+                            items.len()
+                        );
+                    }
+                    Ok(other) => {
+                        tracing::warn!(
+                            "[file-explorer] ReadDir unexpected response for {:?}: {:?}",
+                            path,
+                            std::mem::discriminant(other)
+                        );
+                    }
+                    Err(e) => {
+                        tracing::error!(
+                            "[file-explorer] ReadDir error for {:?}: {:?}",
+                            path,
+                            e
+                        );
+                    }
+                }
                 let Ok(ProxyResponse::ReadDirResponse { mut items }) = result else {
                     done(false);
                     return;

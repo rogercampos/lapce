@@ -21,7 +21,7 @@ use crate::{
     config::{LapceConfig, color::LapceColor, icon::LapceIcons},
     doc::{Doc, DocContent},
     editor::{EditorData, EditorInfo, location::EditorLocation},
-    id::{EditorTabId, KeymapId, SettingsId, SplitId},
+    id::{EditorTabId, KeymapId, ProjectsId, SettingsId, SplitId},
     main_split::{Editors, MainSplitData},
     workspace_data::WorkspaceData,
 };
@@ -33,6 +33,7 @@ pub enum EditorTabChildInfo {
     Editor(EditorInfo),
     Settings,
     Keymap,
+    Projects,
 }
 
 impl EditorTabChildInfo {
@@ -50,6 +51,9 @@ impl EditorTabChildInfo {
                 EditorTabChild::Settings(SettingsId::next())
             }
             EditorTabChildInfo::Keymap => EditorTabChild::Keymap(KeymapId::next()),
+            EditorTabChildInfo::Projects => {
+                EditorTabChild::Projects(ProjectsId::next())
+            }
         }
     }
 }
@@ -114,6 +118,7 @@ pub enum EditorTabChildSource {
     NewFileEditor,
     Settings,
     Keymap,
+    Projects,
 }
 
 /// A live child within an editor tab pane. Each variant holds an ID for its specific
@@ -125,6 +130,7 @@ pub enum EditorTabChild {
     Editor(EditorId),
     Settings(SettingsId),
     Keymap(KeymapId),
+    Projects(ProjectsId),
 }
 
 #[derive(PartialEq)]
@@ -143,6 +149,7 @@ impl EditorTabChild {
             EditorTabChild::Editor(id) => id.to_raw(),
             EditorTabChild::Settings(id) => id.to_raw(),
             EditorTabChild::Keymap(id) => id.to_raw(),
+            EditorTabChild::Projects(id) => id.to_raw(),
         }
     }
 
@@ -162,6 +169,7 @@ impl EditorTabChild {
             }
             EditorTabChild::Settings(_) => EditorTabChildInfo::Settings,
             EditorTabChild::Keymap(_) => EditorTabChildInfo::Keymap,
+            EditorTabChild::Projects(_) => EditorTabChildInfo::Projects,
         }
     }
 
@@ -249,6 +257,17 @@ impl EditorTabChild {
                     is_external: false,
                 }
             }),
+            EditorTabChild::Projects(_) => create_memo(move |_| {
+                let config = config.get();
+                EditorTabChildViewInfo {
+                    icon: config.ui_svg(LapceIcons::FILE_EXPLORER),
+                    color: Some(config.color(LapceColor::LAPCE_ICON_ACTIVE)),
+                    name: "Projects".to_string(),
+                    path: None,
+                    is_pristine: true,
+                    is_external: false,
+                }
+            }),
         }
     }
 }
@@ -323,6 +342,11 @@ impl EditorTabData {
             EditorTabChildSource::Keymap => {
                 self.children.iter().position(|(_, _, child)| {
                     matches!(child, EditorTabChild::Keymap(_))
+                })
+            }
+            EditorTabChildSource::Projects => {
+                self.children.iter().position(|(_, _, child)| {
+                    matches!(child, EditorTabChild::Projects(_))
                 })
             }
         }

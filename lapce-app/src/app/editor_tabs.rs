@@ -37,6 +37,7 @@ use crate::{
     keymap::keymap_view,
     main_split::{SplitContent, SplitData, SplitDirection, SplitMoveDirection},
     panel::position::PanelContainerPosition,
+    projects::projects_view,
     settings::settings_view,
     workspace_data::{Focus, WorkspaceData},
 };
@@ -573,6 +574,12 @@ pub(super) fn editor_tab_content(
             }
             EditorTabChild::Settings(_) => settings_view(editors, common).into_any(),
             EditorTabChild::Keymap(_) => keymap_view(editors, common).into_any(),
+            EditorTabChild::Projects(_) => {
+                let projects = workspace_data.projects;
+                let ws_path = workspace_data.workspace.path.clone();
+                let config = common.config;
+                projects_view(projects, ws_path, config).into_any()
+            }
         };
         child.style(|s| s.size_full())
     };

@@ -30,52 +30,104 @@ pub const LSP_SERVERS: &[LspServerConfig] = &[LspServerConfig {
     init_options_json: Some(r#"{"enabledFeatures":{"semanticHighlighting":false}}"#),
 }];
 
+/// Find the LSP server command configured for a given language, if any.
+pub fn lsp_command_for_language(language_id: &str) -> Option<&'static str> {
+    LSP_SERVERS
+        .iter()
+        .find(|c| c.languages.contains(&language_id))
+        .map(|c| c.command)
+}
+
 /// Manages multiple LSP server instances. Runs on a dedicated thread.
+///
+/// Routes LSP requests by **(language_id, project_root)** to support monorepos
+/// where multiple sub-projects use the same language but need separate LSP servers
+/// (e.g., two Ruby apps with different Gemfiles).
 pub struct LspManager {
     workspace: Option<PathBuf>,
     lsp_rpc: LspRpcHandler,
     /// Active LSP server instances, keyed by PluginId
     servers: HashMap<PluginId, LspClient>,
-    /// Maps language_id → PluginId for routing
-    language_to_server: HashMap<String, PluginId>,
-    /// Tracks which configs have been activated
-    activated_configs: Vec<usize>,
+    /// Maps (language_id, project_root) → PluginId for routing
+    language_project_to_server: HashMap<(String, PathBuf), PluginId>,
+    /// Tracks which (config_index, project_root) pairs have been activated
+    activated_configs: Vec<(usize, PathBuf)>,
+    /// Detected projects: (project_root, languages)
+    projects: Vec<(PathBuf, Vec<String>)>,
     /// Tracks open files for lazy activation replay
     open_files: HashMap<PathBuf, TextDocumentItem>,
 }
 
 impl LspManager {
-    pub fn new(workspace: Option<PathBuf>, lsp_rpc: LspRpcHandler) -> Self {
+    pub fn new(
+        workspace: Option<PathBuf>,
+        lsp_rpc: LspRpcHandler,
+        projects: Vec<(PathBuf, Vec<String>)>,
+    ) -> Self {
         Self {
             workspace,
             lsp_rpc,
             servers: HashMap::new(),
-            language_to_server: HashMap::new(),
+            language_project_to_server: HashMap::new(),
             activated_configs: Vec::new(),
+            projects,
             open_files: HashMap::new(),
         }
     }
 
-    /// Try to activate a server for the given language if one isn't already running.
-    fn ensure_server_for_language(&mut self, language_id: &str) {
-        if self.language_to_server.contains_key(language_id) {
+    /// Find the longest matching project root that is a prefix of `path`.
+    fn find_project_root_for_path(&self, path: &std::path::Path) -> Option<PathBuf> {
+        self.projects
+            .iter()
+            .filter(|(root, _)| path.starts_with(root))
+            .max_by_key(|(root, _)| root.components().count())
+            .map(|(root, _)| root.clone())
+    }
+
+    /// Get the effective project root for a file path, falling back to workspace.
+    fn effective_project_root(&self, path: Option<&std::path::Path>) -> PathBuf {
+        path.and_then(|p| self.find_project_root_for_path(p))
+            .or_else(|| self.workspace.clone())
+            .unwrap_or_default()
+    }
+
+    /// Try to activate a server for the given language and project root
+    /// if one isn't already running.
+    fn ensure_server_for_language(
+        &mut self,
+        language_id: &str,
+        project_root: &PathBuf,
+    ) {
+        let key = (language_id.to_string(), project_root.clone());
+        if self.language_project_to_server.contains_key(&key) {
             return;
         }
 
-        // Find a matching config that hasn't been activated yet
+        // Find a matching config that hasn't been activated for this project root
         for (idx, config) in LSP_SERVERS.iter().enumerate() {
-            if self.activated_configs.contains(&idx) {
+            let activation_key = (idx, project_root.clone());
+            if self.activated_configs.contains(&activation_key) {
                 continue;
             }
             if !config.languages.contains(&language_id) {
                 continue;
             }
 
-            // Try to start this server
-            let env = self.lsp_rpc.shell_env.clone();
+            // Use project-specific shell env
+            let env = self
+                .lsp_rpc
+                .shell_env_for_project(Some(project_root.as_path()));
+
+            // Start the server with the project root as its workspace
+            let server_workspace = if project_root.as_os_str().is_empty() {
+                self.workspace.clone()
+            } else {
+                Some(project_root.clone())
+            };
+
             match LspClient::start(
                 self.lsp_rpc.clone(),
-                self.workspace.clone(),
+                server_workspace,
                 config.command,
                 config.command,
                 config.args,
@@ -87,22 +139,26 @@ impl LspManager {
             ) {
                 Ok(client) => {
                     let plugin_id = client.plugin_id;
-                    self.activated_configs.push(idx);
+                    self.activated_configs.push(activation_key);
 
-                    // Register language → server mapping for all languages this server handles
+                    // Register (language, project_root) → server mapping
                     for lang in config.languages {
-                        self.language_to_server.insert(lang.to_string(), plugin_id);
+                        self.language_project_to_server.insert(
+                            (lang.to_string(), project_root.clone()),
+                            plugin_id,
+                        );
                     }
 
                     self.servers.insert(plugin_id, client);
 
-                    // Replay open files for this server
-                    self.replay_open_files(plugin_id);
+                    // Replay open files that belong to this project root
+                    self.replay_open_files(plugin_id, project_root);
                 }
                 Err(err) => {
                     tracing::error!(
-                        "Failed to start LSP server {}: {:?}",
+                        "Failed to start LSP server {} for project {:?}: {:?}",
                         config.command,
+                        project_root,
                         err
                     );
                 }
@@ -111,18 +167,43 @@ impl LspManager {
         }
     }
 
-    /// Replay didOpen for all currently open files that match this server.
-    fn replay_open_files(&self, plugin_id: PluginId) {
+    /// Look up the server for a given language and file path.
+    fn find_server_for_path(
+        &self,
+        language_id: &str,
+        path: Option<&std::path::Path>,
+    ) -> Option<PluginId> {
+        let project_root = self.effective_project_root(path);
+        let key = (language_id.to_string(), project_root);
+        self.language_project_to_server.get(&key).copied()
+    }
+
+    /// Replay didOpen for open files that belong to the given project root.
+    fn replay_open_files(&self, plugin_id: PluginId, project_root: &PathBuf) {
         let Some(server) = self.servers.get(&plugin_id) else {
             return;
         };
 
-        // Also get open files from the proxy
         match self.lsp_rpc.proxy_rpc.get_open_files_content() {
             Ok(ProxyResponse::GetOpenFilesContentResponse { items }) => {
                 for item in items {
-                    let language_id = Some(item.language_id.clone());
                     let path = item.uri.to_file_path().ok();
+
+                    // Only replay files belonging to this project root
+                    let belongs = path.as_ref().is_some_and(|p| {
+                        if project_root.as_os_str().is_empty() {
+                            // Fallback root: only replay files not in any project
+                            self.find_project_root_for_path(p).is_none()
+                        } else {
+                            p.starts_with(project_root)
+                        }
+                    });
+
+                    if !belongs {
+                        continue;
+                    }
+
+                    let language_id = Some(item.language_id.clone());
                     server.server_notification(
                         DidOpenTextDocument::METHOD,
                         DidOpenTextDocumentParams {
@@ -140,7 +221,7 @@ impl LspManager {
         }
     }
 
-    /// Route a request to the appropriate server based on language_id.
+    /// Route a request to the appropriate server based on language_id and path.
     pub fn handle_server_request(
         &mut self,
         plugin_id: Option<PluginId>,
@@ -168,11 +249,10 @@ impl LspManager {
             return;
         }
 
-        // Route by language
+        // Route by (language, project_root)
         let target_plugin_id = language_id
             .as_deref()
-            .and_then(|lang| self.language_to_server.get(lang))
-            .copied();
+            .and_then(|lang| self.find_server_for_path(lang, path.as_deref()));
 
         if let Some(pid) = target_plugin_id {
             if let Some(server) = self.servers.get(&pid) {
@@ -214,11 +294,10 @@ impl LspManager {
             return;
         }
 
-        // Route by language
+        // Route by (language, project_root)
         let target_plugin_id = language_id
             .as_deref()
-            .and_then(|lang| self.language_to_server.get(lang))
-            .copied();
+            .and_then(|lang| self.find_server_for_path(lang, path.as_deref()));
 
         if let Some(pid) = target_plugin_id {
             if let Some(server) = self.servers.get(&pid) {
@@ -233,12 +312,16 @@ impl LspManager {
             self.open_files.insert(path, document.clone());
         }
 
-        // Ensure a server is running for this language (lazy activation)
-        self.ensure_server_for_language(&document.language_id);
+        // Find project root for this file
+        let file_path = document.uri.to_file_path().ok();
+        let project_root = self.effective_project_root(file_path.as_deref());
+
+        // Ensure a server is running for this (language, project_root)
+        self.ensure_server_for_language(&document.language_id, &project_root);
 
         // Forward to matching server
-        let target_plugin_id =
-            self.language_to_server.get(&document.language_id).copied();
+        let key = (document.language_id.clone(), project_root);
+        let target_plugin_id = self.language_project_to_server.get(&key).copied();
 
         if let Some(pid) = target_plugin_id {
             let path = document.uri.to_file_path().ok();
@@ -262,7 +345,7 @@ impl LspManager {
         text_document: TextDocumentIdentifier,
         text: Rope,
     ) {
-        let target_plugin_id = self.language_to_server.get(&language_id).copied();
+        let target_plugin_id = self.find_server_for_path(&language_id, Some(&path));
 
         if let Some(pid) = target_plugin_id {
             if let Some(server) = self.servers.get(&pid) {
@@ -284,7 +367,9 @@ impl LspManager {
         text: Rope,
         new_text: Rope,
     ) {
-        let target_plugin_id = self.language_to_server.get(&language_id).copied();
+        let path = document.uri.to_file_path().ok();
+        let target_plugin_id =
+            self.find_server_for_path(&language_id, path.as_deref());
 
         if let Some(pid) = target_plugin_id {
             if let Some(server) = self.servers.get_mut(&pid) {

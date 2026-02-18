@@ -141,7 +141,10 @@ pub struct LspRpcHandler {
     proxy_rpc: ProxyRpcHandler,
     lsp_tx: Sender<LspRpc>,
     lsp_rx: Arc<Mutex<Option<Receiver<LspRpc>>>>,
-    pub shell_env: Arc<HashMap<String, String>>,
+    /// Default shell environment (resolved for the workspace root).
+    pub default_shell_env: Arc<HashMap<String, String>>,
+    /// Per-project shell environments, keyed by project root path.
+    pub project_shell_envs: Arc<HashMap<PathBuf, Arc<HashMap<String, String>>>>,
 }
 
 impl LspRpcHandler {
@@ -152,12 +155,32 @@ impl LspRpcHandler {
             proxy_rpc,
             lsp_tx,
             lsp_rx: Arc::new(Mutex::new(Some(lsp_rx))),
-            shell_env: Arc::new(HashMap::new()),
+            default_shell_env: Arc::new(HashMap::new()),
+            project_shell_envs: Arc::new(HashMap::new()),
         }
     }
 
-    pub fn set_shell_env(&mut self, env: HashMap<String, String>) {
-        self.shell_env = Arc::new(env);
+    pub fn set_shell_envs(
+        &mut self,
+        default_env: HashMap<String, String>,
+        project_envs: HashMap<PathBuf, Arc<HashMap<String, String>>>,
+    ) {
+        self.default_shell_env = Arc::new(default_env);
+        self.project_shell_envs = Arc::new(project_envs);
+    }
+
+    /// Get the shell environment for a specific project root, falling back to
+    /// the default workspace-root environment.
+    pub fn shell_env_for_project(
+        &self,
+        project_root: Option<&Path>,
+    ) -> Arc<HashMap<String, String>> {
+        if let Some(root) = project_root {
+            if let Some(env) = self.project_shell_envs.get(root) {
+                return env.clone();
+            }
+        }
+        self.default_shell_env.clone()
     }
 
     pub fn mainloop(&self, manager: &mut LspManager) {

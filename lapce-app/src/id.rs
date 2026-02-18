@@ -24,3 +24,4 @@ define_id!(WorkspaceId);
 define_id!(EditorTabId);
 define_id!(SettingsId);
 define_id!(KeymapId);
+define_id!(ProjectsId);

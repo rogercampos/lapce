@@ -162,6 +162,9 @@ fn right(
                                 .send(LapceWorkbenchCommand::OpenKeyboardShortcuts)
                         },
                     ))
+                    .entry(MenuItem::new("Show Projects").action(move || {
+                        workbench_command.send(LapceWorkbenchCommand::ShowProjects)
+                    }))
                     .separator()
                     .entry(if let Some(v) = latest_version.get_untracked() {
                         if update_in_progress.get_untracked() {

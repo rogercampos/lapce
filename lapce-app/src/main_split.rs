@@ -39,7 +39,7 @@ use crate::{
     editor_tab::{
         EditorTabChild, EditorTabChildSource, EditorTabData, EditorTabInfo,
     },
-    id::{EditorTabId, KeymapId, SettingsId, SplitId},
+    id::{EditorTabId, KeymapId, ProjectsId, SettingsId, SplitId},
     keypress::{EventRef, KeyPressData, KeyPressHandle},
     workspace_data::{CommonData, Focus, WorkspaceData},
 };
@@ -500,6 +500,7 @@ impl MainSplitData {
             }
             EditorTabChild::Settings(_) => None,
             EditorTabChild::Keymap(_) => None,
+            EditorTabChild::Projects(_) => None,
         }
     }
 
@@ -809,6 +810,9 @@ impl MainSplitData {
                 EditorTabChild::Settings(SettingsId::next())
             }
             EditorTabChildSource::Keymap => EditorTabChild::Keymap(KeymapId::next()),
+            EditorTabChildSource::Projects => {
+                EditorTabChild::Projects(ProjectsId::next())
+            }
         }
     }
 
@@ -852,6 +856,7 @@ impl MainSplitData {
                 true
             }
             (EditorTabChild::Settings(_), EditorTabChildSource::Settings) => true,
+            (EditorTabChild::Projects(_), EditorTabChildSource::Projects) => true,
             _ => false,
         };
         if is_same {
@@ -1195,6 +1200,9 @@ impl MainSplitData {
                 EditorTabChild::Settings(SettingsId::next())
             }
             EditorTabChild::Keymap(_) => EditorTabChild::Keymap(KeymapId::next()),
+            EditorTabChild::Projects(_) => {
+                EditorTabChild::Projects(ProjectsId::next())
+            }
         };
 
         let editor_tab = {
@@ -1546,6 +1554,7 @@ impl MainSplitData {
             }
             EditorTabChild::Settings(_) => None,
             EditorTabChild::Keymap(_) => None,
+            EditorTabChild::Projects(_) => None,
         }
     }
 
@@ -1794,6 +1803,7 @@ impl MainSplitData {
             }
             EditorTabChild::Settings(_) => {}
             EditorTabChild::Keymap(_) => {}
+            EditorTabChild::Projects(_) => {}
         }
 
         if editor_tab_children_len == 0 {
@@ -1970,6 +1980,10 @@ impl MainSplitData {
 
     pub fn open_keymap(&self) {
         self.get_editor_tab_child(EditorTabChildSource::Keymap, false);
+    }
+
+    pub fn open_projects(&self) {
+        self.get_editor_tab_child(EditorTabChildSource::Projects, false);
     }
 
     pub fn new_file(&self) -> EditorTabChild {
@@ -2200,6 +2214,7 @@ impl MainSplitData {
             }
             EditorTabChild::Settings(_) => {}
             EditorTabChild::Keymap(_) => {}
+            EditorTabChild::Projects(_) => {}
         }
         Some(())
     }

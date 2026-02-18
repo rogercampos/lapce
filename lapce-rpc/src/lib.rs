@@ -7,6 +7,7 @@ pub mod file;
 pub mod file_line;
 mod parse;
 pub mod plugin;
+pub mod project;
 pub mod proxy;
 pub mod stdio;
 pub mod style;

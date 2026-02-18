@@ -58,6 +58,10 @@ pub struct Dispatcher {
 
 impl ProxyHandler for Dispatcher {
     fn handle_notification(&mut self, rpc: ProxyNotification) {
+        tracing::info!(
+            "[dispatch] handle_notification: {:?}",
+            std::mem::discriminant(&rpc)
+        );
         use ProxyNotification::*;
         match rpc {
             Initialize {
@@ -65,6 +69,10 @@ impl ProxyHandler for Dispatcher {
                 window_id: _,
                 tab_id: _,
             } => {
+                tracing::info!(
+                    "[dispatch] Initialize start, workspace={:?}",
+                    workspace
+                );
                 self.workspace = workspace;
                 self.file_watcher.notify(FileWatchNotifier::new(
                     self.core_rpc.clone(),
@@ -76,25 +84,130 @@ impl ProxyHandler for Dispatcher {
                         .watch(workspace, true, WORKSPACE_EVENT_TOKEN);
                 }
 
+                // Send git branch/repo state quickly (just reads a few files)
                 if let Some(workspace) = self.workspace.as_ref() {
+                    tracing::info!("[dispatch] Reading git branch/repo state...");
                     let branch = read_git_branch(workspace);
                     let repo_state = read_git_repo_state(workspace);
                     self.core_rpc.git_head_changed(branch, repo_state);
-
-                    let statuses = read_git_file_statuses(workspace);
-                    self.core_rpc.git_file_status_changed(statuses);
+                    tracing::info!("[dispatch] Git branch/repo state done");
                 }
 
-                let env =
-                    crate::shell_env::resolve_shell_env(self.workspace.as_deref());
-                self.lsp_rpc.set_shell_env(env);
-
-                let lsp_rpc = self.lsp_rpc.clone();
+                tracing::info!(
+                    "[dispatch] Spawning background thread for git status/projects/LSP"
+                );
+                // Move all heavy work (git file statuses, project detection,
+                // shell env resolution, LSP startup) to a background thread
+                // so we don't block the dispatcher from processing ReadDir
+                // and other requests.
+                let mut lsp_rpc = self.lsp_rpc.clone();
+                let core_rpc = self.core_rpc.clone();
                 let workspace = self.workspace.clone();
                 thread::spawn(move || {
-                    let mut manager = LspManager::new(workspace, lsp_rpc.clone());
+                    tracing::info!("[bg-thread] Background thread started");
+
+                    // Git file statuses can be very slow on large repos
+                    // (scans all files including node_modules, etc.)
+                    if let Some(ws) = workspace.as_ref() {
+                        tracing::info!("[bg-thread] Reading git file statuses...");
+                        let statuses = read_git_file_statuses(ws);
+                        tracing::info!(
+                            "[bg-thread] Git file statuses done ({} entries)",
+                            statuses.len()
+                        );
+                        core_rpc.git_file_status_changed(statuses);
+                    }
+                    // Detect sub-projects
+                    let mut projects = if let Some(ws) = workspace.as_ref() {
+                        tracing::info!(
+                            "[bg-thread] Detecting projects in {:?}...",
+                            ws
+                        );
+                        let p = crate::project::detect_projects(ws);
+                        tracing::info!("[bg-thread] Detected {} projects", p.len());
+                        p
+                    } else {
+                        Vec::new()
+                    };
+
+                    // Send projects immediately so the UI can show them right away.
+                    // Tool versions and version manager info will arrive in a second
+                    // update after shell env resolution completes.
+                    core_rpc.projects_detected(projects.clone());
+
+                    // Resolve shell envs (slow: spawns login shells)
+                    tracing::info!("[bg-thread] Resolving default shell env...");
+                    let default_env =
+                        crate::shell_env::resolve_shell_env(workspace.as_deref());
+                    tracing::info!(
+                        "[bg-thread] Default shell env resolved ({} vars)",
+                        default_env.len()
+                    );
+
+                    let mut project_envs: HashMap<
+                        PathBuf,
+                        Arc<HashMap<String, String>>,
+                    > = HashMap::new();
+                    for project in &mut projects {
+                        let env = if !project_envs.contains_key(&project.root) {
+                            tracing::info!(
+                                "[bg-thread] Resolving shell env for project {:?}...",
+                                project.root
+                            );
+                            let env = crate::shell_env::resolve_shell_env(Some(
+                                project.root.as_path(),
+                            ));
+                            tracing::info!(
+                                "[bg-thread] Shell env resolved for {:?} ({} vars)",
+                                project.root,
+                                env.len()
+                            );
+                            let arc_env = Arc::new(env);
+                            project_envs
+                                .insert(project.root.clone(), arc_env.clone());
+                            arc_env
+                        } else {
+                            project_envs.get(&project.root).unwrap().clone()
+                        };
+
+                        project.tool_versions =
+                            lapce_rpc::project::extract_tool_versions(
+                                &project.kind,
+                                &env,
+                            );
+                        project.version_manager =
+                            lapce_rpc::project::detect_version_manager(
+                                &project.kind,
+                                &env,
+                            );
+                        project.lsp_server = project
+                            .languages
+                            .first()
+                            .and_then(|lang| {
+                                crate::lsp::manager::lsp_command_for_language(lang)
+                            })
+                            .map(|s| s.to_string());
+                    }
+
+                    tracing::info!(
+                        "[bg-thread] Sending projects_detected notification"
+                    );
+                    core_rpc.projects_detected(projects.clone());
+                    lsp_rpc.set_shell_envs(default_env, project_envs);
+
+                    let project_roots: Vec<(PathBuf, Vec<String>)> = projects
+                        .iter()
+                        .map(|p| (p.root.clone(), p.languages.clone()))
+                        .collect();
+
+                    tracing::info!("[bg-thread] Starting LSP manager mainloop");
+                    let mut manager =
+                        LspManager::new(workspace, lsp_rpc.clone(), project_roots);
                     lsp_rpc.mainloop(&mut manager);
                 });
+                tracing::info!(
+                    "[dispatch] Initialize handler done, dispatcher is now free to process requests"
+                );
             }
             OpenPaths { paths } => {
                 self.core_rpc
@@ -175,6 +288,11 @@ impl ProxyHandler for Dispatcher {
     }
 
     fn handle_request(&mut self, id: RequestId, rpc: ProxyRequest) {
+        tracing::info!(
+            "[dispatch] handle_request id={}: {:?}",
+            id,
+            std::mem::discriminant(&rpc)
+        );
         use ProxyRequest::*;
         match rpc {
             NewBuffer { buffer_id, path } => {
@@ -554,9 +672,10 @@ impl ProxyHandler for Dispatcher {
                 self.proxy_rpc.handle_response(id, Ok(resp));
             }
             ReadDir { path } => {
+                tracing::info!("[dispatch] ReadDir request for {:?}", path);
                 let proxy_rpc = self.proxy_rpc.clone();
                 thread::spawn(move || {
-                    let result = fs::read_dir(path)
+                    let result = fs::read_dir(&path)
                         .map(|entries| {
                             let mut items = entries
                                 .into_iter()
@@ -578,7 +697,31 @@ impl ProxyHandler for Dispatcher {
 
                             ProxyResponse::ReadDirResponse { items }
                         })
-                        .map_err(|e| RpcError::new(e.to_string()));
+                        .map_err(|e| {
+                            tracing::error!(
+                                "[dispatch] ReadDir error for {:?}: {}",
+                                path,
+                                e
+                            );
+                            RpcError::new(e.to_string())
+                        });
+                    match &result {
+                        Ok(ProxyResponse::ReadDirResponse { items }) => {
+                            tracing::info!(
+                                "[dispatch] ReadDir response for {:?}: {} items",
+                                path,
+                                items.len()
+                            );
+                        }
+                        Err(e) => {
+                            tracing::error!(
+                                "[dispatch] ReadDir failed for {:?}: {:?}",
+                                path,
+                                e
+                            );
+                        }
+                        _ => {}
+                    }
                     proxy_rpc.handle_response(id, result);
                 });
             }
@@ -1140,7 +1283,9 @@ fn read_git_file_statuses(
     opts.include_untracked(true);
     opts.recurse_untracked_dirs(true);
     opts.include_ignored(true);
-    opts.recurse_ignored_dirs(true);
+    // Don't recurse into ignored directories (node_modules, target, etc.)
+    // — individual ignored files like .env are still detected.
+    opts.recurse_ignored_dirs(false);
     let Ok(statuses) = repo.statuses(Some(&mut opts)) else {
         return result;
     };

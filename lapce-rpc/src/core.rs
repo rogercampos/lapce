@@ -15,7 +15,10 @@ use lsp_types::{
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 
-use crate::{RequestId, RpcError, RpcMessage, file::PathObject, plugin::PluginId};
+use crate::{
+    RequestId, RpcError, RpcMessage, file::PathObject, plugin::PluginId,
+    project::ProjectInfo,
+};
 
 /// Internal channel message type for proxy-to-UI communication.
 /// CoreNotification is boxed because some variants (like CompletionResponse)
@@ -124,6 +127,9 @@ pub enum CoreNotification {
         level: LogLevel,
         message: String,
         target: Option<String>,
+    },
+    ProjectsDetected {
+        projects: Vec<ProjectInfo>,
     },
 }
 
@@ -303,6 +309,10 @@ impl CoreRpcHandler {
 
     pub fn cancel(&self, params: CancelParams) {
         self.notification(CoreNotification::LspCancel { params });
+    }
+
+    pub fn projects_detected(&self, projects: Vec<ProjectInfo>) {
+        self.notification(CoreNotification::ProjectsDetected { projects });
     }
 }
 

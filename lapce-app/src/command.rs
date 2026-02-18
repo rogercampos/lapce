@@ -322,6 +322,10 @@ pub enum LapceWorkbenchCommand {
     #[strum(message = "About Lapce")]
     ShowAbout,
 
+    #[strum(serialize = "show_projects")]
+    #[strum(message = "Show Projects")]
+    ShowProjects,
+
     #[cfg(target_os = "macos")]
     #[strum(message = "Install Lapce to PATH")]
     #[strum(serialize = "install_to_path")]

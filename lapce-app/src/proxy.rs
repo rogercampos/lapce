@@ -55,13 +55,22 @@ pub fn new_proxy(workspace: Arc<LapceWorkspace>) -> ProxyData {
         std::thread::Builder::new()
             .name("ProxyRpcHandler".to_owned())
             .spawn(move || {
+                tracing::info!(
+                    "[proxy] ProxyRpcHandler thread started, workspace={:?}",
+                    workspace.path
+                );
                 proxy_rpc.initialize(workspace.path.clone(), 1, 1);
+                tracing::info!(
+                    "[proxy] Initialize notification queued, creating dispatcher"
+                );
 
                 let core_rpc = core_rpc.clone();
                 let proxy_rpc = proxy_rpc.clone();
                 let mut dispatcher = Dispatcher::new(core_rpc, proxy_rpc);
                 let proxy_rpc = dispatcher.proxy_rpc.clone();
+                tracing::info!("[proxy] Starting dispatcher mainloop");
                 proxy_rpc.mainloop(&mut dispatcher);
+                tracing::info!("[proxy] Dispatcher mainloop exited");
             })
             .unwrap();
     }

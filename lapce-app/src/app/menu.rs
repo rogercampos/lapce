@@ -80,6 +80,9 @@ pub fn window_menu(
             workbench_command.send(LapceWorkbenchCommand::ZoomReset);
         }))
         .separator()
+        .entry(MenuItem::new("Show Projects").action(move || {
+            workbench_command.send(LapceWorkbenchCommand::ShowProjects);
+        }))
         .entry(MenuItem::new("Reveal Active File in File Explorer").action(
             move || {
                 workbench_command

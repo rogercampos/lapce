@@ -36,6 +36,7 @@ use lapce_rpc::{
     core::{CoreNotification, GitFileStatus, GitRepoState},
     file::{Naming, PathObject},
     plugin::PluginId,
+    project::ProjectInfo,
     proxy::{ProxyResponse, ProxyRpcHandler},
 };
 use lsp_types::{
@@ -174,6 +175,7 @@ pub struct WorkspaceData {
     pub search_modal_data: SearchModalData,
     pub replace_modal_data: ReplaceModalData,
     pub about_data: AboutData,
+    pub projects: RwSignal<Vec<ProjectInfo>>,
     pub go_to_file_data: GoToFileData,
     pub go_to_line_data: GoToLineData,
     pub go_to_symbol_data: GoToSymbolData,
@@ -454,6 +456,7 @@ impl WorkspaceData {
         );
 
         let about_data = AboutData::new(cx, common.focus);
+        let projects = cx.create_rw_signal(Vec::<ProjectInfo>::new());
         let go_to_file_data = GoToFileData::new(
             cx,
             workspace.clone(),
@@ -502,6 +505,7 @@ impl WorkspaceData {
             search_modal_data,
             replace_modal_data,
             about_data,
+            projects,
             go_to_file_data,
             go_to_line_data,
             go_to_symbol_data,
@@ -970,6 +974,9 @@ impl WorkspaceData {
             }
             ShowAbout => {
                 self.about_data.open();
+            }
+            ShowProjects => {
+                self.main_split.open_projects();
             }
             // ==== Updating ====
             RestartToUpdate => {
@@ -1447,6 +1454,10 @@ impl WorkspaceData {
     }
 
     fn handle_core_notification(&self, rpc: &CoreNotification) {
+        tracing::info!(
+            "[workspace] handle_core_notification: {:?}",
+            std::mem::discriminant(rpc)
+        );
         match rpc {
             CoreNotification::CompletionResponse {
                 request_id,
@@ -1577,6 +1588,13 @@ impl WorkspaceData {
             }
             CoreNotification::WorkspaceFileChange => {
                 self.file_explorer.reload();
+            }
+            CoreNotification::ProjectsDetected { projects } => {
+                tracing::info!(
+                    "[workspace] ProjectsDetected: {} projects",
+                    projects.len()
+                );
+                self.projects.set(projects.clone());
             }
             _ => {}
         }

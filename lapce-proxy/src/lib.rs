@@ -4,6 +4,7 @@ pub mod buffer;
 pub mod cli;
 pub mod dispatch;
 pub mod lsp;
+pub mod project;
 pub mod shell_env;
 pub mod watcher;
 
