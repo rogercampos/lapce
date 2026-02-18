@@ -26,6 +26,38 @@ pub enum CoreRpc {
     Shutdown,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum GitFileStatus {
+    Modified,
+    Added,
+    Deleted,
+    Renamed,
+    Untracked,
+    Conflicted,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum GitRepoState {
+    #[default]
+    Normal,
+    Rebasing,
+    Merging,
+    CherryPicking,
+    Reverting,
+}
+
+impl GitRepoState {
+    pub fn label(&self) -> Option<&'static str> {
+        match self {
+            GitRepoState::Normal => None,
+            GitRepoState::Rebasing => Some("Rebasing"),
+            GitRepoState::Merging => Some("Merging"),
+            GitRepoState::CherryPicking => Some("Cherry-Picking"),
+            GitRepoState::Reverting => Some("Reverting"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FileChanged {
@@ -60,6 +92,13 @@ pub enum CoreNotification {
         paths: Vec<PathObject>,
     },
     WorkspaceFileChange,
+    GitHeadChanged {
+        head: Option<String>,
+        repo_state: GitRepoState,
+    },
+    GitFileStatusChanged {
+        statuses: HashMap<PathBuf, GitFileStatus>,
+    },
     PublishDiagnostics {
         diagnostics: PublishDiagnosticsParams,
     },
@@ -188,6 +227,17 @@ impl CoreRpcHandler {
 
     pub fn workspace_file_change(&self) {
         self.notification(CoreNotification::WorkspaceFileChange);
+    }
+
+    pub fn git_head_changed(&self, head: Option<String>, repo_state: GitRepoState) {
+        self.notification(CoreNotification::GitHeadChanged { head, repo_state });
+    }
+
+    pub fn git_file_status_changed(
+        &self,
+        statuses: HashMap<PathBuf, GitFileStatus>,
+    ) {
+        self.notification(CoreNotification::GitFileStatusChanged { statuses });
     }
 
     pub fn open_file_changed(&self, path: PathBuf, content: FileChanged) {

@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     env,
     path::{Path, PathBuf},
     rc::Rc,
@@ -32,7 +33,7 @@ use lapce_core::{
 };
 use lapce_rpc::{
     RpcError,
-    core::CoreNotification,
+    core::{CoreNotification, GitFileStatus, GitRepoState},
     file::{Naming, PathObject},
     plugin::PluginId,
     proxy::{ProxyResponse, ProxyRpcHandler},
@@ -183,6 +184,9 @@ pub struct WorkspaceData {
     pub status_height: RwSignal<f64>,
     pub proxy: ProxyData,
     pub set_config: WriteSignal<Arc<LapceConfig>>,
+    pub git_branch: RwSignal<Option<String>>,
+    pub git_repo_state: RwSignal<GitRepoState>,
+    pub git_file_statuses: RwSignal<HashMap<PathBuf, GitFileStatus>>,
     pub update_in_progress: RwSignal<bool>,
     pub progresses: RwSignal<IndexMap<ProgressToken, WorkProgress>>,
     pub messages: RwSignal<Vec<(String, ShowMessageParams)>>,
@@ -502,6 +506,9 @@ impl WorkspaceData {
             status_height,
             proxy,
             set_config,
+            git_branch: cx.create_rw_signal(None),
+            git_repo_state: cx.create_rw_signal(GitRepoState::Normal),
+            git_file_statuses: cx.create_rw_signal(HashMap::new()),
             update_in_progress: cx.create_rw_signal(false),
             progresses: cx.create_rw_signal(IndexMap::new()),
             messages: cx.create_rw_signal(Vec::new()),
@@ -1535,6 +1542,13 @@ impl WorkspaceData {
                     }
                     _ => {}
                 }
+            }
+            CoreNotification::GitHeadChanged { head, repo_state } => {
+                self.git_branch.set(head.clone());
+                self.git_repo_state.set(repo_state.clone());
+            }
+            CoreNotification::GitFileStatusChanged { statuses } => {
+                self.git_file_statuses.set(statuses.clone());
             }
             CoreNotification::WorkspaceFileChange => {
                 self.file_explorer.reload();

@@ -2710,6 +2710,7 @@ dependencies = [
  "directories",
  "dyn-clone",
  "floem-editor-core",
+ "git2",
  "globset",
  "grep-matcher",
  "grep-regex",

@@ -19,7 +19,9 @@ use indexmap::IndexMap;
 use lapce_rpc::{
     RequestId, RpcError,
     buffer::BufferId,
-    core::{CoreNotification, CoreRpcHandler, FileChanged},
+    core::{
+        CoreNotification, CoreRpcHandler, FileChanged, GitFileStatus, GitRepoState,
+    },
     file::FileNodeItem,
     file_line::FileLine,
     proxy::{
@@ -67,10 +69,20 @@ impl ProxyHandler for Dispatcher {
                 self.file_watcher.notify(FileWatchNotifier::new(
                     self.core_rpc.clone(),
                     self.proxy_rpc.clone(),
+                    self.workspace.clone(),
                 ));
                 if let Some(workspace) = self.workspace.as_ref() {
                     self.file_watcher
                         .watch(workspace, true, WORKSPACE_EVENT_TOKEN);
+                }
+
+                if let Some(workspace) = self.workspace.as_ref() {
+                    let branch = read_git_branch(workspace);
+                    let repo_state = read_git_repo_state(workspace);
+                    self.core_rpc.git_head_changed(branch, repo_state);
+
+                    let statuses = read_git_file_statuses(workspace);
+                    self.core_rpc.git_file_status_changed(statuses);
                 }
 
                 let env =
@@ -951,6 +963,7 @@ impl Dispatcher {
 struct FileWatchNotifier {
     core_rpc: CoreRpcHandler,
     proxy_rpc: ProxyRpcHandler,
+    workspace: Option<PathBuf>,
     workspace_fs_change_handler: Arc<Mutex<Option<Sender<bool>>>>,
 }
 
@@ -961,10 +974,15 @@ impl Notify for FileWatchNotifier {
 }
 
 impl FileWatchNotifier {
-    fn new(core_rpc: CoreRpcHandler, proxy_rpc: ProxyRpcHandler) -> Self {
+    fn new(
+        core_rpc: CoreRpcHandler,
+        proxy_rpc: ProxyRpcHandler,
+        workspace: Option<PathBuf>,
+    ) -> Self {
         Self {
             core_rpc,
             proxy_rpc,
+            workspace,
             workspace_fs_change_handler: Arc::new(Mutex::new(None)),
         }
     }
@@ -1000,6 +1018,39 @@ impl FileWatchNotifier {
     }
 
     fn handle_workspace_fs_event(&self, event: notify::Event) {
+        if event.kind.is_modify() {
+            if let Some(workspace) = self.workspace.as_ref() {
+                let git_head = workspace.join(".git/HEAD");
+                if event.paths.iter().any(|p| p == &git_head) {
+                    let branch = read_git_branch(workspace);
+                    let repo_state = read_git_repo_state(workspace);
+                    self.core_rpc.git_head_changed(branch, repo_state);
+                }
+            }
+        }
+
+        // Detect repo state sentinel file changes (rebase, merge, cherry-pick, revert).
+        // These fire immediately (not debounced) since it's just checking file existence.
+        if let Some(workspace) = self.workspace.as_ref() {
+            let git_dir = workspace.join(".git");
+            let sentinel_files = [
+                git_dir.join("rebase-merge"),
+                git_dir.join("rebase-apply"),
+                git_dir.join("MERGE_HEAD"),
+                git_dir.join("CHERRY_PICK_HEAD"),
+                git_dir.join("REVERT_HEAD"),
+            ];
+            let is_sentinel = event
+                .paths
+                .iter()
+                .any(|p| sentinel_files.iter().any(|s| p == s || p.starts_with(s)));
+            if is_sentinel {
+                let branch = read_git_branch(workspace);
+                let repo_state = read_git_repo_state(workspace);
+                self.core_rpc.git_head_changed(branch, repo_state);
+            }
+        }
+
         let explorer_change = match &event.kind {
             notify::EventKind::Create(_)
             | notify::EventKind::Remove(_)
@@ -1008,24 +1059,21 @@ impl FileWatchNotifier {
             _ => return,
         };
 
+        // Debounce: accumulate events for 500ms, then fire once.
+        // The bool tracks whether we need to reload the file explorer tree
+        // (creates/deletes/renames). Git status is always recomputed since
+        // any file modification can change it.
         let mut handler = self.workspace_fs_change_handler.lock();
         if let Some(sender) = handler.as_mut() {
-            if explorer_change {
-                if let Err(err) = sender.send(explorer_change) {
-                    tracing::error!("{:?}", err);
-                }
-            }
+            let _ = sender.send(explorer_change);
             return;
         }
         let (sender, receiver) = crossbeam_channel::unbounded();
-        if explorer_change {
-            if let Err(err) = sender.send(explorer_change) {
-                tracing::error!("{:?}", err);
-            }
-        }
+        let _ = sender.send(explorer_change);
 
         let local_handler = self.workspace_fs_change_handler.clone();
         let core_rpc = self.core_rpc.clone();
+        let workspace = self.workspace.clone();
         thread::spawn(move || {
             thread::sleep(Duration::from_millis(500));
 
@@ -1043,9 +1091,92 @@ impl FileWatchNotifier {
             if explorer_change {
                 core_rpc.workspace_file_change();
             }
+            if let Some(workspace) = workspace.as_ref() {
+                let statuses = read_git_file_statuses(workspace);
+                core_rpc.git_file_status_changed(statuses);
+            }
         });
         *handler = Some(sender);
     }
+}
+
+fn read_git_branch(workspace: &std::path::Path) -> Option<String> {
+    let head_path = workspace.join(".git/HEAD");
+    let content = fs::read_to_string(head_path).ok()?;
+    let content = content.trim();
+    if let Some(branch) = content.strip_prefix("ref: refs/heads/") {
+        Some(branch.to_string())
+    } else if content.len() >= 7 && content.chars().all(|c| c.is_ascii_hexdigit()) {
+        Some(content[..7].to_string())
+    } else {
+        None
+    }
+}
+
+fn read_git_repo_state(workspace: &std::path::Path) -> GitRepoState {
+    let git_dir = workspace.join(".git");
+    if git_dir.join("rebase-merge").exists() || git_dir.join("rebase-apply").exists()
+    {
+        GitRepoState::Rebasing
+    } else if git_dir.join("MERGE_HEAD").exists() {
+        GitRepoState::Merging
+    } else if git_dir.join("CHERRY_PICK_HEAD").exists() {
+        GitRepoState::CherryPicking
+    } else if git_dir.join("REVERT_HEAD").exists() {
+        GitRepoState::Reverting
+    } else {
+        GitRepoState::Normal
+    }
+}
+
+fn read_git_file_statuses(
+    workspace: &std::path::Path,
+) -> HashMap<PathBuf, GitFileStatus> {
+    let mut result = HashMap::new();
+    let Ok(repo) = git2::Repository::open(workspace) else {
+        return result;
+    };
+    let mut opts = git2::StatusOptions::new();
+    opts.include_untracked(true);
+    opts.recurse_untracked_dirs(true);
+    let Ok(statuses) = repo.statuses(Some(&mut opts)) else {
+        return result;
+    };
+    for entry in statuses.iter() {
+        let status = entry.status();
+        let git_status = if status.intersects(git2::Status::CONFLICTED) {
+            GitFileStatus::Conflicted
+        } else if status
+            .intersects(git2::Status::INDEX_RENAMED | git2::Status::WT_RENAMED)
+        {
+            GitFileStatus::Renamed
+        } else if status.intersects(git2::Status::INDEX_NEW | git2::Status::WT_NEW) {
+            if status.intersects(git2::Status::WT_NEW)
+                && !status.intersects(git2::Status::INDEX_NEW)
+            {
+                GitFileStatus::Untracked
+            } else {
+                GitFileStatus::Added
+            }
+        } else if status
+            .intersects(git2::Status::INDEX_DELETED | git2::Status::WT_DELETED)
+        {
+            GitFileStatus::Deleted
+        } else if status.intersects(
+            git2::Status::INDEX_MODIFIED
+                | git2::Status::WT_MODIFIED
+                | git2::Status::INDEX_TYPECHANGE
+                | git2::Status::WT_TYPECHANGE,
+        ) {
+            GitFileStatus::Modified
+        } else {
+            continue;
+        };
+        if let Some(path_str) = entry.path() {
+            result.insert(workspace.join(path_str), git_status);
+        }
+    }
+    result
 }
 
 fn search_in_path(

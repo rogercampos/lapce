@@ -31,6 +31,7 @@ lapce-xi-rope     = { workspace = true }
 lapce-core        = { workspace = true }
 lapce-rpc         = { workspace = true }
 floem-editor-core = { workspace = true }
+git2              = { workspace = true }
 
 # proxy specific dependencies
 

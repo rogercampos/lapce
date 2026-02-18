@@ -11,6 +11,8 @@ use floem::{
 };
 use lapce_core::meta;
 
+use lapce_rpc::core::GitRepoState;
+
 use crate::{
     app::{clickable_icon, not_clickable_icon, window_menu},
     command::{LapceCommand, LapceWorkbenchCommand, WindowCommand},
@@ -20,6 +22,46 @@ use crate::{
     workspace::LapceWorkspace,
     workspace_data::WorkspaceData,
 };
+
+fn center(
+    git_branch: RwSignal<Option<String>>,
+    git_repo_state: RwSignal<GitRepoState>,
+    config: ReadSignal<Arc<LapceConfig>>,
+) -> impl View {
+    let has_branch = move || git_branch.with(|b| b.is_some());
+    let has_repo_state = move || git_repo_state.with(|s| s.label().is_some());
+    stack((
+        svg(move || config.get().ui_svg(LapceIcons::GIT_BRANCH)).style(move |s| {
+            let config = config.get();
+            s.size(14.0, 14.0)
+                .color(config.color(LapceColor::EDITOR_FOREGROUND))
+        }),
+        label(move || git_branch.with(|b| b.clone().unwrap_or_default())).style(
+            move |s| {
+                let config = config.get();
+                s.font_size(config.ui.font_size() as f32 - 1.0)
+                    .color(config.color(LapceColor::EDITOR_FOREGROUND))
+                    .margin_left(4.0)
+            },
+        ),
+        label(move || {
+            git_repo_state
+                .with(|s| s.label().map(|l| format!("({})", l)).unwrap_or_default())
+        })
+        .style(move |s| {
+            let config = config.get();
+            s.font_size(config.ui.font_size() as f32 - 1.0)
+                .color(config.color(LapceColor::LAPCE_WARN))
+                .margin_left(6.0)
+                .apply_if(!has_repo_state(), |s| s.hide())
+        }),
+    ))
+    .style(move |s| {
+        s.items_center()
+            .padding_horiz(8.0)
+            .apply_if(!has_branch(), |s| s.hide())
+    })
+}
 
 /// Left side of the title bar. On macOS, includes a 75px spacer for the native
 /// traffic-light window buttons. On other platforms, shows the Lapce logo and
@@ -180,6 +222,8 @@ pub fn title(workspace_data: Rc<WorkspaceData>) -> impl View {
     let window_maximized = workspace_data.common.window_common.window_maximized;
     let title_height = workspace_data.title_height;
     let update_in_progress = workspace_data.update_in_progress;
+    let git_branch = workspace_data.git_branch;
+    let git_repo_state = workspace_data.git_repo_state;
     let config = workspace_data.common.config;
     stack((
         left(
@@ -189,8 +233,8 @@ pub fn title(workspace_data: Rc<WorkspaceData>) -> impl View {
             current_workspace,
             config,
         ),
-        drag_window_area(empty())
-            .style(|s| s.height_pct(100.0).flex_basis(0.0).flex_grow(1.0)),
+        drag_window_area(center(git_branch, git_repo_state, config))
+            .style(|s| s.height_pct(100.0).items_center().justify_center()),
         right(
             window_command,
             workbench_command,
