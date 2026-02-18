@@ -151,7 +151,7 @@ pub fn lapce_internal_commands() -> IndexMap<String, LapceCommand> {
 )]
 pub enum LapceWorkbenchCommand {
     #[strum(serialize = "open_folder")]
-    #[strum(message = "Open Folder")]
+    #[strum(message = "Open Workspace")]
     OpenFolder,
 
     #[strum(serialize = "reveal_in_panel")]
@@ -485,6 +485,7 @@ pub enum InternalCommand {
 #[derive(Clone)]
 pub enum WindowCommand {
     SetWorkspace { workspace: LapceWorkspace },
+    ReloadWindow,
     NewWindow,
     CloseWindow,
 }
@@ -572,7 +573,7 @@ mod tests {
     #[test]
     fn command_kind_desc_workbench_with_message() {
         let kind = CommandKind::Workbench(LapceWorkbenchCommand::OpenFolder);
-        assert_eq!(kind.desc(), Some("Open Folder"));
+        assert_eq!(kind.desc(), Some("Open Workspace"));
     }
 
     #[test]

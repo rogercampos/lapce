@@ -287,19 +287,15 @@ impl LapceDb {
     }
 
     pub fn save_window(&self, data: WindowData) -> Result<()> {
-        for (_, workspace) in data.workspaces.get_untracked().into_iter() {
-            if let Err(err) = self.save_workspace(workspace) {
-                tracing::error!("{:?}", err);
-            }
+        if let Err(err) = self.save_workspace(data.workspace) {
+            tracing::error!("{:?}", err);
         }
         Ok(())
     }
 
     pub fn insert_window(&self, data: WindowData) -> Result<()> {
-        for (_, workspace) in data.workspaces.get_untracked().into_iter() {
-            if let Err(err) = self.insert_workspace_data(workspace) {
-                tracing::error!("{:?}", err);
-            }
+        if let Err(err) = self.insert_workspace_data(data.workspace.clone()) {
+            tracing::error!("{:?}", err);
         }
         let info = data.info();
         let info = serde_json::to_string_pretty(&info)?;

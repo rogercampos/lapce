@@ -27,11 +27,11 @@ pub fn window_menu(
     current_workspace: &LapceWorkspace,
 ) -> Menu {
     let file_menu = {
-        let mut menu = Menu::new("File").entry(MenuItem::new("Open Folder").action(
-            move || {
+        let mut menu = Menu::new("File").entry(
+            MenuItem::new("Open Workspace").action(move || {
                 workbench_command.send(LapceWorkbenchCommand::OpenFolder);
-            },
-        ));
+            }),
+        );
 
         let mut recent_menu = Menu::new("Open Recent Workspace");
         let db: Arc<LapceDb> = use_context().unwrap();

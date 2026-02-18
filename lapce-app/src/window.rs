@@ -4,24 +4,15 @@ use floem::{
     ViewId,
     action::TimerToken,
     peniko::kurbo::{Point, Size},
-    reactive::{
-        ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith,
-        use_context,
-    },
+    reactive::{ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, use_context},
     window::WindowId,
 };
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    app::AppCommand,
-    command::{InternalCommand, WindowCommand},
-    config::LapceConfig,
-    db::LapceDb,
-    keypress::EventRef,
-    listener::Listener,
-    update::ReleaseInfo,
-    workspace::LapceWorkspace,
-    workspace_data::WorkspaceData,
+    app::AppCommand, command::WindowCommand, config::LapceConfig, db::LapceDb,
+    keypress::EventRef, listener::Listener, update::ReleaseInfo,
+    workspace::LapceWorkspace, workspace_data::WorkspaceData,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -36,6 +27,21 @@ pub struct WindowInfo {
     pub pos: Point,
     pub maximised: bool,
     pub tabs: TabsInfo,
+}
+
+impl WindowInfo {
+    /// Create a WindowInfo for a single workspace.
+    pub fn for_workspace(workspace: LapceWorkspace, size: Size, pos: Point) -> Self {
+        Self {
+            size,
+            pos,
+            maximised: false,
+            tabs: TabsInfo {
+                active_tab: 0,
+                workspaces: vec![workspace],
+            },
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -56,18 +62,14 @@ pub struct WindowCommonData {
 /// `WindowData` is the application model for a top-level window.
 ///
 /// A top-level window can be independently moved around and
-/// resized using your window manager. Normally Lapce has only one
-/// top-level window, but new ones can be created using the "New Window"
-/// command.
-///
-/// Each window has a single workspace.
+/// resized using your window manager. Each window contains exactly
+/// one workspace. Opening a new workspace always creates a new window.
+/// Closing the window closes the workspace.
 #[derive(Clone)]
 pub struct WindowData {
     pub window_id: WindowId,
     pub scope: Scope,
-    pub workspaces: RwSignal<im::Vector<(RwSignal<usize>, Rc<WorkspaceData>)>>,
-    /// The index of the active workspace.
-    pub active: RwSignal<usize>,
+    pub workspace: Rc<WorkspaceData>,
     pub app_command: Listener<AppCommand>,
     pub position: RwSignal<Point>,
     pub root_view_id: RwSignal<ViewId>,
@@ -79,9 +81,9 @@ pub struct WindowData {
 
 impl WindowData {
     /// Create a new window from serialized WindowInfo. This creates a Scope that owns all
-    /// the reactive signals for this window's lifetime. Each workspace listed in the info
+    /// the reactive signals for this window's lifetime. The first workspace listed in the info
     /// is instantiated as a full WorkspaceData. If no workspaces are provided, a default
-    /// empty workspace is created so the window always has at least one tab.
+    /// empty workspace is created.
     pub fn new(
         window_id: WindowId,
         app_view_id: RwSignal<ViewId>,
@@ -95,8 +97,6 @@ impl WindowData {
         let config = cx.create_rw_signal(Arc::new(config));
         let root_view_id = cx.create_rw_signal(ViewId::new());
 
-        let workspaces = cx.create_rw_signal(im::Vector::new());
-        let active = info.tabs.active_tab;
         let window_command = Listener::new_empty(cx);
         let ime_allowed = cx.create_rw_signal(false);
         let window_maximized = cx.create_rw_signal(false);
@@ -117,33 +117,17 @@ impl WindowData {
             app_view_id,
         });
 
-        for w in info.tabs.workspaces {
-            let workspace =
-                Rc::new(WorkspaceData::new(cx, Arc::new(w), common.clone()));
-            workspaces.update(|workspaces| {
-                workspaces.push_back((cx.create_rw_signal(0), workspace));
-            });
-        }
+        // Use the first workspace from the info, or a default empty workspace
+        let ws = info.tabs.workspaces.into_iter().next().unwrap_or_default();
+        let workspace =
+            Rc::new(WorkspaceData::new(cx, Arc::new(ws), common.clone()));
 
-        if workspaces.with_untracked(|workspaces| workspaces.is_empty()) {
-            let workspace = Rc::new(WorkspaceData::new(
-                cx,
-                Arc::new(LapceWorkspace::default()),
-                common.clone(),
-            ));
-            workspaces.update(|workspaces| {
-                workspaces.push_back((cx.create_rw_signal(0), workspace));
-            });
-        }
-
-        let active = cx.create_rw_signal(active);
         let position = cx.create_rw_signal(info.pos);
 
         let window_data = Self {
             window_id,
             scope: cx,
-            workspaces,
-            active,
+            workspace,
             position,
             root_view_id,
             window_scale,
@@ -160,36 +144,18 @@ impl WindowData {
             });
         }
 
-        // When the active workspace tab changes, reset the cursor blink timer
-        // so it starts fresh in the newly-focused workspace (avoids a stale half-blink state).
-        {
-            cx.create_effect(move |_| {
-                let active = active.get();
-                let tab = workspaces
-                    .with(|tabs| tabs.get(active).map(|(_, tab)| tab.clone()));
-                if let Some(tab) = tab {
-                    tab.common
-                        .internal_command
-                        .send(InternalCommand::ResetBlinkCursor);
-                }
-            })
-        }
-
         window_data
     }
 
     pub fn reload_config(&self) {
         let config = LapceConfig::load(&LapceWorkspace::default());
         self.config.set(Arc::new(config));
-        let workspaces = self.workspaces.get_untracked();
-        for (_, workspace) in workspaces {
-            workspace.reload_config();
-        }
+        self.workspace.reload_config();
     }
 
-    /// Handle window-level commands. SetWorkspace replaces the current active workspace,
-    /// persisting the old one's state before shutdown. Every window command triggers a
-    /// SaveApp afterward to keep the persisted state in sync.
+    /// Handle window-level commands. SetWorkspace opens the workspace in a new window.
+    /// ReloadWindow replaces the current workspace in-place.
+    /// Every window command triggers a SaveApp afterward to keep the persisted state in sync.
     pub fn run_window_command(&self, cmd: WindowCommand) {
         match cmd {
             WindowCommand::SetWorkspace { workspace } => {
@@ -198,36 +164,32 @@ impl WindowData {
                     tracing::error!("{:?}", err);
                 }
 
-                let active = self.active.get_untracked();
-                self.workspaces.with_untracked(|workspaces| {
-                    if !workspaces.is_empty() {
-                        let active = workspaces.len().saturating_sub(1).min(active);
-                        if let Err(err) =
-                            db.insert_workspace_data(workspaces[active].1.clone())
-                        {
-                            tracing::error!("{:?}", err);
-                        }
-                    }
+                // Open the workspace in a new window
+                self.app_command.send(AppCommand::NewWindow {
+                    folder: workspace.path,
                 });
 
-                let workspace = Rc::new(WorkspaceData::new(
-                    self.scope,
-                    Arc::new(workspace),
-                    self.common.clone(),
-                ));
-                self.workspaces.update(|workspaces| {
-                    if workspaces.is_empty() {
-                        workspaces
-                            .push_back((self.scope.create_rw_signal(0), workspace));
-                    } else {
-                        let active = workspaces.len().saturating_sub(1).min(active);
-                        let (_, old_workspace) = workspaces.set(
-                            active,
-                            (self.scope.create_rw_signal(0), workspace),
-                        );
-                        old_workspace.proxy.shutdown();
-                    }
-                })
+                // If the current window has no folder (empty workspace), close it
+                if self.workspace.workspace.path.is_none() {
+                    self.app_command
+                        .send(AppCommand::CloseWindow(self.window_id));
+                }
+            }
+            WindowCommand::ReloadWindow => {
+                // Reload replaces the current workspace in-place within this window
+                let db: Arc<LapceDb> = use_context().unwrap();
+                if let Err(err) = db.insert_workspace_data(self.workspace.clone()) {
+                    tracing::error!("{:?}", err);
+                }
+                // We need to create a new workspace and update the window.
+                // Since WindowData.workspace is an Rc (not a signal), we close
+                // and re-open this window to reload it.
+                let workspace = (*self.workspace.workspace).clone();
+                self.app_command.send(AppCommand::NewWindow {
+                    folder: workspace.path,
+                });
+                self.app_command
+                    .send(AppCommand::CloseWindow(self.window_id));
             }
             WindowCommand::NewWindow => {
                 self.app_command
@@ -242,44 +204,22 @@ impl WindowData {
     }
 
     pub fn key_down<'a>(&self, event: impl Into<EventRef<'a>> + Copy) -> bool {
-        let active = self.active.get_untracked();
-        let workspace = self.workspaces.with_untracked(|workspaces| {
-            workspaces
-                .get(active)
-                .or_else(|| workspaces.last())
-                .cloned()
-        });
-        if let Some((_, workspace)) = workspace {
-            workspace.key_down(event)
-        } else {
-            false
-        }
+        self.workspace.key_down(event)
     }
 
     pub fn info(&self) -> WindowInfo {
-        let workspaces: Vec<LapceWorkspace> = self
-            .workspaces
-            .get_untracked()
-            .iter()
-            .map(|(_, t)| (*t.workspace).clone())
-            .collect();
         WindowInfo {
             size: self.common.size.get_untracked(),
             pos: self.position.get_untracked(),
             maximised: false,
             tabs: TabsInfo {
-                active_tab: self.active.get_untracked(),
-                workspaces,
+                active_tab: 0,
+                workspaces: vec![(*self.workspace.workspace).clone()],
             },
         }
     }
 
     pub fn active_workspace(&self) -> Option<Rc<WorkspaceData>> {
-        let workspaces = self.workspaces.get_untracked();
-        let active = self
-            .active
-            .get_untracked()
-            .min(workspaces.len().saturating_sub(1));
-        workspaces.get(active).map(|(_, tab)| tab.clone())
+        Some(self.workspace.clone())
     }
 }

@@ -16,7 +16,6 @@ use floem::{
     IntoView, View, WindowIdExt,
     event::{Event, EventListener, EventPropagation},
     ext_event::{create_ext_action, create_signal_from_channel},
-    menu::Menu,
     peniko::{
         Gradient,
         kurbo::{Point, Size},
@@ -29,7 +28,7 @@ use floem::{
     style::CursorStyle,
     views::{
         Decorators, container, drag_resize_window_area, drag_window_area, empty,
-        label, stack, tab,
+        label, stack,
     },
     window::{ResizeDirection, WindowConfig, WindowId},
 };
@@ -437,9 +436,7 @@ impl AppData {
         );
 
         {
-            let cur_workspace = window_data.active.get_untracked();
-            let (_, workspace) =
-                &window_data.workspaces.get_untracked()[cur_workspace];
+            let workspace = &window_data.workspace;
             for file in files {
                 let position = file.linecol.map(|pos| {
                     EditorPosition::Position(lsp_types::Position {
@@ -701,7 +698,7 @@ fn empty_workspace_view(workspace_data: Rc<WorkspaceData>) -> impl View {
 
     drag_window_area(
         container(
-            label(|| "Open Folder".to_string())
+            label(|| "Open Workspace".to_string())
                 .on_event_stop(EventListener::PointerDown, |_| {})
                 .on_click_stop(move |_| {
                     workbench_command.send(LapceWorkbenchCommand::OpenFolder);
@@ -748,7 +745,7 @@ fn empty_workspace_view(workspace_data: Rc<WorkspaceData>) -> impl View {
 /// It uses a layered stack where the base layer (title + workbench + status bar) is overlaid
 /// by floating elements in z-order: completion, hover, code actions, rename,
 /// go-to-file, search modal, recent files, about popup, and alert dialog.
-/// If no folder is open, shows a simplified "Open Folder" landing page instead.
+/// If no folder is open, shows a simplified "Open Workspace" landing page instead.
 fn workspace_view(workspace_data: Rc<WorkspaceData>) -> impl View {
     let window_origin = workspace_data.common.window_origin;
     let layout_rect = workspace_data.layout_rect;
@@ -831,59 +828,43 @@ fn workspace_view(workspace_data: Rc<WorkspaceData>) -> impl View {
 }
 
 fn window(window_data: WindowData) -> impl View {
-    let workspaces = window_data.workspaces.read_only();
-    let active = window_data.active.read_only();
-    let items = move || workspaces.get();
-    let key = |(_, workspace): &(RwSignal<usize>, Rc<WorkspaceData>)| {
-        workspace.workspace_id
-    };
-    let active = move || active.get();
-    let window_focus = create_rw_signal(false);
+    let workspace_data = window_data.workspace.clone();
     let ime_enabled = window_data.ime_enabled;
     let window_maximized = window_data.common.window_maximized;
 
-    tab(active, items, key, |(_, workspace_data)| {
-        workspace_view(workspace_data)
-    })
-    .window_title(move || {
-        let active = active();
-        let workspaces = workspaces.get();
-        let entry = workspaces.get(active).or_else(|| workspaces.last());
-        let workspace_name = entry.and_then(|(_, ws)| ws.workspace.display());
-        let branch = entry.and_then(|(_, ws)| ws.git_branch.get());
-        let repo_state_label = entry
-            .and_then(|(_, ws)| ws.git_repo_state.get().label().map(String::from));
-        let branch_display = match (branch, repo_state_label) {
-            (Some(br), Some(state)) => Some(format!("{br} ({state})")),
-            (Some(br), None) => Some(br),
-            _ => None,
-        };
-        match (workspace_name, branch_display) {
-            (Some(ws), Some(br)) => format!("{ws} [{br}] - Lapce"),
-            (Some(ws), None) => format!("{ws} - Lapce"),
-            _ => "Lapce".to_string(),
-        }
-    })
-    .on_event_stop(EventListener::ImeEnabled, move |_| {
-        ime_enabled.set(true);
-    })
-    .on_event_stop(EventListener::ImeDisabled, move |_| {
-        ime_enabled.set(false);
-    })
-    .on_event_cont(EventListener::WindowGotFocus, move |_| {
-        window_focus.set(true);
-    })
-    .on_event_cont(EventListener::WindowMaximizeChanged, move |event| {
-        if let Event::WindowMaximizeChanged(maximized) = event {
-            window_maximized.set(*maximized);
-        }
-    })
-    .window_menu(move || {
-        window_focus.track();
-        let active = active();
-        let workspaces = workspaces.get();
-        let workspace = workspaces.get(active).or_else(|| workspaces.last());
-        if let Some((_, workspace)) = workspace {
+    workspace_view(workspace_data.clone())
+        .window_title(move || {
+            let workspace_name = workspace_data.workspace.display();
+            let branch = workspace_data.git_branch.get();
+            let repo_state_label = workspace_data
+                .git_repo_state
+                .get()
+                .label()
+                .map(String::from);
+            let branch_display = match (branch, repo_state_label) {
+                (Some(br), Some(state)) => Some(format!("{br} ({state})")),
+                (Some(br), None) => Some(br),
+                _ => None,
+            };
+            match (workspace_name, branch_display) {
+                (Some(ws), Some(br)) => format!("{ws} [{br}] - Lapce"),
+                (Some(ws), None) => format!("{ws} - Lapce"),
+                _ => "Lapce".to_string(),
+            }
+        })
+        .on_event_stop(EventListener::ImeEnabled, move |_| {
+            ime_enabled.set(true);
+        })
+        .on_event_stop(EventListener::ImeDisabled, move |_| {
+            ime_enabled.set(false);
+        })
+        .on_event_cont(EventListener::WindowMaximizeChanged, move |event| {
+            if let Event::WindowMaximizeChanged(maximized) = event {
+                window_maximized.set(*maximized);
+            }
+        })
+        .window_menu(move || {
+            let workspace = &window_data.workspace;
             workspace.common.keypress.track();
             let workbench_command = workspace.common.workbench_command;
             let lapce_command = workspace.common.lapce_command;
@@ -894,12 +875,9 @@ fn window(window_data: WindowData) -> impl View {
                 window_command,
                 &workspace.workspace,
             )
-        } else {
-            Menu::new("Lapce")
-        }
-    })
-    .style(|s| s.size_full())
-    .debug_name("Window")
+        })
+        .style(|s| s.size_full())
+        .debug_name("Window")
 }
 
 /// Application entry point. Orchestrates the entire startup sequence:
@@ -1145,13 +1123,12 @@ pub fn launch() {
                 );
                 reset_highlight_configs();
                 for (_, window) in app_data.windows.get_untracked() {
-                    for (_, tab) in window.workspaces.get_untracked() {
-                        for (_, doc) in tab.main_split.docs.get_untracked() {
-                            doc.syntax.update(|syntaxt| {
-                                *syntaxt = Syntax::from_language(syntaxt.language);
-                            });
-                            doc.trigger_syntax_change(None);
-                        }
+                    for (_, doc) in window.workspace.main_split.docs.get_untracked()
+                    {
+                        doc.syntax.update(|syntaxt| {
+                            *syntaxt = Syntax::from_language(syntaxt.language);
+                        });
+                        doc.trigger_syntax_change(None);
                     }
                 }
             }

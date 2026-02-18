@@ -639,7 +639,7 @@ impl WorkspaceData {
             // ==== Files / Folders ====
             OpenFolder => {
                 let window_command = self.common.window_common.window_command;
-                let mut options = FileDialogOptions::new().title("Choose a folder").select_directories();
+                let mut options = FileDialogOptions::new().title("Open Workspace").select_directories();
                 options = if let Some(parent) = self.workspace.path.as_ref().and_then(|x| x.parent()) {
                     options.force_starting_directory(parent)
                 } else {
@@ -769,11 +769,10 @@ impl WorkspaceData {
 
             // ==== Window ====
             ReloadWindow => {
-                self.common.window_common.window_command.send(
-                    WindowCommand::SetWorkspace {
-                        workspace: (*self.workspace).clone(),
-                    },
-                );
+                self.common
+                    .window_common
+                    .window_command
+                    .send(WindowCommand::ReloadWindow);
             }
             NewWindow => {
                 self.common
@@ -2025,6 +2024,7 @@ impl WorkspaceData {
             paths.iter().partition(|p| p.is_dir);
 
         for folder in folders {
+            // Each folder opens in a new window
             self.common.window_common.window_command.send(
                 WindowCommand::SetWorkspace {
                     workspace: LapceWorkspace {
