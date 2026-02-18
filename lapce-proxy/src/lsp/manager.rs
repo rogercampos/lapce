@@ -1,4 +1,6 @@
-use std::{borrow::Cow, collections::HashMap, path::PathBuf, process::Command};
+use std::{
+    borrow::Cow, collections::HashMap, path::PathBuf, process::Command, sync::Arc,
+};
 
 use lapce_core::directory::Directory;
 use lapce_rpc::{
@@ -23,12 +25,20 @@ pub struct LspServerConfig {
     pub languages: &'static [&'static str],
     /// JSON string for LSP initializationOptions, parsed at server startup.
     pub init_options_json: Option<&'static str>,
-    /// If set, the server is an npm package that will be auto-installed
-    /// into Lapce's managed `lsp-servers/` directory on first use.
-    /// The `command` field should then be just the binary name (e.g.
-    /// "bash-language-server"), which will be resolved to
-    /// `<lsp-servers-dir>/<npm_package>/node_modules/.bin/<command>`.
-    pub npm_package: Option<&'static str>,
+    /// How to auto-install this server if the command is not found.
+    pub auto_install: AutoInstall,
+}
+
+/// Strategy for auto-installing an LSP server when its binary is not found.
+pub enum AutoInstall {
+    /// No auto-install. The user must install the server manually.
+    None,
+    /// Install via `npm install --prefix <lapce-lsp-dir>/<package> <package>`.
+    /// The binary is resolved from `node_modules/.bin/<command>`.
+    Npm { package: &'static str },
+    /// Install via `gem install <gem>` using the project-specific shell
+    /// environment (preserving Ruby version manager context).
+    Gem { gem: &'static str },
 }
 
 /// Built-in LSP server registry. Adding a new language server = adding one entry here.
@@ -41,7 +51,7 @@ pub const LSP_SERVERS: &[LspServerConfig] = &[
         init_options_json: Some(
             r#"{"enabledFeatures":{"semanticHighlighting":false}}"#,
         ),
-        npm_package: None,
+        auto_install: AutoInstall::Gem { gem: "ruby-lsp" },
     },
     LspServerConfig {
         display_name: "bash-language-server",
@@ -49,7 +59,9 @@ pub const LSP_SERVERS: &[LspServerConfig] = &[
         args: &["start"],
         languages: &["shellscript"],
         init_options_json: None,
-        npm_package: Some("bash-language-server"),
+        auto_install: AutoInstall::Npm {
+            package: "bash-language-server",
+        },
     },
 ];
 
@@ -136,30 +148,6 @@ impl LspManager {
                 continue;
             }
 
-            // Resolve the actual command to execute. For npm-based servers,
-            // auto-install to the managed directory if needed.
-            let resolved_command = match config.npm_package {
-                Some(package) => match self.resolve_npm_server(config, package) {
-                    Ok(path) => path,
-                    Err(err) => {
-                        tracing::error!(
-                            "Failed to set up npm LSP server {}: {:?}",
-                            config.display_name,
-                            err,
-                        );
-                        self.lsp_rpc.show_message(
-                            format!("LSP: {}", config.display_name),
-                            ShowMessageParams {
-                                typ: MessageType::WARNING,
-                                message: format!("{err}"),
-                            },
-                        );
-                        break;
-                    }
-                },
-                None => config.command.to_string(),
-            };
-
             // Use project-specific shell env
             let env = self
                 .lsp_rpc
@@ -172,9 +160,37 @@ impl LspManager {
                 Some(project_root.clone())
             };
 
+            // Resolve the command. For npm-based servers, resolve from the
+            // managed directory (installing if needed). For others, use the
+            // command as-is.
+            let resolved_command = match &config.auto_install {
+                AutoInstall::Npm { package } => {
+                    match self.resolve_npm_server(config, package) {
+                        Ok(path) => path,
+                        Err(err) => {
+                            tracing::error!(
+                                "Failed to set up npm LSP server {}: {:?}",
+                                config.display_name,
+                                err,
+                            );
+                            self.lsp_rpc.show_message(
+                                format!("LSP: {}", config.display_name),
+                                ShowMessageParams {
+                                    typ: MessageType::WARNING,
+                                    message: format!("{err}"),
+                                },
+                            );
+                            break;
+                        }
+                    }
+                }
+                _ => config.command.to_string(),
+            };
+
+            // First attempt to start the server.
             match LspClient::start(
                 self.lsp_rpc.clone(),
-                server_workspace,
+                server_workspace.clone(),
                 config.display_name,
                 &resolved_command,
                 config.args,
@@ -182,31 +198,49 @@ impl LspManager {
                 config
                     .init_options_json
                     .and_then(|s| serde_json::from_str(s).ok()),
-                env,
+                env.clone(),
             ) {
                 Ok(client) => {
-                    let plugin_id = client.plugin_id;
-                    self.activated_configs.push(activation_key);
-
-                    // Register (language, project_root) → server mapping
-                    for lang in config.languages {
-                        self.language_project_to_server.insert(
-                            (lang.to_string(), project_root.clone()),
-                            plugin_id,
-                        );
+                    self.register_server(
+                        client,
+                        activation_key,
+                        config,
+                        project_root,
+                    );
+                }
+                Err(first_err) => {
+                    // For gem-based servers, try auto-installing then retry.
+                    if let AutoInstall::Gem { gem } = &config.auto_install {
+                        if self.try_gem_install(config, gem, &env).is_ok() {
+                            // Retry after install
+                            if let Ok(client) = LspClient::start(
+                                self.lsp_rpc.clone(),
+                                server_workspace,
+                                config.display_name,
+                                &resolved_command,
+                                config.args,
+                                config.languages,
+                                config
+                                    .init_options_json
+                                    .and_then(|s| serde_json::from_str(s).ok()),
+                                env,
+                            ) {
+                                self.register_server(
+                                    client,
+                                    activation_key,
+                                    config,
+                                    project_root,
+                                );
+                                break;
+                            }
+                        }
                     }
 
-                    self.servers.insert(plugin_id, client);
-
-                    // Replay open files that belong to this project root
-                    self.replay_open_files(plugin_id, project_root);
-                }
-                Err(err) => {
                     tracing::error!(
                         "Failed to start LSP server {} for project {:?}: {:?}",
                         config.display_name,
                         project_root,
-                        err
+                        first_err,
                     );
                     self.lsp_rpc.show_message(
                         format!("LSP: {}", config.display_name),
@@ -222,6 +256,67 @@ impl LspManager {
             }
             break;
         }
+    }
+
+    /// Register a successfully started LSP client.
+    fn register_server(
+        &mut self,
+        client: LspClient,
+        activation_key: (usize, PathBuf),
+        config: &LspServerConfig,
+        project_root: &PathBuf,
+    ) {
+        let plugin_id = client.plugin_id;
+        self.activated_configs.push(activation_key);
+
+        for lang in config.languages {
+            self.language_project_to_server
+                .insert((lang.to_string(), project_root.clone()), plugin_id);
+        }
+
+        self.servers.insert(plugin_id, client);
+        self.replay_open_files(plugin_id, project_root);
+    }
+
+    /// Try to install a gem using the given environment. Returns Ok(()) on
+    /// success, Err with a message on failure.
+    fn try_gem_install(
+        &self,
+        config: &LspServerConfig,
+        gem: &str,
+        env: &Arc<HashMap<String, String>>,
+    ) -> Result<(), String> {
+        let gem_cmd = find_command_in_env("gem", env).ok_or_else(|| {
+            format!(
+                "Could not install {}: 'gem' was not found on your PATH.",
+                config.display_name,
+            )
+        })?;
+
+        tracing::info!("Installing gem {} for {}", gem, config.display_name);
+
+        let output = Command::new(&gem_cmd)
+            .args(["install", gem])
+            .envs(env.as_ref())
+            .output()
+            .map_err(|e| format!("Failed to run gem install {}: {}", gem, e))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let msg = format!("gem install {} failed: {}", gem, stderr.trim());
+            tracing::error!("{}", msg);
+            self.lsp_rpc.show_message(
+                format!("LSP: {}", config.display_name),
+                ShowMessageParams {
+                    typ: MessageType::WARNING,
+                    message: msg.clone(),
+                },
+            );
+            return Err(msg);
+        }
+
+        tracing::info!("Successfully installed gem {}", gem);
+        Ok(())
     }
 
     /// Resolve an npm-based LSP server binary, auto-installing if necessary.
