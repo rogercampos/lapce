@@ -1,4 +1,9 @@
-use std::{path::Path, rc::Rc, sync::Arc};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+    rc::Rc,
+    sync::Arc,
+};
 
 use floem::{
     View,
@@ -15,7 +20,10 @@ use floem::{
     },
 };
 use lapce_core::selection::Selection;
-use lapce_rpc::file::{FileNodeViewData, FileNodeViewKind, Naming};
+use lapce_rpc::{
+    core::GitFileStatus,
+    file::{FileNodeViewData, FileNodeViewKind, Naming},
+};
 use lapce_xi_rope::Rope;
 
 use super::{data::FileExplorerData, node::FileNodeVirtualList};
@@ -67,6 +75,7 @@ pub fn file_explorer_panel(
 ) -> impl View {
     let config = workspace_data.common.config;
     let data = workspace_data.file_explorer.clone();
+    let git_file_statuses = workspace_data.git_file_statuses;
 
     let file_explorer_header = {
         let wtd = workspace_data.clone();
@@ -105,7 +114,8 @@ pub fn file_explorer_panel(
         )
         .add_with_header(
             file_explorer_header,
-            container(file_explorer_view(data)).style(|s| s.size_full()),
+            container(file_explorer_view(data, git_file_statuses))
+                .style(|s| s.size_full()),
             workspace_data
                 .panel
                 .section_open(PanelSection::FileExplorer),
@@ -150,11 +160,29 @@ fn initialize_naming_editor(
         .update(|naming| naming.set_editor_needs_reset(false));
 }
 
-fn file_node_text_color(config: ReadSignal<Arc<LapceConfig>>) -> Color {
-    config.get().color(LapceColor::PANEL_FOREGROUND)
+fn file_node_text_color(
+    config: ReadSignal<Arc<LapceConfig>>,
+    git_file_statuses: RwSignal<HashMap<PathBuf, GitFileStatus>>,
+    path: &Path,
+    is_dir: bool,
+) -> Color {
+    if is_dir {
+        return config.get().color(LapceColor::PANEL_FOREGROUND);
+    }
+    let has_git_status =
+        git_file_statuses.with(|statuses| statuses.contains_key(path));
+    if has_git_status {
+        config.get().color(LapceColor::SOURCE_CONTROL_MODIFIED)
+    } else {
+        config.get().color(LapceColor::PANEL_FOREGROUND)
+    }
 }
 
-fn file_node_text_view(data: FileExplorerData, node: FileNodeViewData) -> impl View {
+fn file_node_text_view(
+    data: FileExplorerData,
+    node: FileNodeViewData,
+    git_file_statuses: RwSignal<HashMap<PathBuf, GitFileStatus>>,
+) -> impl View {
     let config = data.common.config;
     let ui_line_height = data.common.ui_line_height;
 
@@ -162,6 +190,7 @@ fn file_node_text_view(data: FileExplorerData, node: FileNodeViewData) -> impl V
         FileNodeViewKind::Path(path) => {
             if node.is_root {
                 let file = path.clone();
+                let path_for_display = path.clone();
                 container((
                     label(move || {
                         file.file_name()
@@ -170,14 +199,19 @@ fn file_node_text_view(data: FileExplorerData, node: FileNodeViewData) -> impl V
                     })
                     .style(move |s| {
                         s.height(ui_line_height.get())
-                            .color(file_node_text_color(config))
+                            .color(file_node_text_color(
+                                config,
+                                git_file_statuses,
+                                &path,
+                                true,
+                            ))
                             .font_bold()
                             .font_size(config.get().ui.font_size() as f32 + 1.0)
                             .padding_right(5.0)
                             .selectable(false)
                     }),
-                    label(move || crate::path::display_path(&path)).style(
-                        move |s| {
+                    label(move || crate::path::display_path(&path_for_display))
+                        .style(move |s| {
                             s.height(ui_line_height.get())
                                 .color(
                                     config
@@ -186,10 +220,11 @@ fn file_node_text_view(data: FileExplorerData, node: FileNodeViewData) -> impl V
                                 )
                                 .font_size(config.get().ui.font_size() as f32 - 1.0)
                                 .selectable(false)
-                        },
-                    ),
+                        }),
                 ))
             } else {
+                let is_dir = node.is_dir;
+                let path_for_color = path.clone();
                 container(
                     label(move || {
                         path.file_name()
@@ -198,7 +233,12 @@ fn file_node_text_view(data: FileExplorerData, node: FileNodeViewData) -> impl V
                     })
                     .style(move |s| {
                         s.height(ui_line_height.get())
-                            .color(file_node_text_color(config))
+                            .color(file_node_text_color(
+                                config,
+                                git_file_statuses,
+                                &path_for_color,
+                                is_dir,
+                            ))
                             .font_size(config.get().ui.font_size() as f32 + 1.0)
                             .selectable(false)
                     }),
@@ -303,7 +343,10 @@ fn file_node_input_view(data: FileExplorerData, err: Option<String>) -> Containe
 /// pre-computed children_open_count for O(1) total_len(). Each node renders
 /// differently based on its kind: Path (normal file/dir), Renaming, Naming
 /// (new file), or Duplicating.
-fn file_explorer_view(data: FileExplorerData) -> impl View {
+fn file_explorer_view(
+    data: FileExplorerData,
+    git_file_statuses: RwSignal<HashMap<PathBuf, GitFileStatus>>,
+) -> impl View {
     let root = data.root;
     let ui_line_height = data.common.ui_line_height;
     let config = data.common.config;
@@ -396,7 +439,7 @@ fn file_explorer_view(data: FileExplorerData) -> impl View {
                                 })
                         })
                     },
-                    file_node_text_view(data, node),
+                    file_node_text_view(data, node, git_file_statuses),
                 ))
                 .style({
                     let kind = kind.clone();

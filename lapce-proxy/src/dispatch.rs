@@ -19,7 +19,7 @@ use indexmap::IndexMap;
 use lapce_rpc::{
     RequestId, RpcError,
     buffer::BufferId,
-    core::{CoreNotification, CoreRpcHandler, FileChanged},
+    core::{CoreNotification, CoreRpcHandler, FileChanged, GitFileStatus},
     file::FileNodeItem,
     file_line::FileLine,
     proxy::{
@@ -77,6 +77,9 @@ impl ProxyHandler for Dispatcher {
                 if let Some(workspace) = self.workspace.as_ref() {
                     let branch = read_git_branch(workspace);
                     self.core_rpc.git_head_changed(branch);
+
+                    let statuses = read_git_file_statuses(workspace);
+                    self.core_rpc.git_file_status_changed(statuses);
                 }
 
                 let env =
@@ -1030,24 +1033,21 @@ impl FileWatchNotifier {
             _ => return,
         };
 
+        // Debounce: accumulate events for 500ms, then fire once.
+        // The bool tracks whether we need to reload the file explorer tree
+        // (creates/deletes/renames). Git status is always recomputed since
+        // any file modification can change it.
         let mut handler = self.workspace_fs_change_handler.lock();
         if let Some(sender) = handler.as_mut() {
-            if explorer_change {
-                if let Err(err) = sender.send(explorer_change) {
-                    tracing::error!("{:?}", err);
-                }
-            }
+            let _ = sender.send(explorer_change);
             return;
         }
         let (sender, receiver) = crossbeam_channel::unbounded();
-        if explorer_change {
-            if let Err(err) = sender.send(explorer_change) {
-                tracing::error!("{:?}", err);
-            }
-        }
+        let _ = sender.send(explorer_change);
 
         let local_handler = self.workspace_fs_change_handler.clone();
         let core_rpc = self.core_rpc.clone();
+        let workspace = self.workspace.clone();
         thread::spawn(move || {
             thread::sleep(Duration::from_millis(500));
 
@@ -1065,6 +1065,10 @@ impl FileWatchNotifier {
             if explorer_change {
                 core_rpc.workspace_file_change();
             }
+            if let Some(workspace) = workspace.as_ref() {
+                let statuses = read_git_file_statuses(workspace);
+                core_rpc.git_file_status_changed(statuses);
+            }
         });
         *handler = Some(sender);
     }
@@ -1081,6 +1085,54 @@ fn read_git_branch(workspace: &std::path::Path) -> Option<String> {
     } else {
         None
     }
+}
+
+fn read_git_file_statuses(
+    workspace: &std::path::Path,
+) -> HashMap<PathBuf, GitFileStatus> {
+    let mut result = HashMap::new();
+    let Ok(repo) = git2::Repository::open(workspace) else {
+        return result;
+    };
+    let mut opts = git2::StatusOptions::new();
+    opts.include_untracked(true);
+    opts.recurse_untracked_dirs(true);
+    let Ok(statuses) = repo.statuses(Some(&mut opts)) else {
+        return result;
+    };
+    for entry in statuses.iter() {
+        let status = entry.status();
+        let git_status = if status
+            .intersects(git2::Status::INDEX_RENAMED | git2::Status::WT_RENAMED)
+        {
+            GitFileStatus::Renamed
+        } else if status.intersects(git2::Status::INDEX_NEW | git2::Status::WT_NEW) {
+            if status.intersects(git2::Status::WT_NEW)
+                && !status.intersects(git2::Status::INDEX_NEW)
+            {
+                GitFileStatus::Untracked
+            } else {
+                GitFileStatus::Added
+            }
+        } else if status
+            .intersects(git2::Status::INDEX_DELETED | git2::Status::WT_DELETED)
+        {
+            GitFileStatus::Deleted
+        } else if status.intersects(
+            git2::Status::INDEX_MODIFIED
+                | git2::Status::WT_MODIFIED
+                | git2::Status::INDEX_TYPECHANGE
+                | git2::Status::WT_TYPECHANGE,
+        ) {
+            GitFileStatus::Modified
+        } else {
+            continue;
+        };
+        if let Some(path_str) = entry.path() {
+            result.insert(workspace.join(path_str), git_status);
+        }
+    }
+    result
 }
 
 fn search_in_path(

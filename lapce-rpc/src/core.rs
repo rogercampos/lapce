@@ -26,6 +26,15 @@ pub enum CoreRpc {
     Shutdown,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum GitFileStatus {
+    Modified,
+    Added,
+    Deleted,
+    Renamed,
+    Untracked,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FileChanged {
@@ -62,6 +71,9 @@ pub enum CoreNotification {
     WorkspaceFileChange,
     GitHeadChanged {
         head: Option<String>,
+    },
+    GitFileStatusChanged {
+        statuses: HashMap<PathBuf, GitFileStatus>,
     },
     PublishDiagnostics {
         diagnostics: PublishDiagnosticsParams,
@@ -195,6 +207,13 @@ impl CoreRpcHandler {
 
     pub fn git_head_changed(&self, head: Option<String>) {
         self.notification(CoreNotification::GitHeadChanged { head });
+    }
+
+    pub fn git_file_status_changed(
+        &self,
+        statuses: HashMap<PathBuf, GitFileStatus>,
+    ) {
+        self.notification(CoreNotification::GitFileStatusChanged { statuses });
     }
 
     pub fn open_file_changed(&self, path: PathBuf, content: FileChanged) {

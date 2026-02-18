@@ -169,7 +169,7 @@ dim-text = "#A0A1A7"
 
 "source_control.added" = "#50A14FCC"
 "source_control.removed" = "#FF5266CC"
-"source_control.modified" = "#0184BCCC"
+"source_control.modified" = "#4A90B8"
 
 "tooltip.background" = "$primary-background"
 "tooltip.foreground" = "$text"

@@ -135,6 +135,8 @@ impl LapceColor {
     pub const PANEL_HOVERED_FOREGROUND_DIM: &'static str =
         "panel.hovered.foreground.dim";
 
+    pub const SOURCE_CONTROL_MODIFIED: &'static str = "source_control.modified";
+
     pub const STATUS_BACKGROUND: &'static str = "status.background";
     pub const STATUS_FOREGROUND: &'static str = "status.foreground";
     pub const MARKDOWN_BLOCKQUOTE: &'static str = "markdown.blockquote";
