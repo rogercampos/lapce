@@ -1731,6 +1731,32 @@ impl DocStyling {
                 }
             }
         }
+
+        // Link hover text color (Cmd+hover definition)
+        if let Some(e_data) = self.doc.editor_data(edid) {
+            if let Some((link_start, link_end)) =
+                e_data.link_hover_range.get_untracked()
+            {
+                let (start_offset, end_offset) =
+                    self.doc.buffer.with_untracked(|buffer| {
+                        (
+                            buffer.offset_of_line(line),
+                            buffer.offset_of_line(line + 1),
+                        )
+                    });
+                if link_start < end_offset && link_end > start_offset {
+                    let link_color = config.color(LapceColor::EDITOR_LINK);
+                    let start_col = link_start.saturating_sub(start_offset);
+                    let end_col = link_end.saturating_sub(start_offset);
+                    let start_col = phantom_text.col_after(start_col, true);
+                    let end_col = phantom_text.col_after(end_col, false);
+                    attrs_list.add_span(
+                        start_col..end_col,
+                        attrs.clone().color(link_color),
+                    );
+                }
+            }
+        }
     }
 }
 impl Styling for DocStyling {
@@ -1945,6 +1971,30 @@ impl Styling for DocStyling {
                 under_line: None,
                 wave_line: None,
             });
+        }
+
+        // Link hover styling (Cmd+hover definition underline)
+        if let Some(e_data) = doc.editor_data(edid) {
+            if let Some((link_start, link_end)) =
+                e_data.link_hover_range.get_untracked()
+            {
+                if link_start < end_offset && link_end > start_offset {
+                    let link_color = config.color(LapceColor::EDITOR_LINK);
+                    let start_col = link_start.saturating_sub(start_offset);
+                    let end_col = link_end.saturating_sub(start_offset);
+                    let start_col = phantom_text.col_after(start_col, true);
+                    let end_col = phantom_text.col_after(end_col, false);
+                    let styles = extra_styles_for_range(
+                        layout,
+                        start_col,
+                        end_col,
+                        None,
+                        Some(link_color),
+                        None,
+                    );
+                    layout_line.extra_style.extend(styles);
+                }
+            }
         }
     }
 

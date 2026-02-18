@@ -778,6 +778,7 @@ fn workspace_view(workspace_data: Rc<WorkspaceData>) -> impl View {
             lsp_views::completion(workspace_data.clone()),
             lsp_views::hover(workspace_data.clone()),
             lsp_views::code_action(workspace_data.clone()),
+            lsp_views::definition_picker(workspace_data.clone()),
             lsp_views::rename(workspace_data.clone()),
             go_to_file::go_to_file_popup(workspace_data.clone()),
             crate::search_modal::search_modal_popup(workspace_data.clone()),

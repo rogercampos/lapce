@@ -454,6 +454,100 @@ pub(super) fn code_action(workspace_data: Rc<WorkspaceData>) -> impl View {
     .debug_name("Code Action Layer")
 }
 
+pub(super) fn definition_picker(workspace_data: Rc<WorkspaceData>) -> impl View {
+    let config = workspace_data.common.config;
+    let definition_picker = workspace_data.definition_picker;
+    let (status, active) =
+        definition_picker.with_untracked(|picker| (picker.status, picker.active));
+    scroll(
+        container(
+            dyn_stack(
+                move || {
+                    definition_picker
+                        .with(|picker| picker.items.clone().into_iter().enumerate())
+                },
+                move |(i, _item)| *i,
+                move |(i, item)| {
+                    let path = item.display_path.clone();
+                    let line = item.line_number;
+                    let item_path = std::path::PathBuf::from(&item.display_path);
+                    container(
+                        stack((
+                            crate::file_icon::file_icon_svg(config, move || {
+                                item_path.clone()
+                            }),
+                            text(format!("{path}:{line}")),
+                        ))
+                        .style(|s| s.items_center()),
+                    )
+                    .on_click_stop(move |_| {
+                        let picker = definition_picker.get_untracked();
+                        picker.active.set(i);
+                        picker.select();
+                    })
+                    .on_event_stop(EventListener::PointerDown, |_| {})
+                    .style(move |s| {
+                        let config = config.get();
+                        s.padding_horiz(10.0)
+                            .align_items(Some(AlignItems::Center))
+                            .line_height(LapceLayout::UI_LINE_HEIGHT as f32)
+                            .border_radius(LapceLayout::BORDER_RADIUS)
+                            .cursor(CursorStyle::Pointer)
+                            .apply_if(active.get() == i, |s| {
+                                s.background(
+                                    config.color(LapceColor::COMPLETION_CURRENT),
+                                )
+                            })
+                            .hover(move |s| {
+                                s.background(
+                                    config
+                                        .color(LapceColor::PANEL_HOVERED_BACKGROUND),
+                                )
+                            })
+                    })
+                },
+            )
+            .style(|s| s.flex_col()),
+        )
+        .style(|s| s.padding_vert(4.0)),
+    )
+    .ensure_visible(move || {
+        let config = config.get();
+        let active = active.get();
+        Size::new(1.0, config.editor.line_height() as f64)
+            .to_rect()
+            .with_origin(Point::new(
+                0.0,
+                active as f64 * config.editor.line_height() as f64,
+            ))
+    })
+    .on_resize(move |rect| {
+        definition_picker.update(|p| {
+            p.layout_rect = rect;
+        });
+    })
+    .on_event_stop(EventListener::PointerMove, |_| {})
+    .style(move |s| {
+        let origin = workspace_data.definition_picker_origin();
+        s.display(match status.get() {
+            crate::definition_picker::DefinitionPickerStatus::Inactive => {
+                Display::None
+            }
+            crate::definition_picker::DefinitionPickerStatus::Active => {
+                Display::Flex
+            }
+        })
+        .position(Position::Absolute)
+        .min_width(400.0)
+        .max_height(300.0)
+        .margin_left(origin.x as f32)
+        .margin_top(origin.y as f32)
+        .background(config.get().color(LapceColor::COMPLETION_BACKGROUND))
+        .border_radius(LapceLayout::BORDER_RADIUS)
+    })
+    .debug_name("Definition Picker Layer")
+}
+
 pub(super) fn rename(workspace_data: Rc<WorkspaceData>) -> impl View {
     let editor = workspace_data.rename.editor.clone();
     let active = workspace_data.rename.active;

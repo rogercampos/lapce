@@ -55,6 +55,7 @@ use crate::{
     completion::{CompletionData, CompletionStatus},
     config::{LapceConfig, layout::LapceLayout},
     db::LapceDb,
+    definition_picker::{DefinitionPickerData, DefinitionPickerStatus},
     doc::DocContent,
     editor::location::{EditorLocation, EditorPosition},
     file_explorer::data::FileExplorerData,
@@ -102,6 +103,7 @@ pub enum Focus {
     GoToFile,
     GoToLine,
     GoToSymbol,
+    DefinitionPicker,
     Panel(PanelKind),
 }
 
@@ -162,6 +164,7 @@ pub struct WorkspaceData {
     pub file_explorer: FileExplorerData,
     pub panel: PanelData,
     pub code_action: RwSignal<CodeActionData>,
+    pub definition_picker: RwSignal<DefinitionPickerData>,
     pub code_lens: RwSignal<Option<ViewId>>,
     pub rename: RenameData,
     pub global_search: GlobalSearchData,
@@ -353,6 +356,8 @@ impl WorkspaceData {
         let main_split = MainSplitData::new(cx, common.clone());
         let code_action =
             cx.create_rw_signal(CodeActionData::new(cx, common.clone()));
+        let definition_picker =
+            cx.create_rw_signal(DefinitionPickerData::new(cx, common.clone()));
         let file_explorer =
             FileExplorerData::new(cx, main_split.editors, common.clone());
 
@@ -478,6 +483,7 @@ impl WorkspaceData {
             panel,
             file_explorer,
             code_action,
+            definition_picker,
             code_lens: cx.create_rw_signal(None),
             rename,
             global_search,
@@ -1309,6 +1315,15 @@ impl WorkspaceData {
                 code_action.show(plugin_id, code_actions, offset, mouse_click);
                 self.code_action.set(code_action);
             }
+            InternalCommand::ShowDefinitionPicker {
+                offset,
+                locations,
+                language,
+            } => {
+                let mut picker = self.definition_picker.get_untracked();
+                picker.show(locations, offset, language);
+                self.definition_picker.set(picker);
+            }
             InternalCommand::RunCodeAction { plugin_id, action } => {
                 self.main_split.run_code_action(plugin_id, action);
             }
@@ -1561,6 +1576,10 @@ impl WorkspaceData {
             Focus::GoToSymbol => {
                 Some(keypress.key_down(event, &self.go_to_symbol_data))
             }
+            Focus::DefinitionPicker => {
+                let picker = self.definition_picker.get_untracked();
+                Some(keypress.key_down(event, &picker))
+            }
             Focus::Panel(PanelKind::Search) => {
                 if let Some(active_search) = self.search_tabs.active_search() {
                     Some(keypress.key_down(event, &active_search))
@@ -1750,6 +1769,55 @@ impl WorkspaceData {
         }
         if origin.x + code_action_size.width + 1.0 > tab_size.width {
             origin.x = tab_size.width - code_action_size.width - 1.0;
+        }
+        if origin.x <= 0.0 {
+            origin.x = 0.0;
+        }
+
+        origin
+    }
+
+    pub fn definition_picker_origin(&self) -> Point {
+        let definition_picker = self.definition_picker.get();
+        let config = self.common.config.get();
+        if definition_picker.status.get_untracked()
+            == DefinitionPickerStatus::Inactive
+        {
+            return Point::ZERO;
+        }
+
+        let tab_size = self.layout_rect.get().size();
+        let picker_size = definition_picker.layout_rect.size();
+
+        let editor_data =
+            if let Some(editor) = self.main_split.active_editor.get_untracked() {
+                editor
+            } else {
+                return Point::ZERO;
+            };
+
+        let (window_origin, viewport, editor) = (
+            editor_data.window_origin(),
+            editor_data.viewport(),
+            &editor_data.editor,
+        );
+
+        let (_point_above, point_below) = editor
+            .points_of_offset(definition_picker.offset, CursorAffinity::Forward);
+
+        let window_origin =
+            window_origin.get() - self.common.window_origin.get().to_vec2();
+        let viewport = viewport.get();
+
+        let mut origin = window_origin
+            + Vec2::new(point_below.x - viewport.x0, point_below.y - viewport.y0);
+
+        if origin.y + picker_size.height > tab_size.height {
+            origin.y =
+                origin.y - config.editor.line_height() as f64 - picker_size.height;
+        }
+        if origin.x + picker_size.width + 1.0 > tab_size.width {
+            origin.x = tab_size.width - picker_size.width - 1.0;
         }
         if origin.x <= 0.0 {
             origin.x = 0.0;

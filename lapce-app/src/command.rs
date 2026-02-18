@@ -3,12 +3,15 @@ use std::{path::PathBuf, rc::Rc};
 pub use floem::views::editor::command::CommandExecuted;
 use floem::{peniko::kurbo::Vec2, views::editor::command::Command};
 use indexmap::IndexMap;
-use lapce_core::command::{
-    EditCommand, FocusCommand, MotionModeCommand, MoveCommand,
-    MultiSelectionCommand, ScrollCommand,
+use lapce_core::{
+    command::{
+        EditCommand, FocusCommand, MotionModeCommand, MoveCommand,
+        MultiSelectionCommand, ScrollCommand,
+    },
+    language::LapceLanguage,
 };
 use lapce_rpc::plugin::PluginId;
-use lsp_types::{CodeActionOrCommand, Position, WorkspaceEdit};
+use lsp_types::{CodeActionOrCommand, Location, Position, WorkspaceEdit};
 use serde_json::Value;
 use strum::{EnumMessage, IntoEnumIterator};
 use strum_macros::{Display, EnumIter, EnumString, IntoStaticStr};
@@ -423,6 +426,11 @@ pub enum InternalCommand {
         mouse_click: bool,
         plugin_id: PluginId,
         code_actions: im::Vector<CodeActionOrCommand>,
+    },
+    ShowDefinitionPicker {
+        offset: usize,
+        locations: Vec<Location>,
+        language: LapceLanguage,
     },
     RunCodeAction {
         plugin_id: PluginId,

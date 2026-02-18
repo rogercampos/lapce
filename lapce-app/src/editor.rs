@@ -1,4 +1,10 @@
-use std::{collections::HashMap, rc::Rc, str::FromStr, sync::Arc, time::Duration};
+use std::{
+    collections::{HashMap, HashSet},
+    rc::Rc,
+    str::FromStr,
+    sync::Arc,
+    time::Duration,
+};
 
 use floem::{
     action::{TimerToken, exec_after, show_context_menu},
@@ -25,12 +31,13 @@ use floem::{
 use itertools::Itertools;
 use lapce_core::{
     buffer::{
-        InvalLines,
+        Buffer, InvalLines,
         rope_text::{RopeText, RopeTextVal},
     },
     command::{EditCommand, FocusCommand, ScrollCommand},
     cursor::{Cursor, CursorMode},
     editor::EditType,
+    language::LapceLanguage,
     rope_text_pos::RopeTextPosition,
     selection::{InsertDrift, SelRegion, Selection},
 };
@@ -208,6 +215,9 @@ pub struct EditorData {
     pub kind: RwSignal<EditorViewKind>,
     pub sticky_header_height: RwSignal<f64>,
     pub mouse_hover_timer: RwSignal<TimerToken>,
+    /// Range (start_offset, end_offset) of the symbol with a confirmed definition link.
+    /// Set when Cmd is held and the LSP confirms a definition exists.
+    pub link_hover_range: RwSignal<Option<(usize, usize)>>,
     pub common: Rc<CommonData>,
     pub sticky_header_info: RwSignal<StickyHeaderInfo>,
 }
@@ -255,6 +265,7 @@ impl EditorData {
             kind: cx.create_rw_signal(EditorViewKind::Normal),
             sticky_header_height: cx.create_rw_signal(0.0),
             mouse_hover_timer: cx.create_rw_signal(TimerToken::INVALID),
+            link_hover_range: cx.create_rw_signal(None),
             common,
             sticky_header_info: cx.create_rw_signal(StickyHeaderInfo::default()),
         }
@@ -896,9 +907,13 @@ impl EditorData {
             None => return,
         };
 
+        let language = doc.syntax.with_untracked(|s| s.language);
         let offset = self.cursor().with_untracked(|c| c.offset());
         let (start_position, position) = doc.buffer.with_untracked(|buffer| {
-            let start_offset = buffer.prev_code_boundary(offset);
+            let mut start_offset = buffer.prev_code_boundary(offset);
+            if language == LapceLanguage::Ruby {
+                start_offset = ruby_word_start(buffer, start_offset);
+            }
             let start_position = buffer.offset_to_position(start_offset);
             let position = buffer.offset_to_position(offset);
             (start_position, position)
@@ -923,18 +938,11 @@ impl EditorData {
                         .send(InternalCommand::JumpToLocation { location });
                 }
                 DefinitionOrReferece::Locations(locations) => {
-                    if let Some(l) = locations.into_iter().next() {
-                        internal_command.send(InternalCommand::JumpToLocation {
-                            location: EditorLocation {
-                                path: path_from_url(&l.uri),
-                                position: Some(EditorPosition::Position(
-                                    l.range.start,
-                                )),
-                                scroll_offset: None,
-                                same_editor_tab: false,
-                            },
-                        });
-                    }
+                    internal_command.send(InternalCommand::ShowDefinitionPicker {
+                        offset,
+                        locations,
+                        language,
+                    });
                 }
             }
         });
@@ -948,74 +956,96 @@ impl EditorData {
                     definition, ..
                 }) = result
                 {
-                    if let Some(location) = match definition {
-                        GotoDefinitionResponse::Scalar(location) => Some(location),
-                        GotoDefinitionResponse::Array(locations) => {
-                            if !locations.is_empty() {
-                                Some(locations[0].clone())
-                            } else {
-                                None
-                            }
-                        }
-                        GotoDefinitionResponse::Link(location_links) => {
-                            let location_link = location_links[0].clone();
-                            Some(Location {
-                                uri: location_link.target_uri,
-                                range: location_link.target_selection_range,
+                    let mut all_locations: Vec<Location> = match definition {
+                        GotoDefinitionResponse::Scalar(loc) => vec![loc],
+                        GotoDefinitionResponse::Array(locs) => locs,
+                        GotoDefinitionResponse::Link(links) => links
+                            .into_iter()
+                            .map(|link| Location {
+                                uri: link.target_uri,
+                                range: link.target_selection_range,
                             })
-                        }
-                    } {
-                        if location.range.start == start_position {
-                            proxy.get_references(
-                                path.clone(),
-                                position,
-                                move |result| {
-                                    if let Ok(
-                                        ProxyResponse::GetReferencesResponse {
-                                            references,
-                                        },
-                                    ) = result
+                            .collect(),
+                    };
+                    {
+                        let mut seen = HashSet::new();
+                        all_locations.retain(|l| {
+                            seen.insert((l.uri.clone(), l.range.start.line))
+                        });
+                    }
+                    if language == LapceLanguage::Ruby {
+                        ruby_filter_type_files(&mut all_locations);
+                        dedup_ruby_stdlib_gems(&mut all_locations);
+                    }
+
+                    if all_locations.is_empty() {
+                        return;
+                    }
+
+                    // If single result at same position, fall back to references
+                    if all_locations.len() == 1
+                        && all_locations[0].range.start == start_position
+                    {
+                        proxy.get_references(
+                            path.clone(),
+                            position,
+                            move |result| {
+                                if let Ok(ProxyResponse::GetReferencesResponse {
+                                    mut references,
+                                }) = result
+                                {
                                     {
-                                        if references.is_empty() {
-                                            return;
-                                        }
-                                        if references.len() == 1 {
-                                            let location = &references[0];
-                                            send(DefinitionOrReferece::Location(
-                                                EditorLocation {
-                                                    path: path_from_url(
-                                                        &location.uri,
-                                                    ),
-                                                    position: Some(
-                                                        EditorPosition::Position(
-                                                            location.range.start,
-                                                        ),
-                                                    ),
-                                                    scroll_offset: None,
-
-                                                    same_editor_tab: false,
-                                                },
-                                            ));
-                                        } else {
-                                            send(DefinitionOrReferece::Locations(
-                                                references,
-                                            ));
-                                        }
+                                        let mut seen = HashSet::new();
+                                        references.retain(|l| {
+                                            seen.insert((
+                                                l.uri.clone(),
+                                                l.range.start.line,
+                                            ))
+                                        });
                                     }
-                                },
-                            );
-                        } else {
-                            let path = path_from_url(&location.uri);
-                            send(DefinitionOrReferece::Location(EditorLocation {
-                                path,
-                                position: Some(EditorPosition::Position(
-                                    location.range.start,
-                                )),
-                                scroll_offset: None,
-
-                                same_editor_tab: false,
-                            }));
-                        }
+                                    if language == LapceLanguage::Ruby {
+                                        ruby_filter_type_files(&mut references);
+                                        dedup_ruby_stdlib_gems(&mut references);
+                                    }
+                                    if references.is_empty() {
+                                        return;
+                                    }
+                                    if references.len() == 1 {
+                                        let location = &references[0];
+                                        send(DefinitionOrReferece::Location(
+                                            EditorLocation {
+                                                path: path_from_url(&location.uri),
+                                                position: Some(
+                                                    EditorPosition::Position(
+                                                        location.range.start,
+                                                    ),
+                                                ),
+                                                scroll_offset: None,
+                                                same_editor_tab: false,
+                                            },
+                                        ));
+                                    } else {
+                                        send(DefinitionOrReferece::Locations(
+                                            references,
+                                        ));
+                                    }
+                                }
+                            },
+                        );
+                    } else if all_locations.len() == 1 {
+                        // Single result at different position — jump directly
+                        let loc = &all_locations[0];
+                        send(DefinitionOrReferece::Location(EditorLocation {
+                            path: path_from_url(&loc.uri),
+                            position: Some(EditorPosition::Position(
+                                loc.range.start,
+                            )),
+                            scroll_offset: None,
+                            same_editor_tab: false,
+                        }));
+                    } else {
+                        // Multiple results — show picker
+                        send(DefinitionOrReferece::Locations(all_locations));
                     }
                 }
             },
@@ -2436,6 +2466,77 @@ impl EditorData {
                 self.mouse_hover_timer.set(TimerToken::INVALID);
             }
         }
+
+        // Cmd+hover definition link styling
+        let is_cmd = (cfg!(target_os = "macos") && pointer_event.modifiers.meta())
+            || (cfg!(not(target_os = "macos")) && pointer_event.modifiers.control());
+
+        if is_cmd && is_inside {
+            if let Some(path) = self.doc().loaded_file_path() {
+                let doc = self.doc();
+                let language = doc.syntax.with_untracked(|s| s.language);
+                let (start_offset, end_offset) =
+                    doc.buffer.with_untracked(|buffer| {
+                        let mut start = buffer.prev_code_boundary(offset);
+                        if language == LapceLanguage::Ruby {
+                            start = ruby_word_start(buffer, start);
+                        }
+                        (start, buffer.next_code_boundary(offset))
+                    });
+
+                if start_offset < end_offset
+                    && self.link_hover_range.get_untracked()
+                        != Some((start_offset, end_offset))
+                {
+                    self.link_hover_range.set(None);
+                    doc.clear_text_cache();
+
+                    let link_hover_range = self.link_hover_range;
+                    let cache_rev = doc.cache_rev;
+                    let send = create_ext_action(
+                        self.scope,
+                        move |has_definition: bool| {
+                            if has_definition {
+                                link_hover_range
+                                    .set(Some((start_offset, end_offset)));
+                                cache_rev.try_update(|r| *r += 1);
+                            }
+                        },
+                    );
+
+                    let position =
+                        doc.buffer.with_untracked(|b| b.offset_to_position(offset));
+                    self.common.proxy.get_definition(
+                        start_offset,
+                        path,
+                        position,
+                        move |result| {
+                            if let Ok(ProxyResponse::GetDefinitionResponse {
+                                definition,
+                                ..
+                            }) = result
+                            {
+                                let has_def = match definition {
+                                    GotoDefinitionResponse::Scalar(loc) => {
+                                        !is_ruby_type_file(&loc.uri)
+                                    }
+                                    GotoDefinitionResponse::Array(locs) => locs
+                                        .iter()
+                                        .any(|l| !is_ruby_type_file(&l.uri)),
+                                    GotoDefinitionResponse::Link(links) => links
+                                        .iter()
+                                        .any(|l| !is_ruby_type_file(&l.target_uri)),
+                                };
+                                send(has_def);
+                            }
+                        },
+                    );
+                }
+            }
+        } else if self.link_hover_range.get_untracked().is_some() {
+            self.link_hover_range.set(None);
+            self.doc().clear_text_cache();
+        }
     }
 
     #[instrument]
@@ -2446,6 +2547,10 @@ impl EditorData {
     #[instrument]
     pub fn pointer_leave(&self) {
         self.mouse_hover_timer.set(TimerToken::INVALID);
+        if self.link_hover_range.get_untracked().is_some() {
+            self.link_hover_range.set(None);
+            self.doc().clear_text_cache();
+        }
     }
 
     #[instrument]
@@ -3018,4 +3123,104 @@ fn find_hint(mut pre_hint_len: u32, index: u32, hint: &InlayHint) -> FindHintRs 
             NoMatchContinue { pre_hint_len }
         }
     }
+}
+
+/// Removes Ruby stdlib locations when an equivalent gem version of the same file exists.
+///
+/// In modern Ruby (3.0+), many stdlib libraries were extracted into "default gems".
+/// Both the legacy stdlib copy (e.g., `.../lib/ruby/3.4.0/uri/common.rb`) and the
+/// gem copy (e.g., `.../gems/uri-1.1.1/lib/uri/common.rb`) coexist on disk, but only
+/// the gem version is loaded at runtime. LSP servers like ruby-lsp find both, so we
+/// Extend a word-start offset backward to include Ruby sigils (`@`, `@@`, `$`).
+///
+/// `prev_code_boundary` treats `@` as a non-word character, so for `@text` it
+/// returns the offset of `t`. This function checks the preceding character(s) and
+/// adjusts the offset to include the sigil, so the LSP receives the full symbol.
+fn ruby_word_start(buffer: &Buffer, word_start: usize) -> usize {
+    if word_start == 0 {
+        return word_start;
+    }
+    let prev = buffer.slice_to_cow(word_start - 1..word_start);
+    if prev == "@" {
+        if word_start >= 2
+            && buffer.slice_to_cow(word_start - 2..word_start - 1) == "@"
+        {
+            word_start - 2 // @@class_var
+        } else {
+            word_start - 1 // @instance_var
+        }
+    } else if prev == "$" {
+        word_start - 1 // $global_var
+    } else {
+        word_start
+    }
+}
+
+/// Returns true if the URI points to a Ruby type definition file (.rbs or .rbi).
+fn is_ruby_type_file(uri: &lsp_types::Url) -> bool {
+    let path = uri.path();
+    path.ends_with(".rbs") || path.ends_with(".rbi")
+}
+
+/// Remove locations pointing to Ruby type definition files (.rbs, .rbi).
+fn ruby_filter_type_files(locations: &mut Vec<Location>) {
+    locations.retain(|l| !is_ruby_type_file(&l.uri));
+}
+
+/// drop the stdlib duplicate.
+///
+/// Detection: a stdlib path contains `/lib/ruby/<ver>/<relpath>` without `/gems/`.
+/// A gem path contains `/gems/<name>/lib/<relpath>`. If `<relpath>` matches, the
+/// stdlib entry is redundant.
+fn dedup_ruby_stdlib_gems(locations: &mut Vec<Location>) {
+    if locations.len() < 2 {
+        return;
+    }
+
+    // Collect relative paths from gem locations: /gems/<gem-name-ver>/lib/<relpath>
+    let gem_rel_paths: HashSet<String> = locations
+        .iter()
+        .filter_map(|l| {
+            let path = l.uri.path();
+            // Find the last /gems/<gem-name-ver>/lib/ and extract the relative path
+            let mut search_from = 0;
+            let mut result = None;
+            while let Some(idx) = path[search_from..].find("/gems/") {
+                let abs_idx = search_from + idx;
+                let after = &path[abs_idx + "/gems/".len()..];
+                if let Some(slash) = after.find('/') {
+                    let rest = &after[slash + 1..];
+                    if let Some(rel) = rest.strip_prefix("lib/") {
+                        if !rel.is_empty() {
+                            result = Some(rel.to_string());
+                        }
+                    }
+                }
+                search_from = abs_idx + 1;
+            }
+            result
+        })
+        .collect();
+
+    if gem_rel_paths.is_empty() {
+        return;
+    }
+
+    // Remove stdlib locations whose relative path matches a gem entry.
+    // Stdlib pattern: /lib/ruby/<ver>/<relpath> where the segment is NOT "gems/"
+    locations.retain(|l| {
+        let path = l.uri.path();
+        if let Some(idx) = path.find("/lib/ruby/") {
+            let after = &path[idx + "/lib/ruby/".len()..];
+            if !after.starts_with("gems/") {
+                if let Some(slash) = after.find('/') {
+                    let rel_path = &after[slash + 1..];
+                    if !rel_path.is_empty() && gem_rel_paths.contains(rel_path) {
+                        return false; // Drop this stdlib duplicate
+                    }
+                }
+            }
+        }
+        true
+    });
 }
