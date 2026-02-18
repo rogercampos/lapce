@@ -1139,6 +1139,8 @@ fn read_git_file_statuses(
     let mut opts = git2::StatusOptions::new();
     opts.include_untracked(true);
     opts.recurse_untracked_dirs(true);
+    opts.include_ignored(true);
+    opts.recurse_ignored_dirs(true);
     let Ok(statuses) = repo.statuses(Some(&mut opts)) else {
         return result;
     };
@@ -1169,6 +1171,8 @@ fn read_git_file_statuses(
                 | git2::Status::WT_TYPECHANGE,
         ) {
             GitFileStatus::Modified
+        } else if status.intersects(git2::Status::IGNORED) {
+            GitFileStatus::Ignored
         } else {
             continue;
         };

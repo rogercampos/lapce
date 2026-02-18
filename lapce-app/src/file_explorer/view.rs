@@ -185,6 +185,9 @@ fn file_node_text_color(
         Some(GitFileStatus::Conflicted) => {
             cfg.color(LapceColor::SOURCE_CONTROL_CONFLICTED)
         }
+        Some(GitFileStatus::Ignored) => {
+            cfg.color(LapceColor::SOURCE_CONTROL_IGNORED)
+        }
         None => cfg.color(LapceColor::PANEL_FOREGROUND),
     }
 }

@@ -140,6 +140,7 @@ impl LapceColor {
     pub const SOURCE_CONTROL_REMOVED: &'static str = "source_control.removed";
     pub const SOURCE_CONTROL_CONFLICTED: &'static str = "source_control.conflicted";
     pub const SOURCE_CONTROL_UNTRACKED: &'static str = "source_control.untracked";
+    pub const SOURCE_CONTROL_IGNORED: &'static str = "source_control.ignored";
 
     pub const STATUS_BACKGROUND: &'static str = "status.background";
     pub const STATUS_FOREGROUND: &'static str = "status.foreground";

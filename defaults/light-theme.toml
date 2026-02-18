@@ -172,6 +172,7 @@ dim-text = "#A0A1A7"
 "source_control.modified" = "#4A90B8"
 "source_control.conflicted" = "#E45649"
 "source_control.untracked" = "#A0A1A7"
+"source_control.ignored" = "#C18401"
 
 "tooltip.background" = "$primary-background"
 "tooltip.foreground" = "$text"

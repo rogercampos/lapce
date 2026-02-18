@@ -34,6 +34,7 @@ pub enum GitFileStatus {
     Renamed,
     Untracked,
     Conflicted,
+    Ignored,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
