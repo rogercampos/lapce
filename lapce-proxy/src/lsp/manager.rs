@@ -1,12 +1,13 @@
-use std::{borrow::Cow, collections::HashMap, path::PathBuf};
+use std::{borrow::Cow, collections::HashMap, path::PathBuf, process::Command};
 
+use lapce_core::directory::Directory;
 use lapce_rpc::{
     RpcError, plugin::PluginId, proxy::ProxyResponse, style::LineStyle,
 };
 use lapce_xi_rope::{Rope, RopeDelta};
 use lsp_types::{
-    DidOpenTextDocumentParams, SemanticTokens, TextDocumentIdentifier,
-    TextDocumentItem, VersionedTextDocumentIdentifier,
+    DidOpenTextDocumentParams, MessageType, SemanticTokens, ShowMessageParams,
+    TextDocumentIdentifier, TextDocumentItem, VersionedTextDocumentIdentifier,
     notification::{DidOpenTextDocument, Notification},
 };
 use serde_json::Value;
@@ -15,20 +16,42 @@ use super::{ClonableCallback, LspRpcHandler, RpcCallback, client::LspClient};
 
 /// Describes one built-in LSP server.
 pub struct LspServerConfig {
+    /// Human-readable name shown in error messages.
+    pub display_name: &'static str,
     pub command: &'static str,
     pub args: &'static [&'static str],
     pub languages: &'static [&'static str],
     /// JSON string for LSP initializationOptions, parsed at server startup.
     pub init_options_json: Option<&'static str>,
+    /// If set, the server is an npm package that will be auto-installed
+    /// into Lapce's managed `lsp-servers/` directory on first use.
+    /// The `command` field should then be just the binary name (e.g.
+    /// "bash-language-server"), which will be resolved to
+    /// `<lsp-servers-dir>/<npm_package>/node_modules/.bin/<command>`.
+    pub npm_package: Option<&'static str>,
 }
 
 /// Built-in LSP server registry. Adding a new language server = adding one entry here.
-pub const LSP_SERVERS: &[LspServerConfig] = &[LspServerConfig {
-    command: "ruby-lsp",
-    args: &[],
-    languages: &["ruby"],
-    init_options_json: Some(r#"{"enabledFeatures":{"semanticHighlighting":false}}"#),
-}];
+pub const LSP_SERVERS: &[LspServerConfig] = &[
+    LspServerConfig {
+        display_name: "ruby-lsp",
+        command: "ruby-lsp",
+        args: &[],
+        languages: &["ruby"],
+        init_options_json: Some(
+            r#"{"enabledFeatures":{"semanticHighlighting":false}}"#,
+        ),
+        npm_package: None,
+    },
+    LspServerConfig {
+        display_name: "bash-language-server",
+        command: "bash-language-server",
+        args: &["start"],
+        languages: &["shellscript"],
+        init_options_json: None,
+        npm_package: Some("bash-language-server"),
+    },
+];
 
 /// Find the LSP server command configured for a given language, if any.
 pub fn lsp_command_for_language(language_id: &str) -> Option<&'static str> {
@@ -113,6 +136,30 @@ impl LspManager {
                 continue;
             }
 
+            // Resolve the actual command to execute. For npm-based servers,
+            // auto-install to the managed directory if needed.
+            let resolved_command = match config.npm_package {
+                Some(package) => match self.resolve_npm_server(config, package) {
+                    Ok(path) => path,
+                    Err(err) => {
+                        tracing::error!(
+                            "Failed to set up npm LSP server {}: {:?}",
+                            config.display_name,
+                            err,
+                        );
+                        self.lsp_rpc.show_message(
+                            format!("LSP: {}", config.display_name),
+                            ShowMessageParams {
+                                typ: MessageType::WARNING,
+                                message: format!("{err}"),
+                            },
+                        );
+                        break;
+                    }
+                },
+                None => config.command.to_string(),
+            };
+
             // Use project-specific shell env
             let env = self
                 .lsp_rpc
@@ -128,8 +175,8 @@ impl LspManager {
             match LspClient::start(
                 self.lsp_rpc.clone(),
                 server_workspace,
-                config.command,
-                config.command,
+                config.display_name,
+                &resolved_command,
                 config.args,
                 config.languages,
                 config
@@ -157,13 +204,94 @@ impl LspManager {
                 Err(err) => {
                     tracing::error!(
                         "Failed to start LSP server {} for project {:?}: {:?}",
-                        config.command,
+                        config.display_name,
                         project_root,
                         err
+                    );
+                    self.lsp_rpc.show_message(
+                        format!("LSP: {}", config.display_name),
+                        ShowMessageParams {
+                            typ: MessageType::WARNING,
+                            message: format!(
+                                "Could not start {}. Is '{}' installed and on your PATH?",
+                                config.display_name, config.command,
+                            ),
+                        },
                     );
                 }
             }
             break;
+        }
+    }
+
+    /// Resolve an npm-based LSP server binary, auto-installing if necessary.
+    /// Returns the absolute path to the binary inside the managed directory.
+    fn resolve_npm_server(
+        &self,
+        config: &LspServerConfig,
+        package: &str,
+    ) -> Result<String, String> {
+        let servers_dir = Directory::lsp_servers_directory()
+            .ok_or("Could not determine Lapce data directory")?;
+        let prefix_dir = servers_dir.join(package);
+        let bin_path = prefix_dir
+            .join("node_modules")
+            .join(".bin")
+            .join(config.command);
+
+        if bin_path.exists() {
+            return Ok(bin_path.to_string_lossy().into_owned());
+        }
+
+        // Need to install. Find npm/node via the shell env.
+        let env = self.lsp_rpc.shell_env_for_project(None);
+        let npm_cmd = find_command_in_env("npm", &env).ok_or_else(|| {
+            format!(
+                "Could not start {}: 'npm' was not found on your PATH. \
+                     Install Node.js to enable {} support.",
+                config.display_name, config.display_name,
+            )
+        })?;
+
+        tracing::info!("Installing {} via npm into {:?}", package, prefix_dir,);
+
+        self.lsp_rpc.show_message(
+            format!("LSP: {}", config.display_name),
+            ShowMessageParams {
+                typ: MessageType::INFO,
+                message: format!(
+                    "Installing {}... This is a one-time setup.",
+                    config.display_name,
+                ),
+            },
+        );
+
+        let output = Command::new(&npm_cmd)
+            .args(["install", "--prefix"])
+            .arg(&prefix_dir)
+            .arg(package)
+            .envs(env.as_ref())
+            .output()
+            .map_err(|e| {
+                format!("Failed to run npm install for {}: {}", package, e)
+            })?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!(
+                "npm install {} failed: {}",
+                package,
+                stderr.trim(),
+            ));
+        }
+
+        if bin_path.exists() {
+            Ok(bin_path.to_string_lossy().into_owned())
+        } else {
+            Err(format!(
+                "npm install {} succeeded but binary '{}' was not found at {:?}",
+                package, config.command, bin_path,
+            ))
         }
     }
 
@@ -403,4 +531,16 @@ impl LspManager {
             server.shutdown_process();
         }
     }
+}
+
+/// Search for an executable in the PATH from the given environment map.
+fn find_command_in_env(cmd: &str, env: &HashMap<String, String>) -> Option<String> {
+    let path_var = env.get("PATH")?;
+    for dir in std::env::split_paths(path_var) {
+        let candidate = dir.join(cmd);
+        if candidate.is_file() {
+            return Some(candidate.to_string_lossy().into_owned());
+        }
+    }
+    None
 }

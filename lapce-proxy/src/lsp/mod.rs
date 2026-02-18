@@ -169,6 +169,15 @@ impl LspRpcHandler {
         self.project_shell_envs = Arc::new(project_envs);
     }
 
+    /// Show a user-visible message in the UI.
+    pub fn show_message(
+        &self,
+        title: String,
+        message: lsp_types::ShowMessageParams,
+    ) {
+        self.core_rpc.show_message(title, message);
+    }
+
     /// Get the shell environment for a specific project root, falling back to
     /// the default workspace-root environment.
     pub fn shell_env_for_project(

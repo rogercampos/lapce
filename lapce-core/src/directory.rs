@@ -193,4 +193,19 @@ impl Directory {
             None
         }
     }
+
+    /// Directory for auto-installed LSP servers managed by Lapce.
+    pub fn lsp_servers_directory() -> Option<PathBuf> {
+        if let Some(dir) = Self::data_local_directory() {
+            let dir = dir.join("lsp-servers");
+            if !dir.exists() {
+                if let Err(err) = std::fs::create_dir(&dir) {
+                    tracing::error!("{:?}", err);
+                }
+            }
+            Some(dir)
+        } else {
+            None
+        }
+    }
 }
