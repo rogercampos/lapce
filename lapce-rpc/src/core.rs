@@ -33,6 +33,29 @@ pub enum GitFileStatus {
     Deleted,
     Renamed,
     Untracked,
+    Conflicted,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum GitRepoState {
+    #[default]
+    Normal,
+    Rebasing,
+    Merging,
+    CherryPicking,
+    Reverting,
+}
+
+impl GitRepoState {
+    pub fn label(&self) -> Option<&'static str> {
+        match self {
+            GitRepoState::Normal => None,
+            GitRepoState::Rebasing => Some("Rebasing"),
+            GitRepoState::Merging => Some("Merging"),
+            GitRepoState::CherryPicking => Some("Cherry-Picking"),
+            GitRepoState::Reverting => Some("Reverting"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -71,6 +94,7 @@ pub enum CoreNotification {
     WorkspaceFileChange,
     GitHeadChanged {
         head: Option<String>,
+        repo_state: GitRepoState,
     },
     GitFileStatusChanged {
         statuses: HashMap<PathBuf, GitFileStatus>,
@@ -205,8 +229,8 @@ impl CoreRpcHandler {
         self.notification(CoreNotification::WorkspaceFileChange);
     }
 
-    pub fn git_head_changed(&self, head: Option<String>) {
-        self.notification(CoreNotification::GitHeadChanged { head });
+    pub fn git_head_changed(&self, head: Option<String>, repo_state: GitRepoState) {
+        self.notification(CoreNotification::GitHeadChanged { head, repo_state });
     }
 
     pub fn git_file_status_changed(

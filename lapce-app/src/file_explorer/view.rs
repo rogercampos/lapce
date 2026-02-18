@@ -169,12 +169,23 @@ fn file_node_text_color(
     if is_dir {
         return config.get().color(LapceColor::PANEL_FOREGROUND);
     }
-    let has_git_status =
-        git_file_statuses.with(|statuses| statuses.contains_key(path));
-    if has_git_status {
-        config.get().color(LapceColor::SOURCE_CONTROL_MODIFIED)
-    } else {
-        config.get().color(LapceColor::PANEL_FOREGROUND)
+    let status = git_file_statuses.with(|statuses| statuses.get(path).cloned());
+    let cfg = config.get();
+    match status {
+        Some(GitFileStatus::Modified | GitFileStatus::Renamed) => {
+            cfg.color(LapceColor::SOURCE_CONTROL_MODIFIED)
+        }
+        Some(GitFileStatus::Added) => cfg.color(LapceColor::SOURCE_CONTROL_ADDED),
+        Some(GitFileStatus::Deleted) => {
+            cfg.color(LapceColor::SOURCE_CONTROL_REMOVED)
+        }
+        Some(GitFileStatus::Untracked) => {
+            cfg.color(LapceColor::SOURCE_CONTROL_UNTRACKED)
+        }
+        Some(GitFileStatus::Conflicted) => {
+            cfg.color(LapceColor::SOURCE_CONTROL_CONFLICTED)
+        }
+        None => cfg.color(LapceColor::PANEL_FOREGROUND),
     }
 }
 

@@ -19,7 +19,9 @@ use indexmap::IndexMap;
 use lapce_rpc::{
     RequestId, RpcError,
     buffer::BufferId,
-    core::{CoreNotification, CoreRpcHandler, FileChanged, GitFileStatus},
+    core::{
+        CoreNotification, CoreRpcHandler, FileChanged, GitFileStatus, GitRepoState,
+    },
     file::FileNodeItem,
     file_line::FileLine,
     proxy::{
@@ -76,7 +78,8 @@ impl ProxyHandler for Dispatcher {
 
                 if let Some(workspace) = self.workspace.as_ref() {
                     let branch = read_git_branch(workspace);
-                    self.core_rpc.git_head_changed(branch);
+                    let repo_state = read_git_repo_state(workspace);
+                    self.core_rpc.git_head_changed(branch, repo_state);
 
                     let statuses = read_git_file_statuses(workspace);
                     self.core_rpc.git_file_status_changed(statuses);
@@ -1020,8 +1023,31 @@ impl FileWatchNotifier {
                 let git_head = workspace.join(".git/HEAD");
                 if event.paths.iter().any(|p| p == &git_head) {
                     let branch = read_git_branch(workspace);
-                    self.core_rpc.git_head_changed(branch);
+                    let repo_state = read_git_repo_state(workspace);
+                    self.core_rpc.git_head_changed(branch, repo_state);
                 }
+            }
+        }
+
+        // Detect repo state sentinel file changes (rebase, merge, cherry-pick, revert).
+        // These fire immediately (not debounced) since it's just checking file existence.
+        if let Some(workspace) = self.workspace.as_ref() {
+            let git_dir = workspace.join(".git");
+            let sentinel_files = [
+                git_dir.join("rebase-merge"),
+                git_dir.join("rebase-apply"),
+                git_dir.join("MERGE_HEAD"),
+                git_dir.join("CHERRY_PICK_HEAD"),
+                git_dir.join("REVERT_HEAD"),
+            ];
+            let is_sentinel = event
+                .paths
+                .iter()
+                .any(|p| sentinel_files.iter().any(|s| p == s || p.starts_with(s)));
+            if is_sentinel {
+                let branch = read_git_branch(workspace);
+                let repo_state = read_git_repo_state(workspace);
+                self.core_rpc.git_head_changed(branch, repo_state);
             }
         }
 
@@ -1087,6 +1113,22 @@ fn read_git_branch(workspace: &std::path::Path) -> Option<String> {
     }
 }
 
+fn read_git_repo_state(workspace: &std::path::Path) -> GitRepoState {
+    let git_dir = workspace.join(".git");
+    if git_dir.join("rebase-merge").exists() || git_dir.join("rebase-apply").exists()
+    {
+        GitRepoState::Rebasing
+    } else if git_dir.join("MERGE_HEAD").exists() {
+        GitRepoState::Merging
+    } else if git_dir.join("CHERRY_PICK_HEAD").exists() {
+        GitRepoState::CherryPicking
+    } else if git_dir.join("REVERT_HEAD").exists() {
+        GitRepoState::Reverting
+    } else {
+        GitRepoState::Normal
+    }
+}
+
 fn read_git_file_statuses(
     workspace: &std::path::Path,
 ) -> HashMap<PathBuf, GitFileStatus> {
@@ -1102,7 +1144,9 @@ fn read_git_file_statuses(
     };
     for entry in statuses.iter() {
         let status = entry.status();
-        let git_status = if status
+        let git_status = if status.intersects(git2::Status::CONFLICTED) {
+            GitFileStatus::Conflicted
+        } else if status
             .intersects(git2::Status::INDEX_RENAMED | git2::Status::WT_RENAMED)
         {
             GitFileStatus::Renamed

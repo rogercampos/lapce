@@ -850,7 +850,14 @@ fn window(window_data: WindowData) -> impl View {
         let entry = workspaces.get(active).or_else(|| workspaces.last());
         let workspace_name = entry.and_then(|(_, ws)| ws.workspace.display());
         let branch = entry.and_then(|(_, ws)| ws.git_branch.get());
-        match (workspace_name, branch) {
+        let repo_state_label = entry
+            .and_then(|(_, ws)| ws.git_repo_state.get().label().map(String::from));
+        let branch_display = match (branch, repo_state_label) {
+            (Some(br), Some(state)) => Some(format!("{br} ({state})")),
+            (Some(br), None) => Some(br),
+            _ => None,
+        };
+        match (workspace_name, branch_display) {
             (Some(ws), Some(br)) => format!("{ws} [{br}] - Lapce"),
             (Some(ws), None) => format!("{ws} - Lapce"),
             _ => "Lapce".to_string(),

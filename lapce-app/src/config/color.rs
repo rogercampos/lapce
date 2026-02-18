@@ -136,6 +136,10 @@ impl LapceColor {
         "panel.hovered.foreground.dim";
 
     pub const SOURCE_CONTROL_MODIFIED: &'static str = "source_control.modified";
+    pub const SOURCE_CONTROL_ADDED: &'static str = "source_control.added";
+    pub const SOURCE_CONTROL_REMOVED: &'static str = "source_control.removed";
+    pub const SOURCE_CONTROL_CONFLICTED: &'static str = "source_control.conflicted";
+    pub const SOURCE_CONTROL_UNTRACKED: &'static str = "source_control.untracked";
 
     pub const STATUS_BACKGROUND: &'static str = "status.background";
     pub const STATUS_FOREGROUND: &'static str = "status.foreground";
