@@ -578,7 +578,8 @@ pub(super) fn editor_tab_content(
                 let projects = workspace_data.projects;
                 let ws_path = workspace_data.workspace.path.clone();
                 let config = common.config;
-                projects_view(projects, ws_path, config).into_any()
+                let starred = workspace_data.file_explorer.starred;
+                projects_view(projects, ws_path, config, starred).into_any()
             }
         };
         child.style(|s| s.size_full())

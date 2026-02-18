@@ -78,6 +78,8 @@ pub struct WorkspaceInfo {
     pub active_search_tab: usize,
     #[serde(default)]
     pub recent_files: Vec<PathBuf>,
+    #[serde(default)]
+    pub starred_folders: Vec<PathBuf>,
 }
 
 #[cfg(test)]

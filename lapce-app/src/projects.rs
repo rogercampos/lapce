@@ -1,4 +1,4 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{collections::HashSet, path::PathBuf, sync::Arc};
 
 use floem::{
     View,
@@ -91,10 +91,19 @@ fn project_card(
     })
 }
 
+/// Returns `true` if the project is considered "starred": either its root
+/// exactly matches a starred folder, or its root is a descendant of one.
+fn is_project_starred(project: &ProjectInfo, starred: &HashSet<PathBuf>) -> bool {
+    starred.iter().any(|starred_path| {
+        project.root == *starred_path || project.root.starts_with(starred_path)
+    })
+}
+
 pub fn projects_view(
     projects: RwSignal<Vec<ProjectInfo>>,
     workspace_path: Option<PathBuf>,
     config: ReadSignal<Arc<LapceConfig>>,
+    starred: RwSignal<HashSet<PathBuf>>,
 ) -> impl View {
     stack((
         // Header
@@ -140,7 +149,20 @@ pub fn projects_view(
                 // scroll sizing issues that plagued the popup approach
                 floem::views::dyn_stack(
                     move || {
-                        projects.get().into_iter().enumerate().collect::<Vec<_>>()
+                        let starred_set = starred.get();
+                        let mut items: Vec<_> =
+                            projects.get().into_iter().enumerate().collect();
+                        items.sort_by(|(_, a), (_, b)| {
+                            let a_starred = is_project_starred(a, &starred_set);
+                            let b_starred = is_project_starred(b, &starred_set);
+                            b_starred.cmp(&a_starred).then_with(|| {
+                                a.root
+                                    .components()
+                                    .count()
+                                    .cmp(&b.root.components().count())
+                            })
+                        });
+                        items
                     },
                     |(i, p)| {
                         format!("{}:{}:{}", i, p.root.display(), p.kind.label())
