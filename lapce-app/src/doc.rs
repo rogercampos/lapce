@@ -86,12 +86,6 @@ pub struct DiagnosticData {
     pub diagnostics_span: RwSignal<Spans<Diagnostic>>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct EditorDiagnostic {
-    pub range: Option<(usize, usize)>,
-    pub diagnostic: Diagnostic,
-}
-
 #[derive(Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct DocHistory {
     pub path: PathBuf,

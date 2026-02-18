@@ -34,8 +34,6 @@ pub fn default_panel_order() -> PanelOrder {
 pub enum PanelSection {
     OpenEditor,
     FileExplorer,
-    Error,
-    Warn,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
