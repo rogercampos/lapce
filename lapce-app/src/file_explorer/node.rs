@@ -1,3 +1,6 @@
+use std::collections::HashSet;
+use std::path::PathBuf;
+
 use floem::views::VirtualVector;
 use lapce_rpc::file::{FileNodeItem, FileNodeViewData, Naming};
 
@@ -8,13 +11,19 @@ use lapce_rpc::file::{FileNodeItem, FileNodeViewData, Naming};
 pub struct FileNodeVirtualList {
     file_node_item: FileNodeItem,
     naming: Naming,
+    starred: HashSet<PathBuf>,
 }
 
 impl FileNodeVirtualList {
-    pub fn new(file_node_item: FileNodeItem, naming: Naming) -> Self {
+    pub fn new(
+        file_node_item: FileNodeItem,
+        naming: Naming,
+        starred: HashSet<PathBuf>,
+    ) -> Self {
         Self {
             file_node_item,
             naming,
+            starred,
         }
     }
 }
@@ -35,7 +44,15 @@ impl VirtualVector<FileNodeViewData> for FileNodeVirtualList {
         let max = range.end;
         let mut view_items = Vec::new();
 
-        root.append_view_slice(&mut view_items, naming, min, max, 0, 1);
+        root.append_view_slice_starred(
+            &mut view_items,
+            naming,
+            min,
+            max,
+            0,
+            1,
+            &self.starred,
+        );
 
         view_items.into_iter()
     }

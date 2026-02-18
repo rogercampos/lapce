@@ -1,6 +1,6 @@
 use std::{
     borrow::Cow,
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     ffi::OsStr,
     path::{Path, PathBuf},
     rc::Rc,
@@ -67,6 +67,9 @@ pub struct FileExplorerData {
     pub scroll_to_line: RwSignal<Option<f64>>,
     /// The currently selected/highlighted item in the tree.
     pub select: RwSignal<Option<FileNodeViewKind>>,
+    /// Set of starred (pinned) first-level folder paths, displayed at the top of the explorer.
+    /// Paths are stored as full absolute paths.
+    pub starred: RwSignal<HashSet<PathBuf>>,
 }
 
 impl KeyPressFocus for FileExplorerData {
@@ -128,7 +131,12 @@ impl KeyPressFocus for FileExplorerData {
 }
 
 impl FileExplorerData {
-    pub fn new(cx: Scope, editors: Editors, common: Rc<CommonData>) -> Self {
+    pub fn new(
+        cx: Scope,
+        editors: Editors,
+        common: Rc<CommonData>,
+        initial_starred: Vec<PathBuf>,
+    ) -> Self {
         let path = common.workspace.path.clone().unwrap_or_default();
         let root = cx.create_rw_signal(FileNodeItem {
             path: path.clone(),
@@ -140,6 +148,8 @@ impl FileExplorerData {
         });
         let naming = cx.create_rw_signal(Naming::None);
         let naming_editor_data = editors.make_local(cx, common.clone());
+        let starred =
+            cx.create_rw_signal(initial_starred.into_iter().collect::<HashSet<_>>());
         let data = Self {
             root,
             naming,
@@ -147,6 +157,7 @@ impl FileExplorerData {
             common,
             scroll_to_line: cx.create_rw_signal(None),
             select: cx.create_rw_signal(None),
+            starred,
         };
         if data.common.workspace.path.is_some() {
             // only fill in the child files if there is open folder
@@ -498,8 +509,10 @@ impl FileExplorerData {
             })
             .unwrap_or(false);
         if done {
-            let (found, line) =
-                self.root.with_untracked(|x| x.find_file_at_line(&path));
+            let starred = self.starred.get_untracked();
+            let (found, line) = self
+                .root
+                .with_untracked(|x| x.find_file_at_line_starred(&path, &starred));
             if found {
                 self.scroll_to_line.set(Some(line));
                 self.select.set(Some(FileNodeViewKind::Path(path)));
@@ -698,5 +711,20 @@ impl FileExplorerData {
                 });
             EventPropagation::Stop
         }
+    }
+
+    /// Toggle the starred state of a first-level folder.
+    pub fn toggle_star(&self, path: &Path) {
+        self.starred.update(|set| {
+            if !set.remove(path) {
+                set.insert(path.to_path_buf());
+            }
+        });
+    }
+
+    /// Returns the current set of starred folder paths.
+    pub fn starred_folders(&self) -> Vec<PathBuf> {
+        self.starred
+            .with_untracked(|set| set.iter().cloned().collect())
     }
 }

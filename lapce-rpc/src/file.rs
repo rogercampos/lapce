@@ -1,6 +1,6 @@
 use std::{
     cmp::{Ord, Ordering, PartialOrd},
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     path::{Path, PathBuf},
 };
 
@@ -331,6 +331,26 @@ impl FileNodeItem {
         children
     }
 
+    /// Collect the children sorted with starred directories first, then unstarred
+    /// directories, then files. Within each group, the standard alphabetical
+    /// ordering (from the `Ord` impl) is preserved.
+    pub fn sorted_children_starred(
+        &self,
+        starred: &HashSet<PathBuf>,
+    ) -> Vec<&FileNodeItem> {
+        let mut children = self.children.values().collect::<Vec<&FileNodeItem>>();
+        children.sort_by(|a, b| {
+            let a_starred = a.is_dir && starred.contains(&a.path);
+            let b_starred = b.is_dir && starred.contains(&b.path);
+            match (a_starred, b_starred) {
+                (true, false) => Ordering::Less,
+                (false, true) => Ordering::Greater,
+                _ => a.cmp(b),
+            }
+        });
+        children
+    }
+
     /// Returns an iterator over the ancestors of `path`, starting with the first descendant of `prefix`.
     ///
     /// # Example:
@@ -463,6 +483,29 @@ impl FileNodeItem {
         current: usize,
         level: usize,
     ) -> usize {
+        self.append_view_slice_starred(
+            view_items,
+            naming,
+            min,
+            max,
+            current,
+            level,
+            &HashSet::new(),
+        )
+    }
+
+    /// Like `append_view_slice` but accepts a starred set for sorting starred
+    /// folders first at the root level.
+    pub fn append_view_slice_starred(
+        &self,
+        view_items: &mut Vec<FileNodeViewData>,
+        naming: &Naming,
+        min: usize,
+        max: usize,
+        current: usize,
+        level: usize,
+        starred: &HashSet<PathBuf>,
+    ) -> usize {
         if current > max {
             return current;
         }
@@ -492,16 +535,32 @@ impl FileNodeItem {
             });
         }
 
-        self.append_children_view_slice(view_items, naming, min, max, current, level)
+        self.append_children_view_slice_starred(
+            view_items, naming, min, max, current, level, starred,
+        )
     }
 
     /// Calculate the row where the file resides
     pub fn find_file_at_line(&self, file_path: &Path) -> (bool, f64) {
+        self.find_file_at_line_starred(file_path, &HashSet::new())
+    }
+
+    /// Like `find_file_at_line` but uses starred-aware sorting at the root level.
+    pub fn find_file_at_line_starred(
+        &self,
+        file_path: &Path,
+        starred: &HashSet<PathBuf>,
+    ) -> (bool, f64) {
         let mut line = 0.0;
         if !self.open {
             return (false, line);
         }
-        for item in self.sorted_children() {
+        let children = if !starred.is_empty() {
+            self.sorted_children_starred(starred)
+        } else {
+            self.sorted_children()
+        };
+        for item in children {
             line += 1.0;
             match (item.is_dir, item.open, item.path == file_path) {
                 (_, _, true) => {
@@ -553,8 +612,31 @@ impl FileNodeItem {
         naming: &Naming,
         min: usize,
         max: usize,
+        i: usize,
+        level: usize,
+    ) -> usize {
+        self.append_children_view_slice_starred(
+            view_items,
+            naming,
+            min,
+            max,
+            i,
+            level,
+            &HashSet::new(),
+        )
+    }
+
+    /// Like `append_children_view_slice` but uses starred-aware sorting at the
+    /// root level (level 1) so that starred folders appear first.
+    pub fn append_children_view_slice_starred(
+        &self,
+        view_items: &mut Vec<FileNodeViewData>,
+        naming: &Naming,
+        min: usize,
+        max: usize,
         mut i: usize,
         level: usize,
+        starred: &HashSet<PathBuf>,
     ) -> usize {
         let mut naming_extra = naming.extra_node(self.is_dir, level, &self.path);
 
@@ -583,7 +665,15 @@ impl FileNodeItem {
 
         let mut after_dirs = false;
 
-        for item in self.sorted_children() {
+        // At the root level (level 1), use starred-aware sorting so that
+        // starred folders appear before unstarred ones.
+        let children = if level == 1 && !starred.is_empty() {
+            self.sorted_children_starred(starred)
+        } else {
+            self.sorted_children()
+        };
+
+        for item in children {
             // If we're naming a file at the root, then wait until we've added the directories
             // before adding the input node
             if naming_extra.is_some()

@@ -47,6 +47,9 @@ name = "Lapce Codicons"
 "file_picker_up" = "arrow-up.svg"
 "locate_file" = "go-to-file.svg"
 
+"star.empty" = "star-empty.svg"
+"star.full" = "star-full.svg"
+
 "image_loading" = "refresh.svg"
 "image_error" = "error.svg"
 

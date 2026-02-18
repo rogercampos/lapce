@@ -87,6 +87,9 @@ impl LapceIcons {
 
     pub const GIT_BRANCH: &'static str = "git.branch";
 
+    pub const STAR_EMPTY: &'static str = "star.empty";
+    pub const STAR_FULL: &'static str = "star.full";
+
     pub const REFERENCES: &'static str = "references";
 
     pub const IMPLEMENTATION: &'static str = "implementation";

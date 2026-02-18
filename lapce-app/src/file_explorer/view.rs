@@ -43,6 +43,66 @@ use crate::{
     workspace_data::{Focus, WorkspaceData},
 };
 
+/// Helper: returns a star icon view for a first-level directory item.
+/// The icon is always visible when the folder is starred, and only visible
+/// on hover when unstarred. Clicking toggles the starred state.
+fn star_icon_view(
+    data: FileExplorerData,
+    path: PathBuf,
+    is_first_level_dir: bool,
+    row_hovered: RwSignal<bool>,
+) -> impl View {
+    let config = data.common.config;
+    let starred = data.starred;
+
+    let path_for_svg = path.clone();
+    let path_for_style = path.clone();
+    let path_for_outer_style = path.clone();
+    let path_for_toggle = path;
+
+    container(
+        svg(move || {
+            let config = config.get();
+            if starred.with(|set| set.contains(&path_for_svg)) {
+                config.ui_svg(LapceIcons::STAR_FULL)
+            } else {
+                config.ui_svg(LapceIcons::STAR_EMPTY)
+            }
+        })
+        .style(move |s| {
+            let config = config.get();
+            let size = config.ui.icon_size() as f32 + 4.0;
+            let is_starred = starred.with(|set| set.contains(&path_for_style));
+            let yellow = Color::from_rgba8(234, 179, 8, 255);
+            s.size(size, size).color(if is_starred {
+                yellow
+            } else {
+                config.color(LapceColor::PANEL_FOREGROUND)
+            })
+        }),
+    )
+    .on_click_stop(move |_| {
+        data.toggle_star(&path_for_toggle);
+    })
+    .on_event_stop(EventListener::PointerDown, |_| {
+        // Prevent the click from propagating to the row's click handler
+        // which would toggle expand/collapse on the directory.
+    })
+    .style(move |s| {
+        let is_starred = starred.with(|set| set.contains(&path_for_outer_style));
+        s.margin_left(4.0)
+            .margin_right(4.0)
+            .cursor(CursorStyle::Pointer)
+            // Hide entirely if not a first-level dir
+            .apply_if(!is_first_level_dir, |s| s.hide())
+            // Show only on hover for unstarred, always show when starred
+            .apply_if(
+                is_first_level_dir && !is_starred && !row_hovered.get(),
+                |s| s.hide(),
+            )
+    })
+}
+
 /// Blends `foreground` with `background`.
 ///
 /// Uses the alpha channel from `foreground` - if `foreground` is opaque, `foreground` will be
@@ -362,6 +422,7 @@ fn file_explorer_view(
     git_file_statuses: RwSignal<HashMap<PathBuf, GitFileStatus>>,
 ) -> impl View {
     let root = data.root;
+    let starred = data.starred;
     let ui_line_height = data.common.ui_line_height;
     let config = data.common.config;
     let naming = data.naming;
@@ -372,7 +433,13 @@ fn file_explorer_view(
 
     scroll(
         virtual_stack(
-            move || FileNodeVirtualList::new(root.get(), data.naming.get()),
+            move || {
+                FileNodeVirtualList::new(
+                    root.get(),
+                    data.naming.get(),
+                    starred.get(),
+                )
+            },
             move |node| (node.kind.clone(), node.is_dir, node.open, node.level),
             move |node| {
                 let level = node.level;
@@ -385,76 +452,104 @@ fn file_explorer_view(
                 let open = node.open;
                 let is_dir = node.is_dir;
 
-                let view = stack((
-                    svg(move || {
-                        let config = config.get();
-                        let svg_str = match open {
-                            true => LapceIcons::ITEM_OPENED,
-                            false => LapceIcons::ITEM_CLOSED,
-                        };
-                        config.ui_svg(svg_str)
-                    })
-                    .style(move |s| {
-                        let config = config.get();
-                        let size = config.ui.icon_size() as f32;
+                let view = {
+                    // level 2 = first-level children of the workspace root (starrable)
+                    let is_first_level_dir = is_dir && level == 2;
+                    let star_path =
+                        kind.path().map(|p| p.to_path_buf()).unwrap_or_default();
+                    let star_data = data.clone();
+                    let row_hovered = create_rw_signal(false);
 
-                        let color = if is_dir {
-                            config.color(LapceColor::LAPCE_ICON_ACTIVE)
-                        } else {
-                            Color::TRANSPARENT
-                        };
-                        s.size(size, size)
-                            .flex_shrink(0.0)
-                            .margin_left(4.0)
-                            .color(color)
-                    }),
-                    {
-                        let kind = kind.clone();
-                        let kind_for_style = kind.clone();
-                        // TODO: use the current naming input as the path for the file svg
+                    stack((
                         svg(move || {
                             let config = config.get();
-                            if is_dir {
-                                let svg_str = match open {
-                                    true => LapceIcons::DIRECTORY_OPENED,
-                                    false => LapceIcons::DIRECTORY_CLOSED,
-                                };
-                                config.ui_svg(svg_str)
-                            } else if let Some(path) = kind.path() {
-                                config.file_svg(path).0
-                            } else {
-                                config.ui_svg(LapceIcons::FILE)
-                            }
+                            let svg_str = match open {
+                                true => LapceIcons::ITEM_OPENED,
+                                false => LapceIcons::ITEM_CLOSED,
+                            };
+                            config.ui_svg(svg_str)
                         })
                         .style(move |s| {
                             let config = config.get();
-                            let base_size = config.ui.icon_size() as f32;
-                            let size = if is_dir {
-                                (base_size * 1.25).round()
-                            } else {
-                                base_size
-                            };
+                            let size = config.ui.icon_size() as f32;
 
+                            let color = if is_dir {
+                                config.color(LapceColor::LAPCE_ICON_ACTIVE)
+                            } else {
+                                Color::TRANSPARENT
+                            };
                             s.size(size, size)
                                 .flex_shrink(0.0)
-                                .margin_horiz(6.0)
-                                .apply_if(is_dir, |s| {
-                                    s.color(
-                                        config.color(LapceColor::LAPCE_ICON_ACTIVE),
-                                    )
-                                })
-                                .apply_if(!is_dir, |s| {
-                                    s.apply_opt(
-                                        kind_for_style
-                                            .path()
-                                            .and_then(|p| config.file_svg(p).1),
-                                        Style::color,
-                                    )
-                                })
-                        })
-                    },
-                    file_node_text_view(data, node, git_file_statuses),
-                ))
+                                .margin_left(4.0)
+                                .color(color)
+                        }),
+                        {
+                            let kind = kind.clone();
+                            let kind_for_style = kind.clone();
+                            // TODO: use the current naming input as the path for the file svg
+                            svg(move || {
+                                let config = config.get();
+                                if is_dir {
+                                    let svg_str = match open {
+                                        true => LapceIcons::DIRECTORY_OPENED,
+                                        false => LapceIcons::DIRECTORY_CLOSED,
+                                    };
+                                    config.ui_svg(svg_str)
+                                } else if let Some(path) = kind.path() {
+                                    config.file_svg(path).0
+                                } else {
+                                    config.ui_svg(LapceIcons::FILE)
+                                }
+                            })
+                            .style(move |s| {
+                                let config = config.get();
+                                let base_size = config.ui.icon_size() as f32;
+                                let size = if is_dir {
+                                    (base_size * 1.25).round()
+                                } else {
+                                    base_size
+                                };
+
+                                s.size(size, size)
+                                    .flex_shrink(0.0)
+                                    .margin_horiz(6.0)
+                                    .apply_if(is_dir, |s| {
+                                        s.color(
+                                            config.color(
+                                                LapceColor::LAPCE_ICON_ACTIVE,
+                                            ),
+                                        )
+                                    })
+                                    .apply_if(!is_dir, |s| {
+                                        s.apply_opt(
+                                            kind_for_style
+                                                .path()
+                                                .and_then(|p| config.file_svg(p).1),
+                                            Style::color,
+                                        )
+                                    })
+                            })
+                        },
+                        file_node_text_view(data, node, git_file_statuses),
+                        // Spacer to push star icon to the right
+                        container(star_icon_view(
+                            star_data,
+                            star_path,
+                            is_first_level_dir,
+                            row_hovered,
+                        ))
+                        .style(|s| s.flex_grow(1.0).justify_end()),
+                    ))
+                    .on_event_cont(EventListener::PointerEnter, move |_| {
+                        row_hovered.set(true);
+                    })
+                    .on_event_cont(
+                        EventListener::PointerLeave,
+                        move |_| {
+                            row_hovered.set(false);
+                        },
+                    )
+                }
                 .style({
                     let kind = kind.clone();
                     move |s| {

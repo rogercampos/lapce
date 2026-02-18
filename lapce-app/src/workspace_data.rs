@@ -372,8 +372,15 @@ impl WorkspaceData {
             cx.create_rw_signal(CodeActionData::new(cx, common.clone()));
         let definition_picker =
             cx.create_rw_signal(DefinitionPickerData::new(cx, common.clone()));
-        let file_explorer =
-            FileExplorerData::new(cx, main_split.editors, common.clone());
+        let file_explorer = FileExplorerData::new(
+            cx,
+            main_split.editors,
+            common.clone(),
+            workspace_info
+                .as_ref()
+                .map(|info| info.starred_folders.clone())
+                .unwrap_or_default(),
+        );
 
         // Restore the split tree from persisted workspace info, or create an empty root.
         // `to_data()` recursively reconstructs the entire split tree, editor tabs,
@@ -1680,6 +1687,7 @@ impl WorkspaceData {
             search_tabs: self.search_tabs.tab_infos(),
             active_search_tab: self.search_tabs.active_tab.get_untracked(),
             recent_files: self.recent_files.get_untracked(),
+            starred_folders: self.file_explorer.starred_folders(),
         }
     }
 
