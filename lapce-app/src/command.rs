@@ -319,7 +319,7 @@ pub enum LapceWorkbenchCommand {
     RecentFiles,
 
     #[strum(serialize = "show_about")]
-    #[strum(message = "About Lapce")]
+    #[strum(message = "About SourceDelve")]
     ShowAbout,
 
     #[strum(serialize = "show_projects")]
@@ -327,12 +327,12 @@ pub enum LapceWorkbenchCommand {
     ShowProjects,
 
     #[cfg(target_os = "macos")]
-    #[strum(message = "Install Lapce to PATH")]
+    #[strum(message = "Install SourceDelve to PATH")]
     #[strum(serialize = "install_to_path")]
     InstallToPATH,
 
     #[cfg(target_os = "macos")]
-    #[strum(message = "Uninstall Lapce from PATH")]
+    #[strum(message = "Uninstall SourceDelve from PATH")]
     #[strum(serialize = "uninstall_from_path")]
     UninstallFromPATH,
 

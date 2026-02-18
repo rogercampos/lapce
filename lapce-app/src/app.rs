@@ -78,12 +78,12 @@ pub use ui_components::{
 };
 
 #[derive(Parser)]
-#[clap(name = "Lapce")]
+#[clap(name = "SourceDelve")]
 #[clap(version=meta::VERSION)]
 #[derive(Debug)]
 struct Cli {
-    /// Launch new window even if Lapce is already running.
-    /// Without this flag, Lapce tries to reuse an already-running instance via local socket.
+    /// Launch new window even if SourceDelve is already running.
+    /// Without this flag, SourceDelve tries to reuse an already-running instance via local socket.
     #[clap(short, long, action)]
     new: bool,
     /// Don't return instantly when opened in a terminal.
@@ -169,7 +169,7 @@ impl AppData {
     fn default_window_config(&self) -> WindowConfig {
         WindowConfig::default()
             .apply_default_theme(false)
-            .title("Lapce")
+            .title("SourceDelve")
     }
 
     pub fn new_window(&self, folder: Option<PathBuf>) {
@@ -847,9 +847,9 @@ fn window(window_data: WindowData) -> impl View {
                 _ => None,
             };
             match (workspace_name, branch_display) {
-                (Some(ws), Some(br)) => format!("{ws} [{br}] - Lapce"),
-                (Some(ws), None) => format!("{ws} - Lapce"),
-                _ => "Lapce".to_string(),
+                (Some(ws), Some(br)) => format!("{ws} [{br}] - SourceDelve"),
+                (Some(ws), None) => format!("{ws} - SourceDelve"),
+                _ => "SourceDelve".to_string(),
             }
         })
         .on_event_stop(EventListener::ImeEnabled, move |_| {
@@ -1018,10 +1018,10 @@ pub fn launch() {
             .args(&args[1..])
             .stderr(stderr)
             .stdout(stdout)
-            .env("LAPCE_LOG", "lapce_app::app=error,off")
+            .env("SOURCEDELVE_LOG", "lapce_app::app=error,off")
             .spawn()
         {
-            eprintln!("Failed to launch lapce: {why}");
+            eprintln!("Failed to launch sourcedelve: {why}");
             std::process::exit(1);
         };
         return;

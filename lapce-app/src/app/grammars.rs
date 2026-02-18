@@ -10,7 +10,7 @@ use lapce_core::directory::Directory;
 use crate::{tracing::*, update::ReleaseInfo};
 
 fn get_github_api(url: &str) -> Result<String> {
-    let user_agent = format!("Lapce/{}", lapce_core::meta::VERSION);
+    let user_agent = format!("SourceDelve/{}", lapce_core::meta::VERSION);
     let resp = lapce_proxy::get_url(url, Some(user_agent.as_str()))?;
     if !resp.status().is_success() {
         return Err(anyhow!("get release info failed {}", resp.text()?));

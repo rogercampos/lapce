@@ -22,8 +22,8 @@ use crate::{
 struct AboutUri {}
 
 impl AboutUri {
-    const LAPCE: &'static str = "https://lapce.dev";
-    const GITHUB: &'static str = "https://github.com/lapce/lapce";
+    const LAPCE: &'static str = "https://sourcedelve.dev";
+    const GITHUB: &'static str = "https://github.com/sourcedelve/sourcedelve";
     const MATRIX: &'static str = "https://matrix.to/#/#lapce-editor:matrix.org";
     const DISCORD: &'static str = "https://discord.gg/n8tGJ6Rn6D";
     const CODICONS: &'static str = "https://github.com/microsoft/vscode-codicons";
@@ -111,7 +111,7 @@ pub fn about_popup(workspace_data: Rc<WorkspaceData>) -> impl View {
                     s.size(logo_size, logo_size)
                         .color(config.get().color(LapceColor::EDITOR_FOREGROUND))
                 }),
-                label(|| "Lapce".to_string()).style(move |s| {
+                label(|| "SourceDelve".to_string()).style(move |s| {
                     s.font_bold()
                         .margin_top(10.0)
                         .color(config.get().color(LapceColor::EDITOR_FOREGROUND))

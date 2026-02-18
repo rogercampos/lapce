@@ -737,7 +737,7 @@ impl WorkspaceData {
                 if let Some(dir) = Directory::logs_directory() {
                     self.open_paths(&[PathObject::from_path(
                         dir.join(format!(
-                            "lapce.{}.log",
+                            "sourcedelve.{}.log",
                             chrono::prelude::Local::now().format("%Y-%m-%d")
                         )),
                         false,
@@ -1034,7 +1034,7 @@ impl WorkspaceData {
                 self.common.internal_command.send(
                     InternalCommand::ExecuteProcess {
                         program: String::from("osascript"),
-                        arguments: vec![String::from("-e"), format!(r#"do shell script "ln -sf '{}' /usr/local/bin/lapce" with administrator privileges"#, std::env::args().next().unwrap())],
+                        arguments: vec![String::from("-e"), format!(r#"do shell script "ln -sf '{}' /usr/local/bin/sourcedelve" with administrator privileges"#, std::env::args().next().unwrap())],
                     }
                 )
             }
@@ -1043,7 +1043,7 @@ impl WorkspaceData {
                 self.common.internal_command.send(
                     InternalCommand::ExecuteProcess {
                         program: String::from("osascript"),
-                        arguments: vec![String::from("-e"), String::from(r#"do shell script "rm /usr/local/bin/lapce" with administrator privileges"#)],
+                        arguments: vec![String::from("-e"), String::from(r#"do shell script "rm /usr/local/bin/sourcedelve" with administrator privileges"#)],
                     }
                 )
             }

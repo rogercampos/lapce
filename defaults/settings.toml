@@ -1,8 +1,8 @@
 #:schema ../extra/schemas/settings.json
 
 [core]
-color-theme = "Lapce Dark"
-icon-theme = "Lapce Codicons"
+color-theme = "SourceDelve Dark"
+icon-theme = "SourceDelve Codicons"
 custom-titlebar = true
 file-explorer-double-click = false
 auto-reload-plugin = false

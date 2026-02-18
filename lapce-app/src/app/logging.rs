@@ -23,7 +23,7 @@ pub(super) fn logging() -> (Handle<Targets>, Option<WorkerGuard>) {
             tracing_appender::rolling::Builder::new()
                 .max_log_files(10)
                 .rotation(tracing_appender::rolling::Rotation::DAILY)
-                .filename_prefix("lapce")
+                .filename_prefix("sourcedelve")
                 .filename_suffix("log")
                 .build(dir)
                 .ok()
@@ -42,7 +42,7 @@ pub(super) fn logging() -> (Handle<Targets>, Option<WorkerGuard>) {
     let (log_file_filter, reload_handle) =
         reload::Subscriber::new(log_file_filter_targets);
 
-    let console_filter_targets = std::env::var("LAPCE_LOG")
+    let console_filter_targets = std::env::var("SOURCEDELVE_LOG")
         .unwrap_or_default()
         .parse::<filter::Targets>()
         .unwrap_or_default();
