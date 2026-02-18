@@ -134,6 +134,7 @@ pub struct EditorTabChildViewInfo {
     pub name: String,
     pub path: Option<PathBuf>,
     pub is_pristine: bool,
+    pub is_external: bool,
 }
 
 impl EditorTabChild {
@@ -172,6 +173,7 @@ impl EditorTabChild {
         &self,
         editors: Editors,
         config: ReadSignal<Arc<LapceConfig>>,
+        workspace_path: Option<PathBuf>,
     ) -> Memo<EditorTabChildViewInfo> {
         match self.clone() {
             EditorTabChild::Editor(editor_id) => create_memo(move |_| {
@@ -191,6 +193,10 @@ impl EditorTabChild {
                     }
                 } else {
                     None
+                };
+                let is_external = match (&path, &workspace_path) {
+                    (Some((p, _)), Some(ws)) => !p.starts_with(ws),
+                    _ => false,
                 };
                 let (icon, color, name, is_pristine) = match path {
                     Some((ref path, is_pristine)) => {
@@ -218,6 +224,7 @@ impl EditorTabChild {
                     name,
                     path: path.map(|opt| opt.0),
                     is_pristine,
+                    is_external,
                 }
             }),
             EditorTabChild::Settings(_) => create_memo(move |_| {
@@ -227,8 +234,8 @@ impl EditorTabChild {
                     color: Some(config.color(LapceColor::LAPCE_ICON_ACTIVE)),
                     name: "Settings".to_string(),
                     path: None,
-
                     is_pristine: true,
+                    is_external: false,
                 }
             }),
             EditorTabChild::Keymap(_) => create_memo(move |_| {
@@ -238,8 +245,8 @@ impl EditorTabChild {
                     color: Some(config.color(LapceColor::LAPCE_ICON_ACTIVE)),
                     name: "Keyboard Shortcuts".to_string(),
                     path: None,
-
                     is_pristine: true,
+                    is_external: false,
                 }
             }),
         }

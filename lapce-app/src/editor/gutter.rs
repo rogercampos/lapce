@@ -1,5 +1,6 @@
 use super::EditorData;
 use crate::config::{LapceConfig, color::LapceColor};
+use crate::doc::DocContent;
 use floem::{
     Renderer, View, ViewId,
     context::PaintCx,
@@ -99,6 +100,36 @@ impl View for EditorGutterView {
         let cursor = self.editor.cursor();
         let screen_lines = self.editor.screen_lines();
         let config = self.editor.common.config;
+
+        let is_external = {
+            let doc = self.editor.doc();
+            let content = doc.content.get_untracked();
+            if let DocContent::File { ref path, .. } = content {
+                self.editor
+                    .common
+                    .workspace
+                    .path
+                    .as_ref()
+                    .map(|ws| !path.starts_with(ws))
+                    .unwrap_or(false)
+            } else {
+                false
+            }
+        };
+
+        if is_external {
+            let bg_rect = Size::new(self.width + 25.0 + 30.0, viewport.height())
+                .to_rect()
+                .with_origin(Point::new(-25.0, 0.0))
+                .inflate(25.0, 0.0);
+            cx.fill(
+                &bg_rect,
+                config
+                    .get_untracked()
+                    .color(LapceColor::EDITOR_EXTERNAL_FILE_BACKGROUND),
+                0.0,
+            );
+        }
 
         let kind_is_normal =
             self.editor.kind.with_untracked(|kind| kind.is_normal());

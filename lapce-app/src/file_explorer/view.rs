@@ -570,7 +570,7 @@ fn open_editors_view(workspace_data: Rc<WorkspaceData>) -> impl View {
         let editor_tab_id =
             editor_tab.with_untracked(|editor_tab| editor_tab.editor_tab_id);
         let child_for_close = child.clone();
-        let info = child.view_info(editors, config);
+        let info = child.view_info(editors, config, None);
         let hovered = create_rw_signal(false);
 
         stack((

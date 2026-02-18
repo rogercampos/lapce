@@ -69,6 +69,7 @@ pub(super) fn editor_tab_header(
     let key = |(_, _, child): &(RwSignal<usize>, RwSignal<Rect>, EditorTabChild)| {
         child.id()
     };
+    let workspace_path = workspace_data.workspace.path.clone();
     let view_fn = move |(i, layout_rect, child): (
         RwSignal<usize>,
         RwSignal<Rect>,
@@ -79,8 +80,8 @@ pub(super) fn editor_tab_header(
         let child_for_mouse_close_2 = child.clone();
         let main_split = main_split.clone();
         let tab_hovered = create_rw_signal(false);
+        let info = child.view_info(editors, config, workspace_path.clone());
         let child_view = {
-            let info = child.view_info(editors, config);
             let hovered = create_rw_signal(false);
 
             use crate::config::ui::TabCloseButton;
@@ -344,6 +345,11 @@ pub(super) fn editor_tab_header(
                         .hover(|s| {
                             s.background(config.color(LapceColor::HOVER_BACKGROUND))
                         })
+                })
+                .apply_if(info.with(|info| info.is_external), |s| {
+                    s.background(
+                        config.color(LapceColor::EDITOR_EXTERNAL_FILE_BACKGROUND),
+                    )
                 })
         })
         .debug_name("Tab and Active Indicator")

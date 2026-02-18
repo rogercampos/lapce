@@ -73,6 +73,8 @@ impl LapceColor {
         "editor.sticky_header_background";
     pub const EDITOR_DRAG_DROP_TAB_BACKGROUND: &'static str =
         "editor.drag_drop_tab_background";
+    pub const EDITOR_EXTERNAL_FILE_BACKGROUND: &'static str =
+        "editor.external_file_background";
 
     pub const EDITOR_FIND_MATCH_BACKGROUND: &'static str =
         "editor.find_match.background";
