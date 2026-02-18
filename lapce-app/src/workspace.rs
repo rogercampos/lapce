@@ -76,6 +76,8 @@ pub struct WorkspaceInfo {
     pub search_tabs: Vec<SearchTabInfo>,
     #[serde(default)]
     pub active_search_tab: usize,
+    #[serde(default)]
+    pub recent_files: Vec<PathBuf>,
 }
 
 #[cfg(test)]

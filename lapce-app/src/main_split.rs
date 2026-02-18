@@ -1761,11 +1761,29 @@ impl MainSplitData {
             editor_tab.children.iter().position(|(_, _, c)| c == &child)
         })?;
 
+        let recent = self.common.recent_files.get_untracked();
+        let editors_handle = self.editors;
         let editor_tab_children_len = editor_tab
             .try_update(|editor_tab| {
                 editor_tab.children.remove(index);
-                editor_tab.active =
-                    index.min(editor_tab.children.len().saturating_sub(1));
+
+                let new_active = recent.iter().find_map(|path| {
+                    editor_tab.children.iter().position(|(_, _, c)| {
+                        if let EditorTabChild::Editor(eid) = c {
+                            editors_handle.editor_untracked(*eid).is_some_and(|ed| {
+                                ed.doc().content.with_untracked(|content| {
+                                    content.path() == Some(path)
+                                })
+                            })
+                        } else {
+                            false
+                        }
+                    })
+                });
+                editor_tab.active = new_active.unwrap_or_else(|| {
+                    index.min(editor_tab.children.len().saturating_sub(1))
+                });
+
                 editor_tab.children.len()
             })
             .unwrap();

@@ -142,6 +142,7 @@ pub struct CommonData {
     // the current focused view which will receive keyboard events
     pub keyboard_focus: RwSignal<Option<ViewId>>,
     pub window_common: Rc<WindowCommonData>,
+    pub recent_files: RwSignal<Vec<PathBuf>>,
 }
 
 impl std::fmt::Debug for CommonData {
@@ -335,6 +336,12 @@ impl WorkspaceData {
             text_layout.size().height
         });
 
+        let persisted_recent_files = workspace_info
+            .as_ref()
+            .map(|info| info.recent_files.clone())
+            .unwrap_or_default();
+        let recent_files = cx.create_rw_signal(persisted_recent_files);
+
         let common = Rc::new(CommonData {
             workspace: workspace.clone(),
             scope: cx,
@@ -355,6 +362,7 @@ impl WorkspaceData {
             window_origin: cx.create_rw_signal(Point::ZERO),
             keyboard_focus: cx.create_rw_signal(None),
             window_common: window_common.clone(),
+            recent_files,
         });
 
         let main_split = MainSplitData::new(cx, common.clone());
@@ -460,7 +468,6 @@ impl WorkspaceData {
             main_split.clone(),
             common.clone(),
         );
-        let recent_files = cx.create_rw_signal(Vec::<PathBuf>::new());
         let recent_files_data = RecentFilesData::new(
             cx,
             main_split.clone(),
@@ -768,6 +775,8 @@ impl WorkspaceData {
                 if let Some(editor_tab_id) =
                     self.main_split.active_editor_tab.get_untracked()
                 {
+                    let editors = self.main_split.editors;
+                    let internal_command = self.common.internal_command;
                     self.main_split.editor_tabs.with_untracked(|editor_tabs| {
                         let Some(editor_tab) = editor_tabs.get(&editor_tab_id)
                         else {
@@ -789,6 +798,13 @@ impl WorkspaceData {
                         if let Some(new_index) = new_index {
                             editor_tab.update(|editor_tab| {
                                 editor_tab.active = new_index;
+                                if let Some(path) =
+                                    editor_tab.active_file_path(editors)
+                                {
+                                    internal_command.send(
+                                        InternalCommand::TrackRecentFile { path },
+                                    );
+                                }
                             });
                         }
                     });
@@ -798,6 +814,8 @@ impl WorkspaceData {
                 if let Some(editor_tab_id) =
                     self.main_split.active_editor_tab.get_untracked()
                 {
+                    let editors = self.main_split.editors;
+                    let internal_command = self.common.internal_command;
                     self.main_split.editor_tabs.with_untracked(|editor_tabs| {
                         let Some(editor_tab) = editor_tabs.get(&editor_tab_id)
                         else {
@@ -817,6 +835,13 @@ impl WorkspaceData {
                         if let Some(new_index) = new_index {
                             editor_tab.update(|editor_tab| {
                                 editor_tab.active = new_index;
+                                if let Some(path) =
+                                    editor_tab.active_file_path(editors)
+                                {
+                                    internal_command.send(
+                                        InternalCommand::TrackRecentFile { path },
+                                    );
+                                }
                             });
                         }
                     });
@@ -1636,6 +1661,7 @@ impl WorkspaceData {
             panel: self.panel.panel_info(),
             search_tabs: self.search_tabs.tab_infos(),
             active_search_tab: self.search_tabs.active_tab.get_untracked(),
+            recent_files: self.recent_files.get_untracked(),
         }
     }
 

@@ -359,6 +359,23 @@ impl EditorTabData {
         None
     }
 
+    pub fn active_file_path(&self, editors: Editors) -> Option<PathBuf> {
+        let (_, _, child) = self.children.get(self.active)?;
+        if let EditorTabChild::Editor(editor_id) = child {
+            editors.editor_untracked(*editor_id).and_then(|editor| {
+                editor.doc().content.with_untracked(|content| {
+                    if let DocContent::File { path, .. } = content {
+                        Some(path.clone())
+                    } else {
+                        None
+                    }
+                })
+            })
+        } else {
+            None
+        }
+    }
+
     pub fn tab_info(&self, data: &WorkspaceData) -> EditorTabInfo {
         EditorTabInfo {
             active: self.active,
