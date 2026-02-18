@@ -1,7 +1,7 @@
 #:schema ../extra/schemas/icon-theme.json
 
 [icon-theme]
-name = "Lapce Codicons"
+name = "SourceDelve Codicons"
 
 [icon-theme.ui]
 "logo" = "lapce_logo.svg"

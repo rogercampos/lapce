@@ -25,12 +25,12 @@ pub fn get_latest_release() -> Result<ReleaseInfo> {
             return Err(anyhow!("no release for debug"));
         }
         meta::ReleaseType::Nightly => {
-            "https://api.github.com/repos/lapce/lapce/releases/tags/nightly"
+            "https://api.github.com/repos/sourcedelve/sourcedelve/releases/tags/nightly"
         }
-        _ => "https://api.github.com/repos/lapce/lapce/releases/latest",
+        _ => "https://api.github.com/repos/sourcedelve/sourcedelve/releases/latest",
     };
 
-    let resp = lapce_proxy::get_url(url, Some("Lapce"))?;
+    let resp = lapce_proxy::get_url(url, Some("SourceDelve"))?;
     if !resp.status().is_success() {
         return Err(anyhow!("get release info failed {}", resp.text()?));
     }
@@ -56,16 +56,16 @@ pub fn download_release(release: &ReleaseInfo) -> Result<PathBuf> {
     let dir =
         Directory::updates_directory().ok_or_else(|| anyhow!("no directory"))?;
     let name = match std::env::consts::OS {
-        "macos" => "Lapce-macos.dmg",
+        "macos" => "SourceDelve-macos.dmg",
         "linux" => match std::env::consts::ARCH {
             "aarch64" => "lapce-linux-arm64.tar.gz",
             "x86_64" => "lapce-linux-amd64.tar.gz",
             _ => return Err(anyhow!("arch not supported")),
         },
         #[cfg(feature = "portable")]
-        "windows" => "Lapce-windows-portable.zip",
+        "windows" => "SourceDelve-windows-portable.zip",
         #[cfg(not(feature = "portable"))]
-        "windows" => "Lapce-windows.msi",
+        "windows" => "SourceDelve-windows.msi",
         _ => return Err(anyhow!("os not supported")),
     };
     let file_path = dir.join(name);
@@ -94,9 +94,9 @@ pub fn extract(src: &Path, process_path: &Path) -> Result<PathBuf> {
     } else {
         dest
     };
-    std::fs::remove_dir_all(dest.join("Lapce.app"))?;
+    std::fs::remove_dir_all(dest.join("SourceDelve.app"))?;
     fs_extra::copy_items(
-        &[info.mount_point.join("Lapce.app")],
+        &[info.mount_point.join("SourceDelve.app")],
         dest,
         &fs_extra::dir::CopyOptions {
             overwrite: true,
@@ -107,7 +107,7 @@ pub fn extract(src: &Path, process_path: &Path) -> Result<PathBuf> {
             depth: 0,
         },
     )?;
-    Ok(dest.join("Lapce.app"))
+    Ok(dest.join("SourceDelve.app"))
 }
 
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
@@ -118,7 +118,7 @@ pub fn extract(src: &Path, process_path: &Path) -> Result<PathBuf> {
     let parent = src.parent().ok_or_else(|| anyhow::anyhow!("no parent"))?;
     archive.unpack(parent)?;
     std::fs::remove_file(process_path)?;
-    std::fs::copy(parent.join("Lapce").join("lapce"), process_path)?;
+    std::fs::copy(parent.join("SourceDelve").join("sourcedelve"), process_path)?;
     Ok(process_path.to_path_buf())
 }
 
@@ -138,8 +138,8 @@ pub fn extract(src: &Path, process_path: &Path) -> Result<PathBuf> {
 
     // TODO(dbuga): instead of replacing the exe, run the msi installer for non-portable
     // TODO(dbuga): there's a very slight chance the user might end up with a backup file without a working .exe
-    std::fs::rename(process_path, dst_parent.join("lapce.exe.bak"))?;
-    std::fs::copy(parent.join("lapce.exe"), process_path)?;
+    std::fs::rename(process_path, dst_parent.join("sourcedelve.exe.bak"))?;
+    std::fs::copy(parent.join("sourcedelve.exe"), process_path)?;
 
     Ok(process_path.to_path_buf())
 }
@@ -216,7 +216,8 @@ pub fn cleanup() {
     // Clean up backup exe after an update
     if let Ok(process_path) = std::env::current_exe() {
         if let Some(dst_parent) = process_path.parent() {
-            if let Err(err) = std::fs::remove_file(dst_parent.join("lapce.exe.bak"))
+            if let Err(err) =
+                std::fs::remove_file(dst_parent.join("sourcedelve.exe.bak"))
             {
                 tracing::error!("{:?}", err);
             }

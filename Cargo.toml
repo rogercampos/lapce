@@ -5,18 +5,18 @@ authors      = { workspace = true }
 edition      = { workspace = true }
 license      = { workspace = true }
 rust-version = { workspace = true }
-default-run  = "lapce"
+default-run  = "sourcedelve"
 
 [dependencies]
 lapce-app   = { path = "./lapce-app" }
 lapce-proxy = { path = "./lapce-proxy" }
 
 [[bin]]
-name = "lapce"
+name = "sourcedelve"
 path = "lapce-app/src/bin/lapce.rs"
 
 [[bin]]
-name = "lapce-proxy"
+name = "sourcedelve-proxy"
 path = "lapce-proxy/src/bin/lapce-proxy.rs"
 
 [workspace]
@@ -28,7 +28,7 @@ version      = "0.4.6"
 edition      = "2024"
 rust-version = "1.87.0"
 license      = "Apache-2.0"
-homepage     = "https://lapce.dev"
+homepage     = "https://sourcedelve.dev"
 authors      = ["Dongdong Zhou <dzhou121@gmail.com>"]
 
 [workspace.dependencies]
@@ -124,7 +124,7 @@ codegen-units = 1
 # See https://doc.rust-lang.org/cargo/reference/profiles.html
 # To use this profile:
 #   cargo build --profile fastdev
-#   cargo run --profile fastdev --bin lapce
+#   cargo run --profile fastdev --bin sourcedelve
 [profile.fastdev.package."*"]
 opt-level = 3
 

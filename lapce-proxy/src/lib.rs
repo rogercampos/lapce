@@ -17,7 +17,7 @@ use lapce_rpc::file::PathObject;
 use tracing::error;
 
 #[derive(Parser)]
-#[clap(name = "Lapce-proxy")]
+#[clap(name = "SourceDelve-proxy")]
 #[clap(version = meta::VERSION)]
 struct Cli {
     /// Paths to file(s) and/or folder(s) to open.
