@@ -3,11 +3,10 @@ use std::{
     rc::Rc,
     str::FromStr,
     sync::Arc,
-    time::Duration,
 };
 
 use floem::{
-    action::{TimerToken, exec_after, show_context_menu},
+    action::{TimerToken, show_context_menu},
     ext_event::create_ext_action,
     keyboard::Modifiers,
     kurbo::{Point, Rect, Vec2},
@@ -44,9 +43,9 @@ use lapce_core::{
 use lapce_rpc::{buffer::BufferId, plugin::PluginId, proxy::ProxyResponse};
 use lapce_xi_rope::{Rope, RopeDelta, Transformer};
 use lsp_types::{
-    CodeActionResponse, CompletionItem, CompletionTextEdit, GotoDefinitionResponse,
-    HoverContents, InlayHint, InlayHintLabel, InlineCompletionTriggerKind, Location,
-    MarkedString, MarkupKind, TextEdit,
+    CodeActionResponse, CompletionItem, CompletionTextEdit, DiagnosticSeverity,
+    GotoDefinitionResponse, HoverContents, InlayHint, InlayHintLabel,
+    InlineCompletionTriggerKind, Location, MarkedString, MarkupKind, TextEdit,
 };
 use serde::{Deserialize, Serialize};
 use view::StickyHeaderInfo;
@@ -2428,44 +2427,7 @@ impl EditorData {
                 cursor.set_offset(offset, true, pointer_event.modifiers.alt())
             });
         }
-        if self.common.hover.active.get_untracked() {
-            let hover_editor_id = self.common.hover.editor_id.get_untracked();
-            if hover_editor_id != self.id() {
-                self.common.hover.active.set(false);
-            } else {
-                let current_offset = self.common.hover.offset.get_untracked();
-                let start_offset = self
-                    .doc()
-                    .buffer
-                    .with_untracked(|buffer| buffer.prev_code_boundary(offset));
-                if current_offset != start_offset {
-                    self.common.hover.active.set(false);
-                }
-            }
-        }
-        let hover_delay = self.common.config.get_untracked().editor.hover_delay;
-        if hover_delay > 0 {
-            if is_inside {
-                let start_offset = self
-                    .doc()
-                    .buffer
-                    .with_untracked(|buffer| buffer.prev_code_boundary(offset));
-
-                let editor = self.clone();
-                let mouse_hover_timer = self.mouse_hover_timer;
-                let timer_token =
-                    exec_after(Duration::from_millis(hover_delay), move |token| {
-                        if mouse_hover_timer.try_get_untracked() == Some(token)
-                            && editor.editor_tab_id.try_get_untracked().is_some()
-                        {
-                            editor.update_hover(start_offset);
-                        }
-                    });
-                mouse_hover_timer.set(timer_token);
-            } else {
-                self.mouse_hover_timer.set(TimerToken::INVALID);
-            }
-        }
+        self.update_diagnostic_hover(offset);
 
         // Cmd+hover definition link styling
         let is_cmd = (cfg!(target_os = "macos") && pointer_event.modifiers.meta())
@@ -2638,6 +2600,50 @@ impl EditorData {
             }
         }
         show_context_menu(menu, None);
+    }
+
+    /// Shows a hover popup with diagnostic messages if the given offset falls
+    /// within a diagnostic range. Clears the hover otherwise.
+    fn update_diagnostic_hover(&self, offset: usize) {
+        let doc = self.doc();
+        let mut messages: Vec<(DiagnosticSeverity, String)> = Vec::new();
+        doc.diagnostics.diagnostics_span.with_untracked(|diags| {
+            for (iv, diag) in diags.iter_chunks(0..usize::MAX) {
+                if iv.start() <= offset
+                    && offset < iv.end()
+                    && diag.severity <= Some(DiagnosticSeverity::WARNING)
+                {
+                    let severity =
+                        diag.severity.unwrap_or(DiagnosticSeverity::WARNING);
+                    messages.push((severity, diag.message.clone()));
+                }
+            }
+        });
+
+        if messages.is_empty() {
+            self.common.hover.active.set(false);
+            return;
+        }
+
+        let config = self.common.config.get_untracked();
+        let text = messages
+            .iter()
+            .map(|(sev, msg)| {
+                let prefix = if *sev == DiagnosticSeverity::ERROR {
+                    "Error"
+                } else {
+                    "Warning"
+                };
+                format!("**{prefix}**: {msg}")
+            })
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        let content = parse_markdown(&text, LapceLayout::UI_LINE_HEIGHT, &config);
+        let hover = &self.common.hover;
+        hover.content.set(content);
+        hover.offset.set(offset);
+        hover.editor_id.set(self.id());
+        hover.active.set(true);
     }
 
     #[instrument]

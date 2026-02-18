@@ -45,7 +45,7 @@ use lapce_core::{
 };
 use lapce_rpc::plugin::PluginId;
 use lapce_xi_rope::find::CaseMatching;
-use lsp_types::CodeLens;
+use lsp_types::{CodeLens, DiagnosticSeverity};
 
 use super::{DocSignal, EditorData, EditorViewKind, gutter::editor_gutter_view};
 use crate::config::layout::LapceLayout;
@@ -1412,6 +1412,93 @@ fn editor_gutter_code_lens(
     .debug_name("CodeLens Stack")
 }
 
+fn editor_gutter_diagnostics(
+    config: ReadSignal<Arc<LapceConfig>>,
+    doc: DocSignal,
+    screen_lines: RwSignal<ScreenLines>,
+    viewport: RwSignal<Rect>,
+    icon_padding: f32,
+) -> impl View {
+    let diag_lines = create_memo(move |_| {
+        let doc = doc.get();
+        let mut line_severity: std::collections::HashMap<usize, DiagnosticSeverity> =
+            std::collections::HashMap::new();
+        doc.diagnostics.diagnostics_span.with(|diags| {
+            doc.buffer.with(|buffer| {
+                let total_len = buffer.len();
+                for (iv, diag) in diags.iter_chunks(0..total_len) {
+                    let severity = match diag.severity {
+                        Some(s) if s <= DiagnosticSeverity::WARNING => s,
+                        _ => continue,
+                    };
+                    let line = buffer.line_of_offset(iv.start());
+                    line_severity
+                        .entry(line)
+                        .and_modify(|s| {
+                            if severity < *s {
+                                *s = severity
+                            }
+                        })
+                        .or_insert(severity);
+                }
+            });
+        });
+        line_severity.into_iter().collect::<Vec<_>>()
+    });
+
+    dyn_stack(
+        move || diag_lines.get(),
+        move |(line, _)| {
+            (
+                *line,
+                doc.with_untracked(|doc| doc.cache_rev.get_untracked()),
+            )
+        },
+        move |(line, severity)| {
+            let icon_name = if severity == DiagnosticSeverity::ERROR {
+                LapceIcons::ERROR
+            } else {
+                LapceIcons::WARNING
+            };
+
+            let icon_view = container(
+                svg(move || config.get().ui_svg(icon_name)).style(move |s| {
+                    let config = config.get();
+                    let size = config.ui.icon_size() as f32;
+                    let color = if severity == DiagnosticSeverity::ERROR {
+                        config.color(LapceColor::LAPCE_ERROR)
+                    } else {
+                        config.color(LapceColor::LAPCE_WARN)
+                    };
+                    s.size(size, size).color(color)
+                }),
+            )
+            .style(move |s| s.padding(4.0));
+
+            container(icon_view).style(move |s| {
+                let line_info = screen_lines.with(|sl| sl.info_for_line(line));
+                let line_y = line_info.map(|l| l.y).unwrap_or(-100.0);
+                let rect = viewport.get();
+                let config = config.get();
+                let icon_size = config.ui.icon_size();
+                let width = icon_size as f32 + icon_padding * 2.0;
+                s.absolute()
+                    .width(width)
+                    .height(config.editor.line_height() as f32)
+                    .justify_center()
+                    .items_center()
+                    .margin_top(line_y as f32 - rect.y0 as f32)
+            })
+        },
+    )
+    .style(move |s| {
+        let config = config.get();
+        let width = config.ui.icon_size() as f32 + icon_padding * 2.0;
+        s.absolute().width(width).height_full()
+    })
+    .debug_name("Diagnostics Stack")
+}
+
 fn editor_gutter_folding_range(
     workspace_data: Rc<WorkspaceData>,
     doc: DocSignal,
@@ -1590,6 +1677,13 @@ fn editor_gutter(
             stack((
                 editor_gutter_code_lens(
                     workspace_data.clone(),
+                    doc,
+                    screen_lines,
+                    viewport,
+                    icon_padding,
+                ),
+                editor_gutter_diagnostics(
+                    config,
                     doc,
                     screen_lines,
                     viewport,
