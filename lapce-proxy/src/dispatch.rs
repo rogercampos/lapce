@@ -100,7 +100,7 @@ impl ProxyHandler for Dispatcher {
                 // shell env resolution, LSP startup) to a background thread
                 // so we don't block the dispatcher from processing ReadDir
                 // and other requests.
-                let mut lsp_rpc = self.lsp_rpc.clone();
+                let lsp_rpc = self.lsp_rpc.clone();
                 let core_rpc = self.core_rpc.clone();
                 let workspace = self.workspace.clone();
 
@@ -169,12 +169,23 @@ impl ProxyHandler for Dispatcher {
                         Vec::new()
                     };
 
-                    // Send projects immediately so the UI can show them right away.
-                    // Tool versions and version manager info will arrive in a second
-                    // update after shell env resolution completes.
+                    // Populate lsp_server from the static config table
+                    // (doesn't need shell env)
+                    for project in &mut projects {
+                        project.lsp_server = project
+                            .languages
+                            .first()
+                            .and_then(|lang| {
+                                crate::lsp::manager::lsp_command_for_language(lang)
+                            })
+                            .map(|s| s.to_string());
+                    }
+
+                    // Send projects to UI. Tool versions and version manager
+                    // will be enriched lazily when LSP servers activate.
                     core_rpc.projects_detected(projects.clone());
 
-                    // Resolve shell envs (slow: spawns login shells)
+                    // Resolve default shell env (slow: spawns login shell)
                     core_rpc.background_task_started(
                         task_id_shell,
                         "Resolving shell environment".into(),
@@ -187,101 +198,11 @@ impl ProxyHandler for Dispatcher {
                         default_env.len()
                     );
                     core_rpc.background_task_finished(task_id_shell);
-
-                    // Pre-announce per-project env resolutions as queued
-                    // (we now know which projects exist after detection).
-                    let mut project_task_ids: Vec<(PathBuf, u64, String)> =
-                        Vec::new();
-                    {
-                        let mut seen_roots =
-                            std::collections::HashSet::<PathBuf>::new();
-                        for project in &projects {
-                            if seen_roots.insert(project.root.clone()) {
-                                let dir_name = project
-                                    .root
-                                    .file_name()
-                                    .map(|n| n.to_string_lossy().into_owned())
-                                    .unwrap_or_default();
-                                let name =
-                                    format!("Resolving environment: {dir_name}");
-                                let id = core_rpc.next_background_task_id();
-                                core_rpc.background_task_queued(id, name.clone());
-                                project_task_ids.push((
-                                    project.root.clone(),
-                                    id,
-                                    name,
-                                ));
-                            }
-                        }
-                    }
-
-                    let mut project_envs: HashMap<
-                        PathBuf,
-                        Arc<HashMap<String, String>>,
-                    > = HashMap::new();
-                    for project in &mut projects {
-                        let env = if !project_envs.contains_key(&project.root) {
-                            // Find the pre-allocated task ID for this project root.
-                            let (task_id, task_name) = project_task_ids
-                                .iter()
-                                .find(|(root, _, _)| root == &project.root)
-                                .map(|(_, id, name)| (*id, name.clone()))
-                                .unwrap();
-                            core_rpc.background_task_started(task_id, task_name);
-                            tracing::info!(
-                                "[bg-thread] Resolving shell env for project {:?}...",
-                                project.root
-                            );
-                            let env = crate::shell_env::resolve_shell_env(Some(
-                                project.root.as_path(),
-                            ));
-                            tracing::info!(
-                                "[bg-thread] Shell env resolved for {:?} ({} vars)",
-                                project.root,
-                                env.len()
-                            );
-                            core_rpc.background_task_finished(task_id);
-                            let arc_env = Arc::new(env);
-                            project_envs
-                                .insert(project.root.clone(), arc_env.clone());
-                            arc_env
-                        } else {
-                            project_envs.get(&project.root).unwrap().clone()
-                        };
-
-                        project.tool_versions =
-                            lapce_rpc::project::extract_tool_versions(
-                                &project.kind,
-                                &env,
-                            );
-                        project.version_manager =
-                            lapce_rpc::project::detect_version_manager(
-                                &project.kind,
-                                &env,
-                            );
-                        project.lsp_server = project
-                            .languages
-                            .first()
-                            .and_then(|lang| {
-                                crate::lsp::manager::lsp_command_for_language(lang)
-                            })
-                            .map(|s| s.to_string());
-                    }
-
-                    tracing::info!(
-                        "[bg-thread] Sending projects_detected notification"
-                    );
-                    core_rpc.projects_detected(projects.clone());
-                    lsp_rpc.set_shell_envs(default_env, project_envs);
-
-                    let project_roots: Vec<(PathBuf, Vec<String>)> = projects
-                        .iter()
-                        .map(|p| (p.root.clone(), p.languages.clone()))
-                        .collect();
+                    lsp_rpc.set_default_shell_env(default_env);
 
                     tracing::info!("[bg-thread] Starting LSP manager mainloop");
                     let mut manager =
-                        LspManager::new(workspace, lsp_rpc.clone(), project_roots);
+                        LspManager::new(workspace, lsp_rpc.clone(), projects);
                     lsp_rpc.mainloop(&mut manager);
                 });
                 tracing::info!(

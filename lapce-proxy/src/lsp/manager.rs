@@ -4,7 +4,8 @@ use std::{
 
 use lapce_core::directory::Directory;
 use lapce_rpc::{
-    RpcError, plugin::PluginId, proxy::ProxyResponse, style::LineStyle,
+    RpcError, plugin::PluginId, project::ProjectInfo, proxy::ProxyResponse,
+    style::LineStyle,
 };
 use lapce_xi_rope::{Rope, RopeDelta};
 use lsp_types::{
@@ -87,8 +88,8 @@ pub struct LspManager {
     language_project_to_server: HashMap<(String, PathBuf), PluginId>,
     /// Tracks which (config_index, project_root) pairs have been activated
     activated_configs: Vec<(usize, PathBuf)>,
-    /// Detected projects: (project_root, languages)
-    projects: Vec<(PathBuf, Vec<String>)>,
+    /// Detected projects
+    projects: Vec<ProjectInfo>,
     /// Tracks open files for lazy activation replay
     open_files: HashMap<PathBuf, TextDocumentItem>,
 }
@@ -97,7 +98,7 @@ impl LspManager {
     pub fn new(
         workspace: Option<PathBuf>,
         lsp_rpc: LspRpcHandler,
-        projects: Vec<(PathBuf, Vec<String>)>,
+        projects: Vec<ProjectInfo>,
     ) -> Self {
         Self {
             workspace,
@@ -114,9 +115,9 @@ impl LspManager {
     fn find_project_root_for_path(&self, path: &std::path::Path) -> Option<PathBuf> {
         self.projects
             .iter()
-            .filter(|(root, _)| path.starts_with(root))
-            .max_by_key(|(root, _)| root.components().count())
-            .map(|(root, _)| root.clone())
+            .filter(|p| path.starts_with(&p.root))
+            .max_by_key(|p| p.root.components().count())
+            .map(|p| p.root.clone())
     }
 
     /// Get the effective project root for a file path, falling back to workspace.
@@ -148,10 +149,37 @@ impl LspManager {
                 continue;
             }
 
-            // Use project-specific shell env
+            // Use project-specific shell env (lazily resolved)
             let env = self
                 .lsp_rpc
                 .shell_env_for_project(Some(project_root.as_path()));
+
+            // Enrich matching ProjectInfo entries with data from the resolved env
+            let mut projects_updated = false;
+            for project in &mut self.projects {
+                if project.root == *project_root && project.tool_versions.is_empty()
+                {
+                    project.tool_versions =
+                        lapce_rpc::project::extract_tool_versions(
+                            &project.kind,
+                            &env,
+                        );
+                    project.version_manager =
+                        lapce_rpc::project::detect_version_manager(
+                            &project.kind,
+                            &env,
+                        );
+                    project.lsp_server = project
+                        .languages
+                        .first()
+                        .and_then(|lang| lsp_command_for_language(lang))
+                        .map(|s| s.to_string());
+                    projects_updated = true;
+                }
+            }
+            if projects_updated {
+                self.lsp_rpc.projects_detected(self.projects.clone());
+            }
 
             // Start the server with the project root as its workspace
             let server_workspace = if project_root.as_os_str().is_empty() {

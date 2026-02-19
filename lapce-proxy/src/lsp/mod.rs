@@ -11,6 +11,8 @@ use std::{
     },
 };
 
+use lapce_rpc::project::ProjectInfo;
+
 use anyhow::Result;
 use crossbeam_channel::{Receiver, Sender};
 use dyn_clone::DynClone;
@@ -145,9 +147,11 @@ pub struct LspRpcHandler {
     lsp_tx: Sender<LspRpc>,
     lsp_rx: Arc<Mutex<Option<Receiver<LspRpc>>>>,
     /// Default shell environment (resolved for the workspace root).
-    pub default_shell_env: Arc<HashMap<String, String>>,
+    pub default_shell_env: Arc<Mutex<Arc<HashMap<String, String>>>>,
     /// Per-project shell environments, keyed by project root path.
-    pub project_shell_envs: Arc<HashMap<PathBuf, Arc<HashMap<String, String>>>>,
+    /// Lazily populated: entries are resolved on first access.
+    pub project_shell_envs:
+        Arc<Mutex<HashMap<PathBuf, Arc<HashMap<String, String>>>>>,
 }
 
 impl LspRpcHandler {
@@ -158,18 +162,13 @@ impl LspRpcHandler {
             proxy_rpc,
             lsp_tx,
             lsp_rx: Arc::new(Mutex::new(Some(lsp_rx))),
-            default_shell_env: Arc::new(HashMap::new()),
-            project_shell_envs: Arc::new(HashMap::new()),
+            default_shell_env: Arc::new(Mutex::new(Arc::new(HashMap::new()))),
+            project_shell_envs: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
-    pub fn set_shell_envs(
-        &mut self,
-        default_env: HashMap<String, String>,
-        project_envs: HashMap<PathBuf, Arc<HashMap<String, String>>>,
-    ) {
-        self.default_shell_env = Arc::new(default_env);
-        self.project_shell_envs = Arc::new(project_envs);
+    pub fn set_default_shell_env(&self, default_env: HashMap<String, String>) {
+        *self.default_shell_env.lock() = Arc::new(default_env);
     }
 
     /// Show a user-visible message in the UI.
@@ -181,18 +180,48 @@ impl LspRpcHandler {
         self.core_rpc.show_message(title, message);
     }
 
-    /// Get the shell environment for a specific project root, falling back to
-    /// the default workspace-root environment.
+    /// Get the shell environment for a specific project root, resolving lazily
+    /// if not yet cached. Falls back to the default workspace-root environment
+    /// when no project root is given.
     pub fn shell_env_for_project(
         &self,
         project_root: Option<&Path>,
     ) -> Arc<HashMap<String, String>> {
-        if let Some(root) = project_root {
-            if let Some(env) = self.project_shell_envs.get(root) {
+        let Some(root) = project_root else {
+            return self.default_shell_env.lock().clone();
+        };
+
+        // Check cache first
+        {
+            let cache = self.project_shell_envs.lock();
+            if let Some(env) = cache.get(root) {
                 return env.clone();
             }
         }
-        self.default_shell_env.clone()
+
+        // Not cached — resolve lazily
+        let dir_name = root
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let task_id = self.next_background_task_id();
+        let name = format!("Resolving environment: {dir_name}");
+        self.background_task_started(task_id, name);
+
+        let env = crate::shell_env::resolve_shell_env(Some(root));
+        let arc_env = Arc::new(env);
+
+        self.project_shell_envs
+            .lock()
+            .insert(root.to_path_buf(), arc_env.clone());
+        self.background_task_finished(task_id);
+
+        arc_env
+    }
+
+    /// Forward a projects_detected notification to the UI.
+    pub fn projects_detected(&self, projects: Vec<ProjectInfo>) {
+        self.core_rpc.projects_detected(projects);
     }
 
     pub fn next_background_task_id(&self) -> BackgroundTaskId {
