@@ -157,6 +157,12 @@ pub enum CoreNotification {
         task_id: BackgroundTaskId,
         status: BackgroundTaskStatus,
     },
+    /// Incremental batch of file paths discovered during workspace indexing.
+    GetFilesDiff {
+        paths: Vec<PathBuf>,
+    },
+    /// Signals that workspace file indexing has completed.
+    GetFilesDone,
     /// Incremental batch of global search results, sent as files are matched.
     GlobalSearchDiffMatches {
         search_id: u64,
@@ -390,6 +396,14 @@ impl CoreRpcHandler {
             task_id,
             status: BackgroundTaskStatus::Finished,
         });
+    }
+
+    pub fn get_files_diff(&self, paths: Vec<PathBuf>) {
+        self.notification(CoreNotification::GetFilesDiff { paths });
+    }
+
+    pub fn get_files_done(&self) {
+        self.notification(CoreNotification::GetFilesDone);
     }
 
     pub fn global_search_diff_matches(

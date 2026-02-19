@@ -1661,6 +1661,12 @@ impl WorkspaceData {
                     });
                 }
             }
+            CoreNotification::GetFilesDiff { paths } => {
+                self.go_to_file_data.append_files(paths);
+            }
+            CoreNotification::GetFilesDone => {
+                // No-op: items signal already updated incrementally.
+            }
             CoreNotification::BackgroundTaskUpdate { task_id, status } => {
                 match status {
                     BackgroundTaskStatus::Queued { name } => {

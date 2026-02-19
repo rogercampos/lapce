@@ -11,20 +11,19 @@ use std::{
 
 use floem::{
     View,
-    ext_event::{create_ext_action, create_signal_from_channel},
+    ext_event::create_signal_from_channel,
     keyboard::Modifiers,
     peniko::kurbo::{Point, Size},
     reactive::{ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith},
     style::{AlignItems, CursorStyle, Display},
     views::{
-        Decorators, VirtualVector, container, scroll, scroll::PropagatePointerWheel,
-        stack, svg, text, virtual_stack,
+        Decorators, VirtualVector, container, label, scroll,
+        scroll::PropagatePointerWheel, stack, svg, text, virtual_stack,
     },
 };
 use lapce_core::{
     command::FocusCommand, mode::Mode, movement::Movement, selection::Selection,
 };
-use lapce_rpc::proxy::ProxyResponse;
 use lapce_xi_rope::Rope;
 use nucleo::Utf32Str;
 
@@ -237,51 +236,47 @@ impl GoToFileData {
         self.index.set(new_index);
     }
 
-    fn get_files(&self) {
+    pub fn append_files(&self, paths: &[PathBuf]) {
         let workspace = self.workspace.clone();
-        let set_items = self.items.write_only();
-        let send =
-            create_ext_action(self.common.scope, move |items: Vec<PathBuf>| {
-                let items = items
-                    .into_iter()
-                    .map(|full_path| {
-                        let path =
-                            if let Some(workspace_path) = workspace.path.as_ref() {
-                                full_path
-                                    .strip_prefix(workspace_path)
-                                    .unwrap_or(&full_path)
-                                    .to_path_buf()
-                            } else {
-                                full_path.clone()
-                            };
-                        let filter_text = path.to_string_lossy().into_owned();
-                        GoToFileItem {
-                            path,
-                            full_path,
-                            filter_text,
-                            score: 0,
-                            indices: Vec::new(),
-                        }
-                    })
-                    .collect::<im::Vector<_>>();
-                set_items.set(items);
-            });
-        self.common.proxy.get_files(move |result| {
-            if let Ok(ProxyResponse::GetFilesResponse { items }) = result {
-                send(items);
+        self.items.update(|items| {
+            for full_path in paths {
+                let path = if let Some(workspace_path) = workspace.path.as_ref() {
+                    full_path
+                        .strip_prefix(workspace_path)
+                        .unwrap_or(full_path)
+                        .to_path_buf()
+                } else {
+                    full_path.clone()
+                };
+                let filter_text = path.to_string_lossy().into_owned();
+                items.push_back(GoToFileItem {
+                    path,
+                    full_path: full_path.clone(),
+                    filter_text,
+                    score: 0,
+                    indices: Vec::new(),
+                });
             }
         });
     }
 
+    fn get_files(&self) {
+        self.common.proxy.get_files(|_| {});
+    }
+
+    const MAX_FILTERED_RESULTS: usize = 200;
+
+    /// Run fuzzy matching on `items`, returning all matches sorted by score.
+    /// Returns `None` if cancelled (run_id changed).
     fn filter_items(
-        run_id: Arc<AtomicU64>,
+        run_id: &AtomicU64,
         current_run_id: u64,
         input: &str,
-        items: im::Vector<GoToFileItem>,
+        items: &[GoToFileItem],
         matcher: &mut nucleo::Matcher,
-    ) -> Option<im::Vector<GoToFileItem>> {
+    ) -> Option<Vec<GoToFileItem>> {
         if input.is_empty() {
-            return Some(items);
+            return Some(items.to_vec());
         }
 
         let pattern = nucleo::pattern::Pattern::parse(
@@ -293,7 +288,7 @@ impl GoToFileData {
         let mut filtered_items = Vec::new();
         let mut indices = Vec::new();
         let mut filter_text_buf = Vec::new();
-        for i in &items {
+        for i in items {
             if run_id.load(Ordering::Acquire) != current_run_id {
                 return None;
             }
@@ -321,7 +316,7 @@ impl GoToFileData {
         if run_id.load(Ordering::Acquire) != current_run_id {
             return None;
         }
-        Some(filtered_items.into())
+        Some(filtered_items)
     }
 
     fn update_process(
@@ -349,17 +344,74 @@ impl GoToFileData {
 
         let mut matcher =
             nucleo::Matcher::new(nucleo::Config::DEFAULT.match_paths());
+
+        // Cache for incremental filtering: when the new input extends the
+        // previous input and the item list hasn't changed, we can re-filter
+        // the cached (untruncated) matches instead of the full list.
+        let mut cache: Option<(u64, String, usize, Vec<GoToFileItem>)> = None;
+
         loop {
             if let Ok((current_run_id, input, items)) = receive_batch(&receiver) {
-                if let Some(filtered_items) = GoToFileData::filter_items(
-                    run_id.clone(),
-                    current_run_id,
-                    &input,
-                    items,
-                    &mut matcher,
-                ) {
+                // Check if we can use incremental filtering.
+                let source_items: &[GoToFileItem] = if let Some((
+                    cached_run_id,
+                    ref cached_input,
+                    cached_len,
+                    ref cached_filtered,
+                )) = cache
+                {
+                    if current_run_id == cached_run_id
+                        && items.len() == cached_len
+                        && !input.is_empty()
+                        && input.starts_with(cached_input.as_str())
+                    {
+                        cached_filtered.as_slice()
+                    } else {
+                        // Collect im::Vector into a temp Vec for the slice
+                        // (handled below)
+                        &[]
+                    }
+                } else {
+                    &[]
+                };
+
+                let filtered = if !source_items.is_empty() {
+                    GoToFileData::filter_items(
+                        &run_id,
+                        current_run_id,
+                        &input,
+                        source_items,
+                        &mut matcher,
+                    )
+                } else {
+                    let all_items: Vec<GoToFileItem> =
+                        items.iter().cloned().collect();
+                    GoToFileData::filter_items(
+                        &run_id,
+                        current_run_id,
+                        &input,
+                        &all_items,
+                        &mut matcher,
+                    )
+                };
+
+                if let Some(filtered_items) = filtered {
+                    // Cache the full (untruncated) result for future incremental use.
+                    cache = Some((
+                        current_run_id,
+                        input.clone(),
+                        items.len(),
+                        filtered_items.clone(),
+                    ));
+
+                    // Truncate for display.
+                    let truncated: im::Vector<GoToFileItem> = filtered_items
+                        .into_iter()
+                        .take(GoToFileData::MAX_FILTERED_RESULTS)
+                        .collect();
+
                     if let Err(err) =
-                        resp_tx.send((current_run_id, input, filtered_items))
+                        resp_tx.send((current_run_id, input, truncated))
                     {
                         tracing::error!("{:?}", err);
                     }
@@ -466,8 +518,9 @@ fn go_to_file_content(workspace_data: Rc<WorkspaceData>) -> impl View {
     let run_id = data.run_id;
     let filter_text = data.filter_text.read_only();
     let item_height = 25.0;
-    let palette_width = config.get_untracked().ui.palette_width() as f64;
-    let initial_height = (layout_rect.get_untracked().height() * 0.45).round();
+    let palette_width =
+        (config.get_untracked().ui.palette_width() as f64 * 1.3).round();
+    let initial_height = (layout_rect.get_untracked().height() * 0.55).round();
 
     let content = stack((
         go_to_file_input(data.clone(), config, focus),
@@ -515,6 +568,33 @@ fn go_to_file_content(workspace_data: Rc<WorkspaceData>) -> impl View {
                 .min_height(0.0)
                 .flex_grow(1.0)
                 .set(PropagatePointerWheel, false)
+        }),
+        label(move || {
+            let count = filtered_items.with(|items| items.len());
+            if count >= GoToFileData::MAX_FILTERED_RESULTS {
+                format!(
+                    "Showing first {} results \u{2014} narrow your search for more",
+                    count
+                )
+            } else {
+                String::new()
+            }
+        })
+        .style(move |s| {
+            let count = filtered_items.with(|items| items.len());
+            let config = config.get();
+            s.display(if count >= GoToFileData::MAX_FILTERED_RESULTS {
+                Display::Flex
+            } else {
+                Display::None
+            })
+            .padding_horiz(10.0)
+            .align_items(Some(AlignItems::Center))
+            .height(item_height as f32)
+            .font_size(config.ui.font_size() as f32 - 1.0)
+            .color(config.color(LapceColor::EDITOR_DIM))
+            .border_top(1.0)
+            .border_color(config.color(LapceColor::LAPCE_BORDER))
         }),
         text("No matching results").style(move |s| {
             s.display(if filtered_items.with(|items| items.is_empty()) {

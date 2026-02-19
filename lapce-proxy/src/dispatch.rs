@@ -641,7 +641,7 @@ impl ProxyHandler for Dispatcher {
                         task_id,
                         "Indexing workspace files".into(),
                     );
-                    let result = if let Some(workspace) = workspace {
+                    if let Some(workspace) = workspace {
                         let overrides = Dispatcher::build_walk_overrides(
                             &workspace,
                             &excluded_directories,
@@ -653,11 +653,37 @@ impl ProxyHandler for Dispatcher {
                             walk_builder.overrides(overrides);
                         }
 
-                        let items: Arc<Mutex<Vec<PathBuf>>> =
+                        // Stream files as they're discovered via notifications.
+                        let pending: Arc<Mutex<Vec<PathBuf>>> =
                             Arc::new(Mutex::new(Vec::new()));
+                        let cancelled =
+                            Arc::new(std::sync::atomic::AtomicBool::new(false));
+
+                        // Background flusher: sends batches every 100ms.
+                        let flush_pending = pending.clone();
+                        let flush_core_rpc = core_rpc.clone();
+                        let flush_cancelled = cancelled.clone();
+                        let flusher = thread::spawn(move || {
+                            while !flush_cancelled.load(Ordering::Relaxed) {
+                                thread::sleep(Duration::from_millis(100));
+                                let batch = {
+                                    let mut guard = flush_pending.lock();
+                                    if guard.is_empty() {
+                                        continue;
+                                    }
+                                    std::mem::take(&mut *guard)
+                                };
+                                flush_core_rpc.get_files_diff(batch);
+                            }
+                            // Final flush
+                            let batch = std::mem::take(&mut *flush_pending.lock());
+                            if !batch.is_empty() {
+                                flush_core_rpc.get_files_diff(batch);
+                            }
+                        });
 
                         walk_builder.build_parallel().run(|| {
-                            let items = items.clone();
+                            let pending = pending.clone();
                             Box::new(move |entry| {
                                 let entry = match entry {
                                     Ok(e) => e,
@@ -665,19 +691,23 @@ impl ProxyHandler for Dispatcher {
                                 };
                                 if entry.file_type().map_or(false, |ft| ft.is_file())
                                 {
-                                    items.lock().push(entry.into_path());
+                                    pending.lock().push(entry.into_path());
                                 }
                                 ignore::WalkState::Continue
                             })
                         });
 
-                        let items = Arc::try_unwrap(items).unwrap().into_inner();
-                        Ok(ProxyResponse::GetFilesResponse { items })
+                        cancelled.store(true, Ordering::Relaxed);
+                        let _ = flusher.join();
+                        core_rpc.get_files_done();
                     } else {
-                        Ok(ProxyResponse::GetFilesResponse { items: Vec::new() })
-                    };
+                        core_rpc.get_files_done();
+                    }
                     core_rpc.background_task_finished(task_id);
-                    proxy_rpc.handle_response(id, result);
+                    proxy_rpc.handle_response(
+                        id,
+                        Ok(ProxyResponse::GetFilesResponse { items: Vec::new() }),
+                    );
                 });
             }
             GetOpenFilesContent {} => {
