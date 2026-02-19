@@ -33,6 +33,9 @@ impl LapceIcons {
     pub const IMAGE_LOADING: &'static str = "image_loading";
     pub const IMAGE_ERROR: &'static str = "image_error";
 
+    pub const BACKGROUND_WORKING: &'static str = "background.working";
+    pub const BACKGROUND_QUEUED: &'static str = "background.queued";
+
     pub const FOLD: &'static str = "fold";
     pub const FOLD_UP: &'static str = "fold.up";
     pub const FOLD_DOWN: &'static str = "fold.down";

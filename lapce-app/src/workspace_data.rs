@@ -33,7 +33,7 @@ use lapce_core::{
 };
 use lapce_rpc::{
     RpcError,
-    core::{CoreNotification, GitFileStatus, GitRepoState},
+    core::{BackgroundTaskStatus, CoreNotification, GitFileStatus, GitRepoState},
     file::{Naming, PathObject},
     plugin::PluginId,
     project::ProjectInfo,
@@ -109,12 +109,18 @@ pub enum Focus {
     Panel(PanelKind),
 }
 
-#[derive(Clone)]
-pub struct WorkProgress {
-    pub token: ProgressToken,
-    pub title: String,
+#[derive(Clone, Debug, PartialEq)]
+pub enum BackgroundTaskState {
+    Queued,
+    Active,
+}
+
+#[derive(Clone, Debug)]
+pub struct BackgroundTaskInfo {
+    pub name: String,
     pub message: Option<String>,
     pub percentage: Option<u32>,
+    pub state: BackgroundTaskState,
 }
 
 /// Shared state accessible to all components within a workspace tab.
@@ -191,7 +197,12 @@ pub struct WorkspaceData {
     pub git_repo_state: RwSignal<GitRepoState>,
     pub git_file_statuses: RwSignal<HashMap<PathBuf, GitFileStatus>>,
     pub update_in_progress: RwSignal<bool>,
-    pub progresses: RwSignal<IndexMap<ProgressToken, WorkProgress>>,
+    pub background_tasks: RwSignal<IndexMap<u64, BackgroundTaskInfo>>,
+    pub bg_tasks_popup_visible: RwSignal<bool>,
+    /// Maps LSP ProgressToken to our background task IDs.
+    progress_task_map: RwSignal<HashMap<ProgressToken, u64>>,
+    /// Counter for generating app-side task IDs (for LSP progress items).
+    local_task_id: Arc<std::sync::atomic::AtomicU64>,
     pub messages: RwSignal<Vec<(String, ShowMessageParams)>>,
     pub common: Rc<CommonData>,
 }
@@ -528,7 +539,12 @@ impl WorkspaceData {
             git_repo_state: cx.create_rw_signal(GitRepoState::Normal),
             git_file_statuses: cx.create_rw_signal(HashMap::new()),
             update_in_progress: cx.create_rw_signal(false),
-            progresses: cx.create_rw_signal(IndexMap::new()),
+            background_tasks: cx.create_rw_signal(IndexMap::new()),
+            bg_tasks_popup_visible: cx.create_rw_signal(false),
+            progress_task_map: cx.create_rw_signal(HashMap::new()),
+            local_task_id: Arc::new(std::sync::atomic::AtomicU64::new(
+                1_000_000_000,
+            )),
             messages: cx.create_rw_signal(Vec::new()),
             common,
         };
@@ -1602,6 +1618,57 @@ impl WorkspaceData {
                 );
                 self.projects.set(projects.clone());
             }
+            CoreNotification::BackgroundTaskUpdate { task_id, status } => {
+                match status {
+                    BackgroundTaskStatus::Queued { name } => {
+                        self.background_tasks.update(|tasks| {
+                            tasks.insert(
+                                *task_id,
+                                BackgroundTaskInfo {
+                                    name: name.clone(),
+                                    message: None,
+                                    percentage: None,
+                                    state: BackgroundTaskState::Queued,
+                                },
+                            );
+                        });
+                    }
+                    BackgroundTaskStatus::Started { name } => {
+                        self.background_tasks.update(|tasks| {
+                            if let Some(info) = tasks.get_mut(task_id) {
+                                info.name = name.clone();
+                                info.state = BackgroundTaskState::Active;
+                            } else {
+                                tasks.insert(
+                                    *task_id,
+                                    BackgroundTaskInfo {
+                                        name: name.clone(),
+                                        message: None,
+                                        percentage: None,
+                                        state: BackgroundTaskState::Active,
+                                    },
+                                );
+                            }
+                        });
+                    }
+                    BackgroundTaskStatus::Progress {
+                        message,
+                        percentage,
+                    } => {
+                        self.background_tasks.update(|tasks| {
+                            if let Some(info) = tasks.get_mut(task_id) {
+                                info.message.clone_from(message);
+                                info.percentage = *percentage;
+                            }
+                        });
+                    }
+                    BackgroundTaskStatus::Finished => {
+                        self.background_tasks.update(|tasks| {
+                            tasks.swap_remove(task_id);
+                        });
+                    }
+                }
+            }
             _ => {}
         }
     }
@@ -2068,29 +2135,46 @@ impl WorkspaceData {
         let token = progress.token.clone();
         match &progress.value {
             lsp_types::ProgressParamsValue::WorkDone(progress) => match progress {
-                lsp_types::WorkDoneProgress::Begin(progress) => {
-                    let progress = WorkProgress {
-                        token: token.clone(),
-                        title: progress.title.clone(),
-                        message: progress.message.clone(),
-                        percentage: progress.percentage,
+                lsp_types::WorkDoneProgress::Begin(begin) => {
+                    let task_id = self
+                        .local_task_id
+                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    self.progress_task_map.update(|m| {
+                        m.insert(token, task_id);
+                    });
+                    let info = BackgroundTaskInfo {
+                        name: begin.title.clone(),
+                        message: begin.message.clone(),
+                        percentage: begin.percentage,
+                        state: BackgroundTaskState::Active,
                     };
-                    self.progresses.update(|p| {
-                        p.insert(token, progress);
+                    self.background_tasks.update(|tasks| {
+                        tasks.insert(task_id, info);
                     });
                 }
                 lsp_types::WorkDoneProgress::Report(report) => {
-                    self.progresses.update(|p| {
-                        if let Some(progress) = p.get_mut(&token) {
-                            progress.message.clone_from(&report.message);
-                            progress.percentage = report.percentage;
-                        }
-                    })
+                    let task_id =
+                        self.progress_task_map.with(|m| m.get(&token).copied());
+                    if let Some(task_id) = task_id {
+                        self.background_tasks.update(|tasks| {
+                            if let Some(info) = tasks.get_mut(&task_id) {
+                                info.message.clone_from(&report.message);
+                                info.percentage = report.percentage;
+                            }
+                        });
+                    }
                 }
                 lsp_types::WorkDoneProgress::End(_) => {
-                    self.progresses.update(|p| {
-                        p.swap_remove(&token);
-                    });
+                    let task_id =
+                        self.progress_task_map.with(|m| m.get(&token).copied());
+                    if let Some(task_id) = task_id {
+                        self.progress_task_map.update(|m| {
+                            m.remove(&token);
+                        });
+                        self.background_tasks.update(|tasks| {
+                            tasks.swap_remove(&task_id);
+                        });
+                    }
                 }
             },
         }

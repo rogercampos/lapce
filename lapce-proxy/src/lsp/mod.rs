@@ -15,7 +15,10 @@ use anyhow::Result;
 use crossbeam_channel::{Receiver, Sender};
 use dyn_clone::DynClone;
 use lapce_rpc::{
-    RpcError, core::CoreRpcHandler, plugin::PluginId, proxy::ProxyRpcHandler,
+    RpcError,
+    core::{BackgroundTaskId, CoreRpcHandler},
+    plugin::PluginId,
+    proxy::ProxyRpcHandler,
     style::LineStyle,
 };
 use lapce_xi_rope::{Rope, RopeDelta};
@@ -190,6 +193,32 @@ impl LspRpcHandler {
             }
         }
         self.default_shell_env.clone()
+    }
+
+    pub fn next_background_task_id(&self) -> BackgroundTaskId {
+        self.core_rpc.next_background_task_id()
+    }
+
+    pub fn background_task_queued(&self, task_id: BackgroundTaskId, name: String) {
+        self.core_rpc.background_task_queued(task_id, name);
+    }
+
+    pub fn background_task_started(&self, task_id: BackgroundTaskId, name: String) {
+        self.core_rpc.background_task_started(task_id, name);
+    }
+
+    pub fn background_task_progress(
+        &self,
+        task_id: BackgroundTaskId,
+        message: Option<String>,
+        percentage: Option<u32>,
+    ) {
+        self.core_rpc
+            .background_task_progress(task_id, message, percentage);
+    }
+
+    pub fn background_task_finished(&self, task_id: BackgroundTaskId) {
+        self.core_rpc.background_task_finished(task_id);
     }
 
     pub fn mainloop(&self, manager: &mut LspManager) {

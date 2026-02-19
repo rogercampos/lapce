@@ -103,12 +103,44 @@ impl ProxyHandler for Dispatcher {
                 let mut lsp_rpc = self.lsp_rpc.clone();
                 let core_rpc = self.core_rpc.clone();
                 let workspace = self.workspace.clone();
+
+                // Pre-announce startup tasks as queued so the UI can show them
+                // before work begins.
+                let task_id_git = if workspace.is_some() {
+                    let id = core_rpc.next_background_task_id();
+                    core_rpc
+                        .background_task_queued(id, "Scanning git status".into());
+                    Some(id)
+                } else {
+                    None
+                };
+                let task_id_projects = if workspace.is_some() {
+                    let id = core_rpc.next_background_task_id();
+                    core_rpc.background_task_queued(id, "Detecting projects".into());
+                    Some(id)
+                } else {
+                    None
+                };
+                let task_id_shell = {
+                    let id = core_rpc.next_background_task_id();
+                    core_rpc.background_task_queued(
+                        id,
+                        "Resolving shell environment".into(),
+                    );
+                    id
+                };
+
                 thread::spawn(move || {
                     tracing::info!("[bg-thread] Background thread started");
 
                     // Git file statuses can be very slow on large repos
                     // (scans all files including node_modules, etc.)
                     if let Some(ws) = workspace.as_ref() {
+                        let task_id = task_id_git.unwrap();
+                        core_rpc.background_task_started(
+                            task_id,
+                            "Scanning git status".into(),
+                        );
                         tracing::info!("[bg-thread] Reading git file statuses...");
                         let statuses = read_git_file_statuses(ws);
                         tracing::info!(
@@ -116,15 +148,22 @@ impl ProxyHandler for Dispatcher {
                             statuses.len()
                         );
                         core_rpc.git_file_status_changed(statuses);
+                        core_rpc.background_task_finished(task_id);
                     }
                     // Detect sub-projects
                     let mut projects = if let Some(ws) = workspace.as_ref() {
+                        let task_id = task_id_projects.unwrap();
+                        core_rpc.background_task_started(
+                            task_id,
+                            "Detecting projects".into(),
+                        );
                         tracing::info!(
                             "[bg-thread] Detecting projects in {:?}...",
                             ws
                         );
                         let p = crate::project::detect_projects(ws);
                         tracing::info!("[bg-thread] Detected {} projects", p.len());
+                        core_rpc.background_task_finished(task_id);
                         p
                     } else {
                         Vec::new()
@@ -136,6 +175,10 @@ impl ProxyHandler for Dispatcher {
                     core_rpc.projects_detected(projects.clone());
 
                     // Resolve shell envs (slow: spawns login shells)
+                    core_rpc.background_task_started(
+                        task_id_shell,
+                        "Resolving shell environment".into(),
+                    );
                     tracing::info!("[bg-thread] Resolving default shell env...");
                     let default_env =
                         crate::shell_env::resolve_shell_env(workspace.as_deref());
@@ -143,6 +186,34 @@ impl ProxyHandler for Dispatcher {
                         "[bg-thread] Default shell env resolved ({} vars)",
                         default_env.len()
                     );
+                    core_rpc.background_task_finished(task_id_shell);
+
+                    // Pre-announce per-project env resolutions as queued
+                    // (we now know which projects exist after detection).
+                    let mut project_task_ids: Vec<(PathBuf, u64, String)> =
+                        Vec::new();
+                    {
+                        let mut seen_roots =
+                            std::collections::HashSet::<PathBuf>::new();
+                        for project in &projects {
+                            if seen_roots.insert(project.root.clone()) {
+                                let dir_name = project
+                                    .root
+                                    .file_name()
+                                    .map(|n| n.to_string_lossy().into_owned())
+                                    .unwrap_or_default();
+                                let name =
+                                    format!("Resolving environment: {dir_name}");
+                                let id = core_rpc.next_background_task_id();
+                                core_rpc.background_task_queued(id, name.clone());
+                                project_task_ids.push((
+                                    project.root.clone(),
+                                    id,
+                                    name,
+                                ));
+                            }
+                        }
+                    }
 
                     let mut project_envs: HashMap<
                         PathBuf,
@@ -150,6 +221,13 @@ impl ProxyHandler for Dispatcher {
                     > = HashMap::new();
                     for project in &mut projects {
                         let env = if !project_envs.contains_key(&project.root) {
+                            // Find the pre-allocated task ID for this project root.
+                            let (task_id, task_name) = project_task_ids
+                                .iter()
+                                .find(|(root, _, _)| root == &project.root)
+                                .map(|(_, id, name)| (*id, name.clone()))
+                                .unwrap();
+                            core_rpc.background_task_started(task_id, task_name);
                             tracing::info!(
                                 "[bg-thread] Resolving shell env for project {:?}...",
                                 project.root
@@ -162,6 +240,7 @@ impl ProxyHandler for Dispatcher {
                                 project.root,
                                 env.len()
                             );
+                            core_rpc.background_task_finished(task_id);
                             let arc_env = Arc::new(env);
                             project_envs
                                 .insert(project.root.clone(), arc_env.clone());
@@ -332,28 +411,33 @@ impl ProxyHandler for Dispatcher {
                     .cloned()
                     .collect::<Vec<PathBuf>>();
                 let proxy_rpc = self.proxy_rpc.clone();
+                let core_rpc = self.core_rpc.clone();
 
                 thread::spawn(move || {
-                    proxy_rpc.handle_response(
-                        id,
-                        search_in_path(
-                            our_id,
-                            &WORKER_ID,
-                            workspace
-                                .iter()
-                                .flat_map(|w| ignore::Walk::new(w).flatten())
-                                .chain(
-                                    buffers.iter().flat_map(|p| {
-                                        ignore::Walk::new(p).flatten()
-                                    }),
-                                )
-                                .map(|p| p.into_path()),
-                            &pattern,
-                            case_sensitive,
-                            whole_word,
-                            is_regex,
-                        ),
+                    let task_id = core_rpc.next_background_task_id();
+                    core_rpc.background_task_started(
+                        task_id,
+                        "Searching workspace".into(),
                     );
+                    let result = search_in_path(
+                        our_id,
+                        &WORKER_ID,
+                        workspace
+                            .iter()
+                            .flat_map(|w| ignore::Walk::new(w).flatten())
+                            .chain(
+                                buffers
+                                    .iter()
+                                    .flat_map(|p| ignore::Walk::new(p).flatten()),
+                            )
+                            .map(|p| p.into_path()),
+                        &pattern,
+                        case_sensitive,
+                        whole_word,
+                        is_regex,
+                    );
+                    core_rpc.background_task_finished(task_id);
+                    proxy_rpc.handle_response(id, result);
                 });
             }
             CompletionResolve {
@@ -620,7 +704,13 @@ impl ProxyHandler for Dispatcher {
             GetFiles { .. } => {
                 let workspace = self.workspace.clone();
                 let proxy_rpc = self.proxy_rpc.clone();
+                let core_rpc = self.core_rpc.clone();
                 thread::spawn(move || {
+                    let task_id = core_rpc.next_background_task_id();
+                    core_rpc.background_task_started(
+                        task_id,
+                        "Indexing workspace files".into(),
+                    );
                     let result = if let Some(workspace) = workspace {
                         let git_folder =
                             ignore::overrides::OverrideBuilder::new(&workspace)
@@ -654,6 +744,7 @@ impl ProxyHandler for Dispatcher {
                     } else {
                         Ok(ProxyResponse::GetFilesResponse { items: Vec::new() })
                     };
+                    core_rpc.background_task_finished(task_id);
                     proxy_rpc.handle_response(id, result);
                 });
             }
@@ -1235,8 +1326,12 @@ impl FileWatchNotifier {
                 core_rpc.workspace_file_change();
             }
             if let Some(workspace) = workspace.as_ref() {
+                let task_id = core_rpc.next_background_task_id();
+                core_rpc
+                    .background_task_started(task_id, "Updating git status".into());
                 let statuses = read_git_file_statuses(workspace);
                 core_rpc.git_file_status_changed(statuses);
+                core_rpc.background_task_finished(task_id);
             }
         });
         *handler = Some(sender);

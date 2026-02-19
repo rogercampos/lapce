@@ -772,6 +772,7 @@ fn workspace_view(workspace_data: Rc<WorkspaceData>) -> impl View {
             })
             .style(|s| s.size_full().flex_col())
             .debug_name("Base Layer"),
+            crate::status::background_tasks_popup(workspace_data.clone()),
             lsp_views::completion(workspace_data.clone()),
             lsp_views::hover(workspace_data.clone()),
             lsp_views::code_action(workspace_data.clone()),

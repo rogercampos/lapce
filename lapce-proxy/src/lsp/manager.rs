@@ -160,6 +160,12 @@ impl LspManager {
                 Some(project_root.clone())
             };
 
+            let task_id = self.lsp_rpc.next_background_task_id();
+            self.lsp_rpc.background_task_started(
+                task_id,
+                format!("Starting LSP: {}", config.display_name),
+            );
+
             // Resolve the command. For npm-based servers, resolve from the
             // managed directory (installing if needed). For others, use the
             // command as-is.
@@ -180,6 +186,7 @@ impl LspManager {
                                     message: format!("{err}"),
                                 },
                             );
+                            self.lsp_rpc.background_task_finished(task_id);
                             break;
                         }
                     }
@@ -231,6 +238,7 @@ impl LspManager {
                                     config,
                                     project_root,
                                 );
+                                self.lsp_rpc.background_task_finished(task_id);
                                 break;
                             }
                         }
@@ -254,6 +262,7 @@ impl LspManager {
                     );
                 }
             }
+            self.lsp_rpc.background_task_finished(task_id);
             break;
         }
     }
@@ -293,13 +302,20 @@ impl LspManager {
             )
         })?;
 
+        let task_id = self.lsp_rpc.next_background_task_id();
+        self.lsp_rpc
+            .background_task_started(task_id, format!("Installing gem: {gem}"));
+
         tracing::info!("Installing gem {} for {}", gem, config.display_name);
 
         let output = Command::new(&gem_cmd)
             .args(["install", gem])
             .envs(env.as_ref())
             .output()
-            .map_err(|e| format!("Failed to run gem install {}: {}", gem, e))?;
+            .map_err(|e| {
+                self.lsp_rpc.background_task_finished(task_id);
+                format!("Failed to run gem install {}: {}", gem, e)
+            })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -312,10 +328,12 @@ impl LspManager {
                     message: msg.clone(),
                 },
             );
+            self.lsp_rpc.background_task_finished(task_id);
             return Err(msg);
         }
 
         tracing::info!("Successfully installed gem {}", gem);
+        self.lsp_rpc.background_task_finished(task_id);
         Ok(())
     }
 
@@ -348,6 +366,10 @@ impl LspManager {
             )
         })?;
 
+        let task_id = self.lsp_rpc.next_background_task_id();
+        self.lsp_rpc
+            .background_task_started(task_id, format!("Installing {package}"));
+
         tracing::info!("Installing {} via npm into {:?}", package, prefix_dir,);
 
         self.lsp_rpc.show_message(
@@ -368,11 +390,13 @@ impl LspManager {
             .envs(env.as_ref())
             .output()
             .map_err(|e| {
+                self.lsp_rpc.background_task_finished(task_id);
                 format!("Failed to run npm install for {}: {}", package, e)
             })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
+            self.lsp_rpc.background_task_finished(task_id);
             return Err(format!(
                 "npm install {} failed: {}",
                 package,
@@ -380,6 +404,7 @@ impl LspManager {
             ));
         }
 
+        self.lsp_rpc.background_task_finished(task_id);
         if bin_path.exists() {
             Ok(bin_path.to_string_lossy().into_owned())
         } else {

@@ -7,6 +7,24 @@ use std::{
     },
 };
 
+pub type BackgroundTaskId = u64;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BackgroundTaskStatus {
+    Queued {
+        name: String,
+    },
+    Started {
+        name: String,
+    },
+    Progress {
+        message: Option<String>,
+        percentage: Option<u32>,
+    },
+    Finished,
+}
+
 use crossbeam_channel::{Receiver, Sender};
 use lsp_types::{
     CancelParams, CompletionResponse, LogMessageParams, ProgressParams,
@@ -131,6 +149,10 @@ pub enum CoreNotification {
     ProjectsDetected {
         projects: Vec<ProjectInfo>,
     },
+    BackgroundTaskUpdate {
+        task_id: BackgroundTaskId,
+        status: BackgroundTaskStatus,
+    },
 }
 
 /// Currently empty -- the proxy never makes requests to the UI that require
@@ -155,6 +177,7 @@ pub struct CoreRpcHandler {
     tx: Sender<CoreRpc>,
     rx: Receiver<CoreRpc>,
     id: Arc<AtomicU64>,
+    bg_task_id: Arc<AtomicU64>,
     #[allow(clippy::type_complexity)]
     pending: Arc<Mutex<HashMap<u64, Sender<Result<CoreResponse, RpcError>>>>>,
 }
@@ -166,6 +189,7 @@ impl CoreRpcHandler {
             tx,
             rx,
             id: Arc::new(AtomicU64::new(0)),
+            bg_task_id: Arc::new(AtomicU64::new(0)),
             pending: Arc::new(Mutex::new(HashMap::new())),
         }
     }
@@ -313,6 +337,46 @@ impl CoreRpcHandler {
 
     pub fn projects_detected(&self, projects: Vec<ProjectInfo>) {
         self.notification(CoreNotification::ProjectsDetected { projects });
+    }
+
+    pub fn next_background_task_id(&self) -> BackgroundTaskId {
+        self.bg_task_id.fetch_add(1, Ordering::Relaxed)
+    }
+
+    pub fn background_task_queued(&self, task_id: BackgroundTaskId, name: String) {
+        self.notification(CoreNotification::BackgroundTaskUpdate {
+            task_id,
+            status: BackgroundTaskStatus::Queued { name },
+        });
+    }
+
+    pub fn background_task_started(&self, task_id: BackgroundTaskId, name: String) {
+        self.notification(CoreNotification::BackgroundTaskUpdate {
+            task_id,
+            status: BackgroundTaskStatus::Started { name },
+        });
+    }
+
+    pub fn background_task_progress(
+        &self,
+        task_id: BackgroundTaskId,
+        message: Option<String>,
+        percentage: Option<u32>,
+    ) {
+        self.notification(CoreNotification::BackgroundTaskUpdate {
+            task_id,
+            status: BackgroundTaskStatus::Progress {
+                message,
+                percentage,
+            },
+        });
+    }
+
+    pub fn background_task_finished(&self, task_id: BackgroundTaskId) {
+        self.notification(CoreNotification::BackgroundTaskUpdate {
+            task_id,
+            status: BackgroundTaskStatus::Finished,
+        });
     }
 }
 

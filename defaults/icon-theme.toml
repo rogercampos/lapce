@@ -53,6 +53,9 @@ name = "SourceDelve Codicons"
 "image_loading" = "refresh.svg"
 "image_error" = "error.svg"
 
+"background.working" = "gear.svg"
+"background.queued" = "history.svg"
+
 "git.branch" = "source-control.svg"
 "scm.icon" = "source-control.svg"
 "scm.diff.modified" = "diff-modified.svg"
