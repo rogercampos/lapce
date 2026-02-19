@@ -83,6 +83,13 @@ pub enum ProxyRequest {
         /// notifications back to the correct `GlobalSearchData` instance.
         search_id: u64,
     },
+    GlobalReplace {
+        pattern: String,
+        replacement: String,
+        case_sensitive: bool,
+        whole_word: bool,
+        is_regex: bool,
+    },
     CompletionResolve {
         plugin_id: PluginId,
         completion_item: Box<CompletionItem>,
@@ -361,6 +368,9 @@ pub enum ProxyResponse {
     },
     GlobalSearchResponse {
         matches: IndexMap<PathBuf, Vec<SearchMatch>>,
+    },
+    GlobalReplaceResponse {
+        modified_count: usize,
     },
     CreatePathResponse {
         path: PathBuf,
@@ -651,6 +661,27 @@ impl ProxyRpcHandler {
                 is_regex,
                 max_results,
                 search_id,
+            },
+            f,
+        );
+    }
+
+    pub fn global_replace(
+        &self,
+        pattern: String,
+        replacement: String,
+        case_sensitive: bool,
+        whole_word: bool,
+        is_regex: bool,
+        f: impl ProxyCallback + 'static,
+    ) {
+        self.request_async(
+            ProxyRequest::GlobalReplace {
+                pattern,
+                replacement,
+                case_sensitive,
+                whole_word,
+                is_regex,
             },
             f,
         );

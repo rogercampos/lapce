@@ -172,6 +172,11 @@ pub enum CoreNotification {
     GlobalSearchDone {
         search_id: u64,
     },
+    /// Signals that a global replace operation has finished, listing the files
+    /// that were modified on disk so the UI can reload open documents.
+    GlobalReplaceDone {
+        modified_files: Vec<PathBuf>,
+    },
 }
 
 /// Currently empty -- the proxy never makes requests to the UI that require
@@ -419,6 +424,10 @@ impl CoreRpcHandler {
 
     pub fn global_search_done(&self, search_id: u64) {
         self.notification(CoreNotification::GlobalSearchDone { search_id });
+    }
+
+    pub fn global_replace_done(&self, modified_files: Vec<PathBuf>) {
+        self.notification(CoreNotification::GlobalReplaceDone { modified_files });
     }
 }
 

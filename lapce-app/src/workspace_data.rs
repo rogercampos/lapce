@@ -1661,6 +1661,28 @@ impl WorkspaceData {
                     });
                 }
             }
+            CoreNotification::GlobalReplaceDone { modified_files } => {
+                for path in modified_files {
+                    let doc = self
+                        .main_split
+                        .docs
+                        .with_untracked(|docs| docs.get(path).cloned());
+                    if let Some(doc) = doc {
+                        match std::fs::read_to_string(path) {
+                            Ok(content) => {
+                                doc.handle_file_changed(lapce_xi_rope::Rope::from(
+                                    content,
+                                ));
+                            }
+                            Err(e) => {
+                                tracing::error!(
+                                    "Failed to reload file after replace: {path:?}: {e}"
+                                );
+                            }
+                        }
+                    }
+                }
+            }
             CoreNotification::GetFilesDiff { paths } => {
                 self.go_to_file_data.append_files(paths);
             }

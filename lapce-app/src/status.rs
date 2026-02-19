@@ -601,5 +601,8 @@ fn format_task_display(info: &BackgroundTaskInfo) -> String {
             text = format!("{}: {}", text, msg);
         }
     }
+    if let Some(pct) = info.percentage {
+        text = format!("{} \u{2014} {}%", text, pct);
+    }
     text
 }

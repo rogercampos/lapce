@@ -369,6 +369,36 @@ impl ProxyHandler for Dispatcher {
                     proxy_rpc.handle_response(id, result);
                 });
             }
+            GlobalReplace {
+                pattern,
+                replacement,
+                case_sensitive,
+                whole_word,
+                is_regex,
+            } => {
+                let workspace = self.workspace.clone();
+                let proxy_rpc = self.proxy_rpc.clone();
+                let core_rpc = self.core_rpc.clone();
+                let excluded_directories = self.excluded_directories.clone();
+
+                thread::spawn(move || {
+                    let task_id = core_rpc.next_background_task_id();
+                    core_rpc.background_task_started(task_id, "Replace All".into());
+                    let result = global_replace(
+                        workspace.as_deref(),
+                        &excluded_directories,
+                        &pattern,
+                        &replacement,
+                        case_sensitive,
+                        whole_word,
+                        is_regex,
+                        &core_rpc,
+                        task_id,
+                    );
+                    core_rpc.background_task_finished(task_id);
+                    proxy_rpc.handle_response(id, result);
+                });
+            }
             CompletionResolve {
                 plugin_id,
                 completion_item,
@@ -1569,6 +1599,214 @@ fn parallel_search(
     Ok(ProxyResponse::GlobalSearchResponse {
         matches: IndexMap::new(),
     })
+}
+
+/// Replace all occurrences of a pattern on a single line (proxy-side version).
+fn replace_all_on_line(
+    line: &str,
+    pattern: &str,
+    replacement: &str,
+    case_sensitive: bool,
+    whole_word: bool,
+    is_regex: bool,
+) -> String {
+    if is_regex {
+        let case_flag = if case_sensitive { "" } else { "(?i)" };
+        let full_pattern = if whole_word {
+            format!("{case_flag}\\b{pattern}\\b")
+        } else {
+            format!("{case_flag}{pattern}")
+        };
+        if let Ok(re) = regex::Regex::new(&full_pattern) {
+            re.replace_all(line, replacement).to_string()
+        } else {
+            line.to_string()
+        }
+    } else {
+        let mut result = String::new();
+        let mut remaining = line;
+        loop {
+            let found = if case_sensitive {
+                remaining.find(pattern)
+            } else {
+                let lower = remaining.to_lowercase();
+                let lower_pat = pattern.to_lowercase();
+                lower.find(&lower_pat)
+            };
+            let Some(pos) = found else {
+                result.push_str(remaining);
+                break;
+            };
+            let end = pos + pattern.len();
+
+            if whole_word {
+                let abs_start = line.len() - remaining.len() + pos;
+                let abs_end = abs_start + pattern.len();
+                let before_ok = abs_start == 0
+                    || !line.as_bytes()[abs_start - 1].is_ascii_alphanumeric()
+                        && line.as_bytes()[abs_start - 1] != b'_';
+                let after_ok = abs_end >= line.len()
+                    || !line.as_bytes()[abs_end].is_ascii_alphanumeric()
+                        && line.as_bytes()[abs_end] != b'_';
+                if before_ok && after_ok {
+                    result.push_str(&remaining[..pos]);
+                    result.push_str(replacement);
+                    remaining = &remaining[end..];
+                } else {
+                    result.push_str(&remaining[..end]);
+                    remaining = &remaining[end..];
+                }
+            } else {
+                result.push_str(&remaining[..pos]);
+                result.push_str(replacement);
+                remaining = &remaining[end..];
+            }
+        }
+        result
+    }
+}
+
+/// Replace a single file's matching lines in-place. Returns true if the file was modified.
+fn replace_in_file(
+    matcher: &grep_regex::RegexMatcher,
+    path: &std::path::Path,
+    pattern: &str,
+    replacement: &str,
+    case_sensitive: bool,
+    whole_word: bool,
+    is_regex: bool,
+) -> bool {
+    let line_matches = search_file(matcher, path);
+    if line_matches.is_empty() {
+        return false;
+    }
+
+    let Ok(content) = std::fs::read_to_string(path) else {
+        return false;
+    };
+
+    let mut lines: Vec<String> =
+        content.split('\n').map(|s| s.to_string()).collect();
+
+    // Collect unique matched line numbers
+    let mut matched_lines: Vec<usize> =
+        line_matches.iter().map(|m| m.line).collect();
+    matched_lines.dedup();
+
+    for line_num in matched_lines {
+        let line_idx = line_num.saturating_sub(1);
+        if line_idx >= lines.len() {
+            continue;
+        }
+        lines[line_idx] = replace_all_on_line(
+            &lines[line_idx],
+            pattern,
+            replacement,
+            case_sensitive,
+            whole_word,
+            is_regex,
+        );
+    }
+
+    let new_content = lines.join("\n");
+    if new_content == content {
+        return false;
+    }
+    std::fs::write(path, &new_content).is_ok()
+}
+
+/// Background global replace: walks the workspace, replaces all matches in all files,
+/// reports progress, and sends a GlobalReplaceDone notification with modified file paths.
+fn global_replace(
+    workspace: Option<&std::path::Path>,
+    excluded_directories: &[String],
+    pattern: &str,
+    replacement: &str,
+    case_sensitive: bool,
+    whole_word: bool,
+    is_regex: bool,
+    core_rpc: &CoreRpcHandler,
+    task_id: u64,
+) -> Result<ProxyResponse, RpcError> {
+    let mut builder = RegexMatcherBuilder::new();
+    let builder = builder.case_insensitive(!case_sensitive).word(whole_word);
+    let matcher = if is_regex {
+        builder.build(pattern)
+    } else {
+        builder.build_literals(&[&regex::escape(pattern)])
+    };
+    let matcher = matcher.map_err(|_| RpcError::new("can't build matcher"))?;
+
+    let workspace = match workspace {
+        Some(w) => w,
+        None => {
+            core_rpc.global_replace_done(Vec::new());
+            return Ok(ProxyResponse::GlobalReplaceResponse { modified_count: 0 });
+        }
+    };
+
+    // Phase 1: Collect all file paths
+    let overrides =
+        Dispatcher::build_walk_overrides(workspace, excluded_directories);
+    let mut walk_builder = ignore::WalkBuilder::new(workspace);
+    walk_builder.hidden(false).parents(false).require_git(false);
+    if let Some(overrides) = overrides {
+        walk_builder.overrides(overrides);
+    }
+
+    let mut all_files: Vec<PathBuf> = Vec::new();
+    for entry in walk_builder.build() {
+        let entry = match entry {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        if entry.file_type().map_or(false, |ft| ft.is_file()) {
+            all_files.push(entry.into_path());
+        }
+    }
+
+    let total = all_files.len();
+    let mut modified_files: Vec<PathBuf> = Vec::new();
+    let mut last_reported_pct: u32 = 0;
+
+    // Phase 2: Process each file
+    for (i, path) in all_files.iter().enumerate() {
+        if replace_in_file(
+            &matcher,
+            path,
+            pattern,
+            replacement,
+            case_sensitive,
+            whole_word,
+            is_regex,
+        ) {
+            modified_files.push(path.clone());
+        }
+
+        // Report progress every ~5%
+        let pct = if total > 0 {
+            ((i + 1) * 100 / total) as u32
+        } else {
+            100
+        };
+        if pct >= last_reported_pct + 5 || i + 1 == total {
+            let msg = format!(
+                "{}/{} files ({} replaced)",
+                i + 1,
+                total,
+                modified_files.len()
+            );
+            core_rpc.background_task_progress(task_id, Some(msg), Some(pct));
+            last_reported_pct = pct;
+        }
+    }
+
+    let modified_count = modified_files.len();
+
+    // Phase 3: Notify UI about modified files
+    core_rpc.global_replace_done(modified_files);
+
+    Ok(ProxyResponse::GlobalReplaceResponse { modified_count })
 }
 
 #[cfg(test)]

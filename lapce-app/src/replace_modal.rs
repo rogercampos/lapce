@@ -113,21 +113,32 @@ impl ReplaceModalData {
             })
         });
 
-        // Reset index and auto-preview first match when the search pattern changes.
-        // We track the search editor buffer (not flat_matches) so that single-match
-        // removals during replacement don't reset the index to 0.
+        // Reset index when the search pattern changes. Preview is NOT set here
+        // because with streaming results, flat_matches may still be empty at this
+        // point. The separate effect below handles preview once results arrive.
+        {
+            let buffer = search_editor.doc().buffer;
+            cx.create_effect(move |_| {
+                let _pattern = buffer.with(|b| b.to_string());
+                index.set(0);
+                has_preview.set(false);
+            });
+        }
+
+        // Auto-preview first match when results arrive (streaming). This effect
+        // tracks flat_matches.get() but only acts when transitioning from empty
+        // to non-empty (or when has_preview is false), so that single-match
+        // removals during replacement don't reset the view.
         {
             let preview_editor = preview_editor.clone();
             let main_split = main_split.clone();
-            let buffer = search_editor.doc().buffer;
             cx.create_effect(move |_| {
-                // Track the search buffer — when the pattern changes, new results
-                // arrive and we should reset to the first match.
-                let _pattern = buffer.with(|b| b.to_string());
-                // Read the current flat matches (untracked — we only want to
-                // rerun when the pattern changes, not on every match removal).
-                let matches = flat_matches.get_untracked();
-                index.set(0);
+                let matches = flat_matches.get();
+                if has_preview.get_untracked() {
+                    // Already showing a preview — don't reset on incremental
+                    // streaming updates or match removals.
+                    return;
+                }
                 if let Some(m) = matches.first() {
                     let (doc, new_doc) = main_split.get_doc(m.path.clone(), None);
                     preview_editor.update_doc(doc);
@@ -144,8 +155,6 @@ impl ReplaceModalData {
                         None,
                     );
                     has_preview.set(true);
-                } else {
-                    has_preview.set(false);
                 }
             });
         }
@@ -362,13 +371,10 @@ impl ReplaceModalData {
         self.remove_match_and_advance(idx, &path, &search_match);
     }
 
-    /// Replace all matches, then close the modal.
+    /// Replace all matches across the entire workspace via the proxy.
+    /// The proxy performs an uncapped search and replaces all occurrences
+    /// in a background thread, reporting progress to the status bar.
     pub fn replace_all(&self) {
-        let matches = self.flat_matches.get_untracked();
-        if matches.is_empty() {
-            return;
-        }
-
         let replacement = self
             .replace_editor
             .doc()
@@ -387,68 +393,18 @@ impl ReplaceModalData {
         let whole_words = self.global_search.whole_words.get_untracked();
         let is_regex = self.global_search.is_regex.get_untracked();
 
-        // Group matches by file path — collect owned data to avoid borrow conflicts
-        let mut by_file: indexmap::IndexMap<PathBuf, Vec<SearchMatch>> =
-            indexmap::IndexMap::new();
-        for m in matches.iter() {
-            by_file
-                .entry(m.path.clone())
-                .or_default()
-                .push(m.search_match.clone());
-        }
+        let case_sensitive = matches!(case_matching, CaseMatching::Exact);
 
-        // Drop the borrowed matches before we start mutating
-        drop(matches);
+        self.common.proxy.global_replace(
+            pattern,
+            replacement,
+            case_sensitive,
+            whole_words,
+            is_regex,
+            |_result| {},
+        );
 
-        // Collect all paths that need doc reload
-        let mut changed_files: Vec<(PathBuf, String)> = Vec::new();
-
-        for (path, file_matches) in &by_file {
-            let Ok(content) = std::fs::read_to_string(path) else {
-                continue;
-            };
-
-            let mut lines: Vec<String> =
-                content.split('\n').map(|s| s.to_string()).collect();
-
-            // Group by line, then process in reverse line order to preserve offsets
-            let mut by_line: std::collections::BTreeMap<usize, Vec<&SearchMatch>> =
-                std::collections::BTreeMap::new();
-            for sm in file_matches {
-                by_line.entry(sm.line).or_default().push(sm);
-            }
-
-            for (line_num, _line_matches) in by_line.iter().rev() {
-                let line_idx = line_num.saturating_sub(1);
-                if line_idx >= lines.len() {
-                    continue;
-                }
-                // Replace all occurrences of the pattern on this line
-                let line = &lines[line_idx];
-                let new_line = replace_all_on_line(
-                    line,
-                    &pattern,
-                    &replacement,
-                    case_matching,
-                    whole_words,
-                    is_regex,
-                );
-                lines[line_idx] = new_line;
-            }
-
-            let new_content = lines.join("\n");
-            if std::fs::write(path, &new_content).is_err() {
-                continue;
-            }
-            changed_files.push((path.clone(), new_content));
-        }
-
-        // Reload open docs after all file writes are done
-        for (path, new_content) in &changed_files {
-            self.reload_open_doc(path, new_content);
-        }
-
-        // Clear search results
+        // Clear search results and close the modal immediately
         self.global_search
             .search_result
             .set(indexmap::IndexMap::new());
@@ -563,76 +519,6 @@ fn find_pattern_on_line(
         } else {
             Some((start, end))
         }
-    }
-}
-
-/// Replace all occurrences of a pattern on a single line.
-fn replace_all_on_line(
-    line: &str,
-    pattern: &str,
-    replacement: &str,
-    case_matching: CaseMatching,
-    whole_words: bool,
-    is_regex: bool,
-) -> String {
-    if is_regex {
-        let case_flag = match case_matching {
-            CaseMatching::Exact => "",
-            CaseMatching::CaseInsensitive => "(?i)",
-        };
-        let full_pattern = if whole_words {
-            format!("{case_flag}\\b{pattern}\\b")
-        } else {
-            format!("{case_flag}{pattern}")
-        };
-        if let Ok(re) = Regex::new(&full_pattern) {
-            re.replace_all(line, replacement).to_string()
-        } else {
-            line.to_string()
-        }
-    } else {
-        let mut result = String::new();
-        let mut remaining = line;
-        loop {
-            let found = match case_matching {
-                CaseMatching::Exact => remaining.find(pattern),
-                CaseMatching::CaseInsensitive => {
-                    let lower = remaining.to_lowercase();
-                    let lower_pat = pattern.to_lowercase();
-                    lower.find(&lower_pat)
-                }
-            };
-            let Some(pos) = found else {
-                result.push_str(remaining);
-                break;
-            };
-            let end = pos + pattern.len();
-
-            if whole_words {
-                let abs_start = line.len() - remaining.len() + pos;
-                let abs_end = abs_start + pattern.len();
-                let before_ok = abs_start == 0
-                    || !line.as_bytes()[abs_start - 1].is_ascii_alphanumeric()
-                        && line.as_bytes()[abs_start - 1] != b'_';
-                let after_ok = abs_end >= line.len()
-                    || !line.as_bytes()[abs_end].is_ascii_alphanumeric()
-                        && line.as_bytes()[abs_end] != b'_';
-                if before_ok && after_ok {
-                    result.push_str(&remaining[..pos]);
-                    result.push_str(replacement);
-                    remaining = &remaining[end..];
-                } else {
-                    // Not a whole word match; skip past it
-                    result.push_str(&remaining[..end]);
-                    remaining = &remaining[end..];
-                }
-            } else {
-                result.push_str(&remaining[..pos]);
-                result.push_str(replacement);
-                remaining = &remaining[end..];
-            }
-        }
-        result
     }
 }
 
@@ -785,6 +671,8 @@ fn replace_modal_content(workspace_data: Rc<WorkspaceData>) -> impl View {
     let item_height = 26.0;
     let search_buffer = data.search_editor.doc().buffer;
 
+    let searching = data.global_search.searching;
+
     let content = stack((
         // Header: Search + Replace inputs
         replace_modal_inputs(data.clone(), config, focus),
@@ -797,10 +685,11 @@ fn replace_modal_content(workspace_data: Rc<WorkspaceData>) -> impl View {
             flat_matches,
             has_preview,
             search_buffer,
+            searching,
             item_height,
         ),
         // Footer: Replace / Replace All buttons
-        replace_modal_footer(data, config),
+        replace_modal_footer(data, config, flat_matches, searching),
     ))
     .style(move |s| {
         let config = config.get();
@@ -895,6 +784,7 @@ fn replace_modal_body(
     flat_matches: Memo<Vec<FlatSearchMatch>>,
     has_preview: RwSignal<bool>,
     search_buffer: RwSignal<Buffer>,
+    searching: RwSignal<bool>,
     item_height: f64,
 ) -> impl View {
     stack((
@@ -1091,8 +981,11 @@ fn replace_modal_body(
             label(move || {
                 let input_text = search_buffer.with(|b| b.to_string());
                 let is_empty = flat_matches.with(|items| items.is_empty());
+                let is_searching = searching.get();
                 if input_text.is_empty() {
                     "Type search query to find in files".to_string()
+                } else if is_searching && is_empty {
+                    "Searching\u{2026}".to_string()
                 } else if is_empty {
                     "No results".to_string()
                 } else {
@@ -1166,6 +1059,8 @@ fn replace_modal_preview_editor(
 fn replace_modal_footer(
     data: ReplaceModalData,
     config: ReadSignal<Arc<LapceConfig>>,
+    flat_matches: Memo<Vec<FlatSearchMatch>>,
+    searching: RwSignal<bool>,
 ) -> impl View {
     let replace_data = data.clone();
     let replace_all_data = data.clone();
@@ -1177,6 +1072,29 @@ fn replace_modal_footer(
     };
 
     stack((
+        // Match count / searching status
+        label(move || {
+            let count = flat_matches.with(|m| m.len());
+            let is_searching = searching.get();
+            if is_searching {
+                if count > 0 {
+                    format!("{count} matches (searching\u{2026})")
+                } else {
+                    "Searching\u{2026}".to_string()
+                }
+            } else if count >= 100 {
+                format!("Showing first {count} results")
+            } else if count > 0 {
+                format!("{count} matches")
+            } else {
+                String::new()
+            }
+        })
+        .style(move |s| {
+            s.color(config.get().color(LapceColor::EDITOR_DIM))
+                .font_size(12.0)
+        }),
+        container(text("")).style(|s| s.flex_grow(1.0)),
         // Replace button
         label(|| "Replace".to_string())
             .on_click_stop(move |_| {
