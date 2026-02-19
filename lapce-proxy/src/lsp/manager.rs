@@ -1,5 +1,9 @@
 use std::{
-    borrow::Cow, collections::HashMap, path::PathBuf, process::Command, sync::Arc,
+    borrow::Cow,
+    collections::HashMap,
+    path::PathBuf,
+    process::Command,
+    sync::{Arc, Mutex},
 };
 
 use lapce_core::directory::Directory;
@@ -15,6 +19,8 @@ use lsp_types::{
 };
 use serde_json::Value;
 
+use dyn_clone::clone_box;
+
 use super::{ClonableCallback, LspRpcHandler, RpcCallback, client::LspClient};
 
 /// Describes one built-in LSP server.
@@ -28,6 +34,16 @@ pub struct LspServerConfig {
     pub init_options_json: Option<&'static str>,
     /// How to auto-install this server if the command is not found.
     pub auto_install: AutoInstall,
+    /// Condition that must be met for this server to activate.
+    pub activation_condition: ActivationCondition,
+}
+
+/// Condition that must be met for a server to activate.
+pub enum ActivationCondition {
+    /// Always activate when a matching file is opened.
+    Always,
+    /// Only activate if the given gem is present in the project's Gemfile.lock.
+    GemInGemfileLock(&'static str),
 }
 
 /// Strategy for auto-installing an LSP server when its binary is not found.
@@ -53,6 +69,16 @@ pub const LSP_SERVERS: &[LspServerConfig] = &[
             r#"{"enabledFeatures":{"semanticHighlighting":false}}"#,
         ),
         auto_install: AutoInstall::Gem { gem: "ruby-lsp" },
+        activation_condition: ActivationCondition::Always,
+    },
+    LspServerConfig {
+        display_name: "sorbet",
+        command: "srb",
+        args: &["tc", "--lsp"],
+        languages: &["ruby"],
+        init_options_json: None,
+        auto_install: AutoInstall::None,
+        activation_condition: ActivationCondition::GemInGemfileLock("sorbet-static"),
     },
     LspServerConfig {
         display_name: "bash-language-server",
@@ -63,6 +89,7 @@ pub const LSP_SERVERS: &[LspServerConfig] = &[
         auto_install: AutoInstall::Npm {
             package: "bash-language-server",
         },
+        activation_condition: ActivationCondition::Always,
     },
 ];
 
@@ -84,8 +111,8 @@ pub struct LspManager {
     lsp_rpc: LspRpcHandler,
     /// Active LSP server instances, keyed by PluginId
     servers: HashMap<PluginId, LspClient>,
-    /// Maps (language_id, project_root) → PluginId for routing
-    language_project_to_server: HashMap<(String, PathBuf), PluginId>,
+    /// Maps (language_id, project_root) → Vec<PluginId> for multi-server routing
+    language_project_to_server: HashMap<(String, PathBuf), Vec<PluginId>>,
     /// Tracks which (config_index, project_root) pairs have been activated
     activated_configs: Vec<(usize, PathBuf)>,
     /// Detected projects
@@ -203,19 +230,14 @@ impl LspManager {
         if opts.is_null() { None } else { Some(opts) }
     }
 
-    /// Try to activate a server for the given language and project root
-    /// if one isn't already running.
+    /// Try to activate all matching servers for the given language and project
+    /// root. Multiple configs can match (e.g. ruby-lsp + sorbet for Ruby).
     fn ensure_server_for_language(
         &mut self,
         language_id: &str,
         project_root: &PathBuf,
     ) {
-        let key = (language_id.to_string(), project_root.clone());
-        if self.language_project_to_server.contains_key(&key) {
-            return;
-        }
-
-        // Find a matching config that hasn't been activated for this project root
+        // Iterate ALL configs — don't break early, we may need multiple servers
         for (idx, config) in LSP_SERVERS.iter().enumerate() {
             let activation_key = (idx, project_root.clone());
             if self.activated_configs.contains(&activation_key) {
@@ -223,6 +245,18 @@ impl LspManager {
             }
             if !config.languages.contains(&language_id) {
                 continue;
+            }
+
+            // Check activation condition
+            match &config.activation_condition {
+                ActivationCondition::Always => {}
+                ActivationCondition::GemInGemfileLock(gem) => {
+                    if !gemfile_lock_contains_gem(project_root, gem) {
+                        // Mark as activated so we don't re-check on every file open
+                        self.activated_configs.push(activation_key);
+                        continue;
+                    }
+                }
             }
 
             // Use project-specific shell env (lazily resolved)
@@ -291,7 +325,7 @@ impl LspManager {
                                 },
                             );
                             self.lsp_rpc.background_task_finished(task_id);
-                            break;
+                            continue;
                         }
                     }
                 }
@@ -321,6 +355,7 @@ impl LspManager {
                 }
                 Err(first_err) => {
                     // For gem-based servers, try auto-installing then retry.
+                    let mut installed = false;
                     if let AutoInstall::Gem { gem } = &config.auto_install {
                         if self.try_gem_install(config, gem, &env).is_ok() {
                             // Retry after install
@@ -340,32 +375,32 @@ impl LspManager {
                                     config,
                                     project_root,
                                 );
-                                self.lsp_rpc.background_task_finished(task_id);
-                                break;
+                                installed = true;
                             }
                         }
                     }
 
-                    tracing::error!(
-                        "Failed to start LSP server {} for project {:?}: {:?}",
-                        config.display_name,
-                        project_root,
-                        first_err,
-                    );
-                    self.lsp_rpc.show_message(
-                        format!("LSP: {}", config.display_name),
-                        ShowMessageParams {
-                            typ: MessageType::WARNING,
-                            message: format!(
-                                "Could not start {}. Is '{}' installed and on your PATH?",
-                                config.display_name, config.command,
-                            ),
-                        },
-                    );
+                    if !installed {
+                        tracing::error!(
+                            "Failed to start LSP server {} for project {:?}: {:?}",
+                            config.display_name,
+                            project_root,
+                            first_err,
+                        );
+                        self.lsp_rpc.show_message(
+                            format!("LSP: {}", config.display_name),
+                            ShowMessageParams {
+                                typ: MessageType::WARNING,
+                                message: format!(
+                                    "Could not start {}. Is '{}' installed and on your PATH?",
+                                    config.display_name, config.command,
+                                ),
+                            },
+                        );
+                    }
                 }
             }
             self.lsp_rpc.background_task_finished(task_id);
-            break;
         }
     }
 
@@ -382,7 +417,9 @@ impl LspManager {
 
         for lang in config.languages {
             self.language_project_to_server
-                .insert((lang.to_string(), project_root.clone()), plugin_id);
+                .entry((lang.to_string(), project_root.clone()))
+                .or_default()
+                .push(plugin_id);
         }
 
         self.servers.insert(plugin_id, client);
@@ -517,15 +554,18 @@ impl LspManager {
         }
     }
 
-    /// Look up the server for a given language and file path.
-    fn find_server_for_path(
+    /// Look up all servers for a given language and file path.
+    fn find_servers_for_path(
         &self,
         language_id: &str,
         path: Option<&std::path::Path>,
-    ) -> Option<PluginId> {
+    ) -> Vec<PluginId> {
         let project_root = self.effective_project_root(path);
         let key = (language_id.to_string(), project_root);
-        self.language_project_to_server.get(&key).copied()
+        self.language_project_to_server
+            .get(&key)
+            .cloned()
+            .unwrap_or_default()
     }
 
     /// Replay didOpen for open files that belong to the given project root.
@@ -571,7 +611,8 @@ impl LspManager {
         }
     }
 
-    /// Route a request to the appropriate server based on language_id and path.
+    /// Route a request to the appropriate server(s) based on language_id and
+    /// path. When multiple servers match, fan-out to all and merge results.
     pub fn handle_server_request(
         &mut self,
         plugin_id: Option<PluginId>,
@@ -599,12 +640,23 @@ impl LspManager {
             return;
         }
 
-        // Route by (language, project_root)
-        let target_plugin_id = language_id
+        // Route by (language, project_root) — may have multiple servers
+        let server_ids = language_id
             .as_deref()
-            .and_then(|lang| self.find_server_for_path(lang, path.as_deref()));
+            .map(|lang| self.find_servers_for_path(lang, path.as_deref()))
+            .unwrap_or_default();
 
-        if let Some(pid) = target_plugin_id {
+        if server_ids.is_empty() {
+            f(
+                PluginId(0),
+                Err(RpcError::new("no LSP server available for this language")),
+            );
+            return;
+        }
+
+        // Single server — fast path (no merge needed)
+        if server_ids.len() == 1 {
+            let pid = server_ids[0];
             if let Some(server) = self.servers.get(&pid) {
                 server.server_request_async(
                     method,
@@ -615,15 +667,48 @@ impl LspManager {
                         f(pid, result);
                     },
                 );
-                return;
             }
+            return;
         }
 
-        // No server available
-        f(
-            PluginId(0),
-            Err(RpcError::new("no LSP server available for this language")),
-        );
+        // Multiple servers — fan-out and merge
+        let total = server_ids.len();
+        let state = Arc::new(Mutex::new(MultiServerState {
+            remaining: total,
+            results: Vec::with_capacity(total),
+        }));
+
+        for pid in server_ids {
+            let state = Arc::clone(&state);
+            let f = clone_box(&*f);
+            if let Some(server) = self.servers.get(&pid) {
+                server.server_request_async(
+                    method.clone(),
+                    params.clone(),
+                    language_id.clone(),
+                    path.clone(),
+                    move |result| {
+                        let mut guard = state.lock().unwrap();
+                        guard.results.push((pid, result));
+                        guard.remaining -= 1;
+                        if guard.remaining == 0 {
+                            let (merged_pid, merged_result) = merge_server_results(
+                                std::mem::take(&mut guard.results),
+                            );
+                            f(merged_pid, merged_result);
+                        }
+                    },
+                );
+            } else {
+                let mut guard = state.lock().unwrap();
+                guard.remaining -= 1;
+                if guard.remaining == 0 {
+                    let (merged_pid, merged_result) =
+                        merge_server_results(std::mem::take(&mut guard.results));
+                    f(merged_pid, merged_result);
+                }
+            }
+        }
     }
 
     pub fn handle_server_notification(
@@ -644,14 +729,20 @@ impl LspManager {
             return;
         }
 
-        // Route by (language, project_root)
-        let target_plugin_id = language_id
+        // Broadcast to all servers for this (language, project_root)
+        let server_ids = language_id
             .as_deref()
-            .and_then(|lang| self.find_server_for_path(lang, path.as_deref()));
+            .map(|lang| self.find_servers_for_path(lang, path.as_deref()))
+            .unwrap_or_default();
 
-        if let Some(pid) = target_plugin_id {
+        for pid in server_ids {
             if let Some(server) = self.servers.get(&pid) {
-                server.server_notification(method, params, language_id, path);
+                server.server_notification(
+                    method.clone(),
+                    params.clone(),
+                    language_id.clone(),
+                    path.clone(),
+                );
             }
         }
     }
@@ -666,14 +757,18 @@ impl LspManager {
         let file_path = document.uri.to_file_path().ok();
         let project_root = self.effective_project_root(file_path.as_deref());
 
-        // Ensure a server is running for this (language, project_root)
+        // Ensure servers are running for this (language, project_root)
         self.ensure_server_for_language(&document.language_id, &project_root);
 
-        // Forward to matching server
+        // Broadcast to all matching servers
         let key = (document.language_id.clone(), project_root);
-        let target_plugin_id = self.language_project_to_server.get(&key).copied();
+        let server_ids = self
+            .language_project_to_server
+            .get(&key)
+            .cloned()
+            .unwrap_or_default();
 
-        if let Some(pid) = target_plugin_id {
+        for pid in server_ids {
             let path = document.uri.to_file_path().ok();
             if let Some(server) = self.servers.get(&pid) {
                 server.server_notification(
@@ -681,7 +776,7 @@ impl LspManager {
                     DidOpenTextDocumentParams {
                         text_document: document.clone(),
                     },
-                    Some(document.language_id),
+                    Some(document.language_id.clone()),
                     path,
                 );
             }
@@ -695,15 +790,15 @@ impl LspManager {
         text_document: TextDocumentIdentifier,
         text: Rope,
     ) {
-        let target_plugin_id = self.find_server_for_path(&language_id, Some(&path));
+        let server_ids = self.find_servers_for_path(&language_id, Some(&path));
 
-        if let Some(pid) = target_plugin_id {
+        for pid in server_ids {
             if let Some(server) = self.servers.get(&pid) {
                 server.handle_did_save_text_document(
-                    language_id,
-                    path,
-                    text_document,
-                    text,
+                    language_id.clone(),
+                    path.clone(),
+                    text_document.clone(),
+                    text.clone(),
                 );
             }
         }
@@ -718,17 +813,16 @@ impl LspManager {
         new_text: Rope,
     ) {
         let path = document.uri.to_file_path().ok();
-        let target_plugin_id =
-            self.find_server_for_path(&language_id, path.as_deref());
+        let server_ids = self.find_servers_for_path(&language_id, path.as_deref());
 
-        if let Some(pid) = target_plugin_id {
+        for pid in server_ids {
             if let Some(server) = self.servers.get_mut(&pid) {
                 server.handle_did_change_text_document(
-                    language_id,
-                    document,
-                    delta,
-                    text,
-                    new_text,
+                    language_id.clone(),
+                    document.clone(),
+                    delta.clone(),
+                    text.clone(),
+                    new_text.clone(),
                 );
             }
         }
@@ -815,9 +909,83 @@ fn find_command_in_env(cmd: &str, env: &HashMap<String, String>) -> Option<Strin
     None
 }
 
+/// Check whether a gem is listed in the project's Gemfile.lock.
+fn gemfile_lock_contains_gem(
+    project_root: &std::path::Path,
+    gem_name: &str,
+) -> bool {
+    let gemfile_lock = project_root.join("Gemfile.lock");
+    parse_gemfile_lock_gems(&gemfile_lock)
+        .map(|gems| gems.iter().any(|g| g == gem_name))
+        .unwrap_or(false)
+}
+
+/// Accumulator for multi-server fan-out responses.
+struct MultiServerState {
+    remaining: usize,
+    results: Vec<(PluginId, Result<Value, RpcError>)>,
+}
+
+/// Merge results from multiple LSP servers into a single response.
+///
+/// Strategy:
+/// - If all servers errored → return the last error
+/// - Array values → concatenate all arrays
+/// - Null from one + non-null from another → use non-null
+/// - Multiple non-null non-array → use first
+fn merge_server_results(
+    results: Vec<(PluginId, Result<Value, RpcError>)>,
+) -> (PluginId, Result<Value, RpcError>) {
+    let mut successes: Vec<(PluginId, Value)> = Vec::new();
+    let mut last_error: Option<(PluginId, RpcError)> = None;
+
+    for (pid, result) in results {
+        match result {
+            Ok(value) => successes.push((pid, value)),
+            Err(err) => last_error = Some((pid, err)),
+        }
+    }
+
+    if successes.is_empty() {
+        return last_error
+            .map(|(pid, err)| (pid, Err(err)))
+            .unwrap_or_else(|| {
+                (PluginId(0), Err(RpcError::new("no server responses")))
+            });
+    }
+
+    let first_pid = successes[0].0;
+
+    // Check if any success is an array — if so, concatenate all arrays
+    let has_array = successes.iter().any(|(_, v)| v.is_array());
+
+    if has_array {
+        let mut merged = Vec::new();
+        for (_, value) in successes {
+            if let Value::Array(arr) = value {
+                merged.extend(arr);
+            }
+            // Skip nulls and non-arrays when merging arrays
+        }
+        return (first_pid, Ok(Value::Array(merged)));
+    }
+
+    // No arrays — pick the first non-null value
+    for (pid, value) in &successes {
+        if !value.is_null() {
+            return (*pid, Ok(value.clone()));
+        }
+    }
+
+    // All nulls
+    (first_pid, Ok(Value::Null))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::parse_gemfile_lock_gems;
+    use super::{merge_server_results, parse_gemfile_lock_gems};
+    use lapce_rpc::{RpcError, plugin::PluginId};
+    use serde_json::Value;
 
     #[test]
     fn extracts_gems_from_gem_section() {
@@ -897,5 +1065,122 @@ PLATFORMS
 
         let gems = parse_gemfile_lock_gems(&lock).unwrap();
         assert!(gems.is_empty());
+    }
+
+    #[test]
+    fn gemfile_lock_contains_gem_returns_true_when_present() {
+        let dir = tempfile::tempdir().unwrap();
+        let lock = dir.path().join("Gemfile.lock");
+        std::fs::write(
+            &lock,
+            "\
+GEM
+  remote: https://rubygems.org/
+  specs:
+    sorbet-static (0.5.11000)
+    sorbet (0.5.11000)
+      sorbet-static (= 0.5.11000)
+
+PLATFORMS
+  ruby
+",
+        )
+        .unwrap();
+
+        assert!(super::gemfile_lock_contains_gem(
+            dir.path(),
+            "sorbet-static"
+        ));
+    }
+
+    #[test]
+    fn gemfile_lock_contains_gem_returns_false_when_absent() {
+        let dir = tempfile::tempdir().unwrap();
+        let lock = dir.path().join("Gemfile.lock");
+        std::fs::write(
+            &lock,
+            "\
+GEM
+  remote: https://rubygems.org/
+  specs:
+    rails (7.1.3)
+
+PLATFORMS
+  ruby
+",
+        )
+        .unwrap();
+
+        assert!(!super::gemfile_lock_contains_gem(
+            dir.path(),
+            "sorbet-static"
+        ));
+    }
+
+    #[test]
+    fn gemfile_lock_contains_gem_returns_false_when_no_lockfile() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(!super::gemfile_lock_contains_gem(
+            dir.path(),
+            "sorbet-static"
+        ));
+    }
+
+    #[test]
+    fn merge_concatenates_arrays() {
+        let results = vec![
+            (
+                PluginId(1),
+                Ok(Value::Array(vec![Value::String("a".into())])),
+            ),
+            (
+                PluginId(2),
+                Ok(Value::Array(vec![Value::String("b".into())])),
+            ),
+        ];
+        let (pid, result) = merge_server_results(results);
+        assert_eq!(pid, PluginId(1));
+        let arr = result.unwrap();
+        assert_eq!(
+            arr,
+            Value::Array(
+                vec![Value::String("a".into()), Value::String("b".into()),]
+            )
+        );
+    }
+
+    #[test]
+    fn merge_filters_nulls() {
+        let results = vec![
+            (PluginId(1), Ok(Value::Null)),
+            (PluginId(2), Ok(Value::String("hover info".into()))),
+        ];
+        let (pid, result) = merge_server_results(results);
+        assert_eq!(pid, PluginId(2));
+        assert_eq!(result.unwrap(), Value::String("hover info".into()));
+    }
+
+    #[test]
+    fn merge_skips_errors_when_successes_exist() {
+        let results = vec![
+            (PluginId(1), Err(RpcError::new("server crashed"))),
+            (
+                PluginId(2),
+                Ok(Value::Array(vec![Value::String("loc".into())])),
+            ),
+        ];
+        let (pid, result) = merge_server_results(results);
+        assert_eq!(pid, PluginId(2));
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn merge_returns_error_when_all_fail() {
+        let results = vec![
+            (PluginId(1), Err(RpcError::new("error1"))),
+            (PluginId(2), Err(RpcError::new("error2"))),
+        ];
+        let (_pid, result) = merge_server_results(results);
+        assert!(result.is_err());
     }
 }
