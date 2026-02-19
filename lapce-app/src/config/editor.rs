@@ -228,6 +228,12 @@ pub struct EditorConfig {
         desc = "Glob patterns for excluding files and folders (in file explorer)"
     )]
     pub files_exclude: String,
+    #[field_names(
+        desc = "When enabled, all gems from Gemfile.lock are excluded from ruby-lsp indexing"
+    )]
+    pub ruby_lsp_exclude_gems: bool,
+    #[field_names(desc = "Glob patterns to exclude from ruby-lsp indexing")]
+    pub ruby_lsp_excluded_patterns: Vec<String>,
 }
 
 impl EditorConfig {
@@ -283,6 +289,8 @@ impl EditorConfig {
             bracket_pair_colorization: false,
             bracket_colorization_limit: 0,
             files_exclude: String::new(),
+            ruby_lsp_exclude_gems: true,
+            ruby_lsp_excluded_patterns: Vec::new(),
         }
     }
 

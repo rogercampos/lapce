@@ -92,6 +92,10 @@ pub struct LspManager {
     projects: Vec<ProjectInfo>,
     /// Tracks open files for lazy activation replay
     open_files: HashMap<PathBuf, TextDocumentItem>,
+    /// Whether to exclude all gems from ruby-lsp indexing
+    ruby_lsp_exclude_gems: bool,
+    /// Additional glob patterns to exclude from ruby-lsp indexing
+    ruby_lsp_excluded_patterns: Vec<String>,
 }
 
 impl LspManager {
@@ -99,6 +103,8 @@ impl LspManager {
         workspace: Option<PathBuf>,
         lsp_rpc: LspRpcHandler,
         projects: Vec<ProjectInfo>,
+        ruby_lsp_exclude_gems: bool,
+        ruby_lsp_excluded_patterns: Vec<String>,
     ) -> Self {
         Self {
             workspace,
@@ -108,6 +114,8 @@ impl LspManager {
             activated_configs: Vec::new(),
             projects,
             open_files: HashMap::new(),
+            ruby_lsp_exclude_gems,
+            ruby_lsp_excluded_patterns,
         }
     }
 
@@ -125,6 +133,74 @@ impl LspManager {
         path.and_then(|p| self.find_project_root_for_path(p))
             .or_else(|| self.workspace.clone())
             .unwrap_or_default()
+    }
+
+    /// Build initialization options for an LSP server, merging static config
+    /// with dynamic ruby-lsp indexing options when applicable.
+    fn build_init_options(
+        &self,
+        config: &LspServerConfig,
+        project_root: &std::path::Path,
+    ) -> Option<Value> {
+        let mut opts: Value = config
+            .init_options_json
+            .and_then(|s| serde_json::from_str(s).ok())
+            .unwrap_or(Value::Null);
+
+        if config.command == "ruby-lsp" {
+            let mut indexing = serde_json::Map::new();
+
+            if self.ruby_lsp_exclude_gems {
+                let gemfile_lock = project_root.join("Gemfile.lock");
+                match parse_gemfile_lock_gems(&gemfile_lock) {
+                    Ok(gems) if !gems.is_empty() => {
+                        tracing::info!(
+                            "ruby-lsp: excluding {} gems from indexing",
+                            gems.len()
+                        );
+                        indexing.insert(
+                            "excludedGems".to_string(),
+                            Value::Array(
+                                gems.into_iter().map(Value::String).collect(),
+                            ),
+                        );
+                    }
+                    Ok(_) => {
+                        tracing::info!("ruby-lsp: no gems found in Gemfile.lock");
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            "ruby-lsp: could not read Gemfile.lock: {}",
+                            e
+                        );
+                    }
+                }
+            }
+
+            if !self.ruby_lsp_excluded_patterns.is_empty() {
+                indexing.insert(
+                    "excludedPatterns".to_string(),
+                    Value::Array(
+                        self.ruby_lsp_excluded_patterns
+                            .iter()
+                            .cloned()
+                            .map(Value::String)
+                            .collect(),
+                    ),
+                );
+            }
+
+            if !indexing.is_empty() {
+                if opts.is_null() {
+                    opts = Value::Object(serde_json::Map::new());
+                }
+                if let Value::Object(ref mut map) = opts {
+                    map.insert("indexing".to_string(), Value::Object(indexing));
+                }
+            }
+        }
+
+        if opts.is_null() { None } else { Some(opts) }
     }
 
     /// Try to activate a server for the given language and project root
@@ -222,6 +298,8 @@ impl LspManager {
                 _ => config.command.to_string(),
             };
 
+            let init_options = self.build_init_options(config, project_root);
+
             // First attempt to start the server.
             match LspClient::start(
                 self.lsp_rpc.clone(),
@@ -230,9 +308,7 @@ impl LspManager {
                 &resolved_command,
                 config.args,
                 config.languages,
-                config
-                    .init_options_json
-                    .and_then(|s| serde_json::from_str(s).ok()),
+                init_options.clone(),
                 env.clone(),
             ) {
                 Ok(client) => {
@@ -255,9 +331,7 @@ impl LspManager {
                                 &resolved_command,
                                 config.args,
                                 config.languages,
-                                config
-                                    .init_options_json
-                                    .and_then(|s| serde_json::from_str(s).ok()),
+                                init_options,
                                 env,
                             ) {
                                 self.register_server(
@@ -681,6 +755,54 @@ impl LspManager {
     }
 }
 
+/// Parse gem names from a Gemfile.lock file. Only extracts gems from the
+/// `GEM` section's `specs:` block (the main RubyGems source). Gems from
+/// `GIT` or `PATH` sections are excluded — those are local/development gems
+/// that ruby-lsp should still index.
+pub fn parse_gemfile_lock_gems(
+    path: &std::path::Path,
+) -> Result<Vec<String>, std::io::Error> {
+    let content = std::fs::read_to_string(path)?;
+    let mut gems = Vec::new();
+    let mut in_gem_section = false;
+    let mut in_specs = false;
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+
+        // Top-level section headers have no leading whitespace
+        if !line.starts_with(' ') && !trimmed.is_empty() {
+            in_gem_section = trimmed == "GEM";
+            in_specs = false;
+            continue;
+        }
+
+        if !in_gem_section {
+            continue;
+        }
+
+        if trimmed == "specs:" {
+            in_specs = true;
+            continue;
+        }
+
+        if !in_specs {
+            continue;
+        }
+
+        // Gem entries in the specs block have exactly 4 spaces of indent:
+        //     gem_name (version)
+        // Sub-dependencies have 6+ spaces. We only want top-level gems.
+        if line.starts_with("    ") && !line.starts_with("      ") {
+            if let Some(name) = trimmed.split_whitespace().next() {
+                gems.push(name.to_string());
+            }
+        }
+    }
+
+    Ok(gems)
+}
+
 /// Search for an executable in the PATH from the given environment map.
 fn find_command_in_env(cmd: &str, env: &HashMap<String, String>) -> Option<String> {
     let path_var = env.get("PATH")?;
@@ -691,4 +813,89 @@ fn find_command_in_env(cmd: &str, env: &HashMap<String, String>) -> Option<Strin
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_gemfile_lock_gems;
+
+    #[test]
+    fn extracts_gems_from_gem_section() {
+        let dir = tempfile::tempdir().unwrap();
+        let lock = dir.path().join("Gemfile.lock");
+        std::fs::write(
+            &lock,
+            "\
+GEM
+  remote: https://rubygems.org/
+  specs:
+    actioncable (7.1.3)
+      actionpack (= 7.1.3)
+    actionpack (7.1.3)
+      rack (>= 2.2.4)
+    rails (7.1.3)
+      actioncable (= 7.1.3)
+
+PLATFORMS
+  ruby
+
+DEPENDENCIES
+  rails (~> 7.1)
+",
+        )
+        .unwrap();
+
+        let gems = parse_gemfile_lock_gems(&lock).unwrap();
+        assert_eq!(gems, vec!["actioncable", "actionpack", "rails"]);
+    }
+
+    #[test]
+    fn does_not_extract_from_git_or_path_sections() {
+        let dir = tempfile::tempdir().unwrap();
+        let lock = dir.path().join("Gemfile.lock");
+        std::fs::write(
+            &lock,
+            "\
+GIT
+  remote: https://github.com/example/foo.git
+  revision: abc123
+  specs:
+    foo (1.0.0)
+
+PATH
+  remote: vendor/bar
+  specs:
+    bar (0.1.0)
+
+GEM
+  remote: https://rubygems.org/
+  specs:
+    rails (7.1.3)
+
+PLATFORMS
+  ruby
+",
+        )
+        .unwrap();
+
+        let gems = parse_gemfile_lock_gems(&lock).unwrap();
+        assert_eq!(gems, vec!["rails"]);
+    }
+
+    #[test]
+    fn returns_error_for_missing_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let lock = dir.path().join("nonexistent");
+        assert!(parse_gemfile_lock_gems(&lock).is_err());
+    }
+
+    #[test]
+    fn returns_empty_for_empty_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let lock = dir.path().join("Gemfile.lock");
+        std::fs::write(&lock, "").unwrap();
+
+        let gems = parse_gemfile_lock_gems(&lock).unwrap();
+        assert!(gems.is_empty());
+    }
 }

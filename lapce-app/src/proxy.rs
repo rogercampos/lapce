@@ -44,7 +44,11 @@ impl ProxyData {
 ///
 /// For local workspaces, the proxy runs in-process (as threads, not a separate process).
 /// The `proxy_rpc.initialize()` call triggers LSP server startup.
-pub fn new_proxy(workspace: Arc<LapceWorkspace>) -> ProxyData {
+pub fn new_proxy(
+    workspace: Arc<LapceWorkspace>,
+    ruby_lsp_exclude_gems: bool,
+    ruby_lsp_excluded_patterns: Vec<String>,
+) -> ProxyData {
     let proxy_rpc = ProxyRpcHandler::new();
     let core_rpc = CoreRpcHandler::new();
 
@@ -59,7 +63,13 @@ pub fn new_proxy(workspace: Arc<LapceWorkspace>) -> ProxyData {
                     "[proxy] ProxyRpcHandler thread started, workspace={:?}",
                     workspace.path
                 );
-                proxy_rpc.initialize(workspace.path.clone(), 1, 1);
+                proxy_rpc.initialize(
+                    workspace.path.clone(),
+                    1,
+                    1,
+                    ruby_lsp_exclude_gems,
+                    ruby_lsp_excluded_patterns,
+                );
                 tracing::info!(
                     "[proxy] Initialize notification queued, creating dispatcher"
                 );

@@ -226,6 +226,8 @@ pub enum ProxyNotification {
         workspace: Option<PathBuf>,
         window_id: usize,
         tab_id: usize,
+        ruby_lsp_exclude_gems: bool,
+        ruby_lsp_excluded_patterns: Vec<String>,
     },
     OpenFileChanged {
         path: PathBuf,
@@ -501,11 +503,15 @@ impl ProxyRpcHandler {
         workspace: Option<PathBuf>,
         window_id: usize,
         tab_id: usize,
+        ruby_lsp_exclude_gems: bool,
+        ruby_lsp_excluded_patterns: Vec<String>,
     ) {
         self.notification(ProxyNotification::Initialize {
             workspace,
             window_id,
             tab_id,
+            ruby_lsp_exclude_gems,
+            ruby_lsp_excluded_patterns,
         });
     }
 

@@ -68,6 +68,8 @@ impl ProxyHandler for Dispatcher {
                 workspace,
                 window_id: _,
                 tab_id: _,
+                ruby_lsp_exclude_gems,
+                ruby_lsp_excluded_patterns,
             } => {
                 tracing::info!(
                     "[dispatch] Initialize start, workspace={:?}",
@@ -201,8 +203,13 @@ impl ProxyHandler for Dispatcher {
                     lsp_rpc.set_default_shell_env(default_env);
 
                     tracing::info!("[bg-thread] Starting LSP manager mainloop");
-                    let mut manager =
-                        LspManager::new(workspace, lsp_rpc.clone(), projects);
+                    let mut manager = LspManager::new(
+                        workspace,
+                        lsp_rpc.clone(),
+                        projects,
+                        ruby_lsp_exclude_gems,
+                        ruby_lsp_excluded_patterns,
+                    );
                     lsp_rpc.mainloop(&mut manager);
                 });
                 tracing::info!(

@@ -60,6 +60,8 @@ scroll-speed-modifier = 1
 bracket-pair-colorization = false
 bracket-colorization-limit = 30000
 files-exclude = "**/{.git,.svn,.hg,CVS,.DS_Store,Thumbs.db}" # Glob patterns
+ruby-lsp-exclude-gems = true
+ruby-lsp-excluded-patterns = []
 
 [terminal]
 font-family = ""

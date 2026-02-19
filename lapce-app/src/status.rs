@@ -485,12 +485,16 @@ pub fn background_tasks_popup(workspace_data: Rc<WorkspaceData>) -> impl View {
             dyn_stack(
                 move || background_tasks.get().into_iter().collect::<Vec<_>>(),
                 move |(id, _)| *id,
-                move |(_, info)| {
-                    let is_queued = info.state == BackgroundTaskState::Queued;
-                    let display_text = format_task_display(&info);
+                move |(task_id, _)| {
+                    let task_id = task_id;
                     stack((
                         svg(move || {
                             let config = config.get();
+                            let is_queued = background_tasks.with(|tasks| {
+                                tasks.get(&task_id).is_some_and(|info| {
+                                    info.state == BackgroundTaskState::Queued
+                                })
+                            });
                             if is_queued {
                                 config.ui_svg(LapceIcons::BACKGROUND_QUEUED)
                             } else {
@@ -500,6 +504,11 @@ pub fn background_tasks_popup(workspace_data: Rc<WorkspaceData>) -> impl View {
                         .style(move |s| {
                             let config = config.get();
                             let size = config.ui.icon_size() as f32;
+                            let is_queued = background_tasks.with(|tasks| {
+                                tasks.get(&task_id).is_some_and(|info| {
+                                    info.state == BackgroundTaskState::Queued
+                                })
+                            });
                             let color = if is_queued {
                                 config.color(LapceColor::EDITOR_DIM)
                             } else {
@@ -513,8 +522,21 @@ pub fn background_tasks_popup(workspace_data: Rc<WorkspaceData>) -> impl View {
                             };
                             s.size(size, size).min_width(size).color(color)
                         }),
-                        label(move || display_text.clone()).style(move |s| {
+                        label(move || {
+                            background_tasks.with(|tasks| {
+                                tasks
+                                    .get(&task_id)
+                                    .map(format_task_display)
+                                    .unwrap_or_default()
+                            })
+                        })
+                        .style(move |s| {
                             let config = config.get();
+                            let is_queued = background_tasks.with(|tasks| {
+                                tasks.get(&task_id).is_some_and(|info| {
+                                    info.state == BackgroundTaskState::Queued
+                                })
+                            });
                             let color = if is_queued {
                                 config.color(LapceColor::EDITOR_DIM)
                             } else {
@@ -576,9 +598,6 @@ fn format_task_display(info: &BackgroundTaskInfo) -> String {
         if !msg.is_empty() {
             text = format!("{}: {}", text, msg);
         }
-    }
-    if let Some(pct) = info.percentage {
-        text = format!("{} ({}%)", text, pct);
     }
     text
 }

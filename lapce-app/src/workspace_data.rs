@@ -319,7 +319,11 @@ impl WorkspaceData {
 
         // Start the proxy backend (runs as a thread in-process for local workspaces).
         // The proxy handles LSP, plugins, file watching, and global search.
-        let proxy = new_proxy(workspace.clone());
+        let proxy = new_proxy(
+            workspace.clone(),
+            config.editor.ruby_lsp_exclude_gems,
+            config.editor.ruby_lsp_excluded_patterns.clone(),
+        );
         // Split config into read and write signals so that components only get
         // read access (via common.config) while only WorkspaceData can update it.
         let (config, set_config) = cx.create_signal(Arc::new(config));
