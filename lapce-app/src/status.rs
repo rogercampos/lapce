@@ -365,7 +365,6 @@ fn background_tasks_indicator(
 ) -> impl View {
     let cx = Scope::current();
     let has_tasks = create_memo(move |_| !background_tasks.with(|t| t.is_empty()));
-    let task_count = create_memo(move |_| background_tasks.with(|t| t.len()));
 
     // Timer-driven pulse: a tick counter incremented every 50ms while tasks exist.
     let pulse_tick = cx.create_rw_signal(0u32);
@@ -405,12 +404,15 @@ fn background_tasks_indicator(
             },
         ),
         label(move || {
-            let count = task_count.get();
-            if count > 1 {
-                format!("Working ({count})...")
-            } else {
-                "Working...".to_string()
-            }
+            background_tasks.with(|tasks| {
+                tasks
+                    .values()
+                    .rev()
+                    .find(|t| t.state == BackgroundTaskState::Active)
+                    .or_else(|| tasks.values().last())
+                    .map(|t| format_task_display(t))
+                    .unwrap_or_default()
+            })
         })
         .style(move |s| {
             s.margin_left(4.0)
