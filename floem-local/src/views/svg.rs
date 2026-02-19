@@ -20,10 +20,12 @@ use crate::{
 use super::Decorators;
 
 prop!(pub SvgColor: Option<Brush> {} = None);
+prop!(pub SvgPreserveColors: bool {} = false);
 
 prop_extractor! {
     SvgStyle {
         svg_color: SvgColor,
+        svg_preserve_colors: SvgPreserveColors,
         text_color: TextColor,
     }
 }
@@ -201,7 +203,9 @@ impl View for Svg {
             let rect =
                 Size::new(layout.size.width as f64, layout.size.height as f64)
                     .to_rect();
-            let color = if let Some(brush) = self.svg_style.svg_color() {
+            let color = if self.svg_style.svg_preserve_colors() {
+                None
+            } else if let Some(brush) = self.svg_style.svg_color() {
                 Some(brush)
             } else {
                 self.svg_style.text_color().map(Brush::Solid)

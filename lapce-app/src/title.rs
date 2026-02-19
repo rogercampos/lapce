@@ -23,7 +23,7 @@ use crate::{
     workspace_data::WorkspaceData,
 };
 
-fn center(
+fn branch_indicator(
     git_branch: RwSignal<Option<String>>,
     git_repo_state: RwSignal<GitRepoState>,
     config: ReadSignal<Arc<LapceConfig>>,
@@ -33,13 +33,13 @@ fn center(
     stack((
         svg(move || config.get().ui_svg(LapceIcons::GIT_BRANCH)).style(move |s| {
             let config = config.get();
-            s.size(14.0, 14.0)
+            s.size(16.0, 16.0)
                 .color(config.color(LapceColor::EDITOR_FOREGROUND))
         }),
         label(move || git_branch.with(|b| b.clone().unwrap_or_default())).style(
             move |s| {
                 let config = config.get();
-                s.font_size(config.ui.font_size() as f32 - 1.0)
+                s.font_size(config.ui.font_size() as f32)
                     .color(config.color(LapceColor::EDITOR_FOREGROUND))
                     .margin_left(4.0)
             },
@@ -50,7 +50,7 @@ fn center(
         })
         .style(move |s| {
             let config = config.get();
-            s.font_size(config.ui.font_size() as f32 - 1.0)
+            s.font_size(config.ui.font_size() as f32)
                 .color(config.color(LapceColor::LAPCE_WARN))
                 .margin_left(6.0)
                 .apply_if(!has_repo_state(), |s| s.hide())
@@ -60,6 +60,21 @@ fn center(
         s.items_center()
             .padding_horiz(8.0)
             .apply_if(!has_branch(), |s| s.hide())
+    })
+}
+
+fn workspace_name(
+    workspace: Arc<LapceWorkspace>,
+    config: ReadSignal<Arc<LapceConfig>>,
+) -> impl View {
+    let name = workspace.display();
+    let has_name = name.is_some();
+    label(move || name.clone().unwrap_or_default()).style(move |s| {
+        let config = config.get();
+        s.font_size(config.ui.font_size() as f32)
+            .color(config.color(LapceColor::EDITOR_FOREGROUND))
+            .margin_left(10.0)
+            .apply_if(!has_name, |s| s.hide())
     })
 }
 
@@ -80,7 +95,7 @@ fn left(
         container(svg(move || config.get().ui_svg(LapceIcons::LOGO)).style(
             move |s| {
                 let config = config.get();
-                s.size(16.0, 16.0)
+                s.size(18.0, 18.0)
                     .color(config.color(LapceColor::LAPCE_ICON_ACTIVE))
             },
         ))
@@ -105,15 +120,8 @@ fn left(
                 .margin_right(6.0)
                 .apply_if(is_macos, |s| s.hide())
         }),
-        drag_window_area(empty())
-            .style(|s| s.height_pct(100.0).flex_basis(0.0).flex_grow(1.0)),
     ))
-    .style(move |s| {
-        s.height_pct(100.0)
-            .flex_basis(0.0)
-            .flex_grow(1.0)
-            .items_center()
-    })
+    .style(move |s| s.height_pct(100.0).items_center())
     .debug_name("Left Side of Top Bar")
 }
 
@@ -233,11 +241,18 @@ pub fn title(workspace_data: Rc<WorkspaceData>) -> impl View {
             lapce_command,
             workbench_command,
             window_command,
-            current_workspace,
+            current_workspace.clone(),
             config,
         ),
-        drag_window_area(center(git_branch, git_repo_state, config))
-            .style(|s| s.height_pct(100.0).items_center().justify_center()),
+        workspace_name(current_workspace, config),
+        drag_window_area(branch_indicator(git_branch, git_repo_state, config))
+            .style(|s| {
+                s.height_pct(100.0)
+                    .items_center()
+                    .margin_left(30.0)
+                    .flex_basis(0.0)
+                    .flex_grow(1.0)
+            }),
         right(
             window_command,
             workbench_command,
@@ -253,7 +268,12 @@ pub fn title(workspace_data: Rc<WorkspaceData>) -> impl View {
             title_height.set(height);
         }
     })
-    .style(move |s| s.width_pct(100.0).height(37.0).items_center())
+    .style(move |s| {
+        s.width_pct(100.0)
+            .height(42.0)
+            .padding_top(2.0)
+            .items_center()
+    })
     .debug_name("Title / Top Bar")
 }
 

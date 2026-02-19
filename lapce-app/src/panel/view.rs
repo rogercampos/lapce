@@ -371,7 +371,10 @@ pub fn panel_container_view(
             ))
             .style(move |s| s.size_full().apply_if(!is_bottom, |s| s.flex_col())),
         )
-        .style(move |s| s.size_full().border_radius(LapceLayout::BORDER_RADIUS)),
+        .style(move |s| {
+            s.size_full()
+                .border_radius(LapceLayout::PANEL_BORDER_RADIUS)
+        }),
         resize_drag_view(position),
     ))
     .on_resize(move |rect| {
@@ -405,7 +408,7 @@ pub fn panel_container_view(
                     .height_pct(100.0)
                     .background(config.color(LapceColor::PANEL_BACKGROUND))
             })
-            .border_radius(10.0)
+            .border_radius(LapceLayout::PANEL_BORDER_RADIUS)
             .color(config.color(LapceColor::PANEL_FOREGROUND))
     })
     .debug_name(format!("{:?} Panel Container View", position))

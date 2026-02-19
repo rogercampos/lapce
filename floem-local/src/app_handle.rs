@@ -409,7 +409,6 @@ impl ApplicationHandle {
                 .with_title_hidden(true)
                 .with_titlebar_transparent(true)
                 .with_fullsize_content_view(true);
-            // .with_traffic_lights_offset(11.0, 16.0);
         }
 
         #[cfg(target_os = "macos")]
@@ -451,7 +450,7 @@ impl ApplicationHandle {
                     window_attributes.with_movable_by_window_background(val);
             }
             // if let Some((x, y)) = mac.traffic_lights_offset {
-            // TODO
+            // TODO: winit version doesn't support with_traffic_lights_offset
             // window_attributes = window_attributes.with_traffic_lights_offset(x, y);
             // }
             if let Some(val) = mac.accepts_first_mouse {

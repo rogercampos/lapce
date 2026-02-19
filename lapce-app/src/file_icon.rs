@@ -4,7 +4,7 @@ use floem::{
     IntoView, View,
     reactive::{ReadSignal, SignalGet},
     style::Style,
-    views::{Decorators, label, stack, svg},
+    views::{Decorators, SvgPreserveColors, label, stack, svg},
 };
 
 use crate::config::{LapceConfig, color::LapceColor};
@@ -19,11 +19,13 @@ pub fn file_icon_svg(
     svg(move || config.get().file_svg(&path()).0).style(move |s| {
         let config = config.get();
         let size = config.ui.icon_size() as f32;
-        let color = config.file_svg(&style_path()).1;
+        let (_, color) = config.file_svg(&style_path());
+        let preserve = color.is_none();
         s.min_width(size)
             .size(size, size)
             .margin_right(6.0)
             .apply_opt(color, Style::color)
+            .apply_if(preserve, |s| s.set(SvgPreserveColors, true))
     })
 }
 
