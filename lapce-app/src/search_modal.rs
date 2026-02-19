@@ -800,8 +800,18 @@ fn search_modal_footer(
     data: SearchModalData,
     config: ReadSignal<Arc<LapceConfig>>,
 ) -> impl View {
+    let flat_matches = data.flat_matches;
+
     stack((
-        label(|| "Open in search panel".to_string()).style(move |s| {
+        label(move || {
+            let count = flat_matches.with(|m| m.len());
+            if count >= 100 {
+                format!("Showing first {count} results \u{2014} Open in search panel for more")
+            } else {
+                "Open in search panel".to_string()
+            }
+        })
+        .style(move |s| {
             s.color(config.get().color(LapceColor::EDITOR_DIM))
                 .font_size(12.0)
         }),

@@ -110,16 +110,14 @@ impl SearchTabsData {
         self.tabs.with_untracked(|tabs| tabs.get(active).cloned())
     }
 
-    /// Set the active tab and trigger re-evaluation of its search.
+    /// Set the active tab. Results are cached in memory, so switching tabs
+    /// does not re-run the search.
     pub fn activate_tab(&self, index: usize) {
         let len = self.tabs.with_untracked(|tabs| tabs.len());
         if index >= len {
             return;
         }
         self.active_tab.set(index);
-        if let Some(gs) = self.tabs.with_untracked(|tabs| tabs.get(index).cloned()) {
-            gs.re_evaluate();
-        }
     }
 
     /// Restore tabs from persisted info. Creates new GlobalSearchData for each.

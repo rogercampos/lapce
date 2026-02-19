@@ -76,6 +76,12 @@ pub enum ProxyRequest {
         case_sensitive: bool,
         whole_word: bool,
         is_regex: bool,
+        /// When set, stop searching after this many total matches.
+        /// Used by the search modal for fast preview results.
+        max_results: Option<usize>,
+        /// Unique ID for this search request. Used to route streaming
+        /// notifications back to the correct `GlobalSearchData` instance.
+        search_id: u64,
     },
     CompletionResolve {
         plugin_id: PluginId,
@@ -633,6 +639,8 @@ impl ProxyRpcHandler {
         case_sensitive: bool,
         whole_word: bool,
         is_regex: bool,
+        max_results: Option<usize>,
+        search_id: u64,
         f: impl ProxyCallback + 'static,
     ) {
         self.request_async(
@@ -641,6 +649,8 @@ impl ProxyRpcHandler {
                 case_sensitive,
                 whole_word,
                 is_regex,
+                max_results,
+                search_id,
             },
             f,
         );

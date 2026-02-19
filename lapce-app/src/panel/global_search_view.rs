@@ -16,6 +16,7 @@ use floem::{
 
 use super::position::PanelPosition;
 use crate::{
+    app::{clickable_icon, tooltip_label},
     command::InternalCommand,
     config::{
         LapceConfig, color::LapceColor, icon::LapceIcons, layout::LapceLayout,
@@ -74,12 +75,14 @@ fn search_tab_header(
                         .enumerate()
                         .map(|(i, gs)| {
                             let pattern = gs.pattern_text();
-                            (i, pattern)
+                            let searching = gs.searching;
+                            let panel_search_result = gs.panel_search_result;
+                            (i, pattern, searching, panel_search_result)
                         })
                         .collect::<im::Vector<_>>()
                 },
-                move |(i, _)| *i,
-                move |(i, pattern)| {
+                move |(i, _, _, _)| *i,
+                move |(i, pattern, tab_searching, tab_panel_result)| {
                     let search_tabs = search_tabs.clone();
                     let close_command = internal_command;
                     let tab_index = i;
@@ -91,21 +94,44 @@ fn search_tab_header(
                         pattern.clone()
                     };
 
-                    // Tab content: search icon + label + close button
+                    // Tab content: search icon/spinner + label + count + close button
                     let tab_content = stack((
-                        // Search icon
-                        svg(move || config.get().ui_svg(LapceIcons::SEARCH)).style(
-                            move |s| {
-                                let config = config.get();
-                                let size = config.ui.icon_size() as f32;
-                                s.size(size, size).color(
-                                    config.color(LapceColor::LAPCE_ICON_ACTIVE),
-                                )
-                            },
-                        ),
+                        // Search icon — shows working icon while searching
+                        svg(move || {
+                            let icon = if tab_searching.get() {
+                                LapceIcons::BACKGROUND_WORKING
+                            } else {
+                                LapceIcons::SEARCH
+                            };
+                            config.get().ui_svg(icon)
+                        })
+                        .style(move |s| {
+                            let config = config.get();
+                            let size = config.ui.icon_size() as f32;
+                            s.size(size, size)
+                                .color(config.color(LapceColor::LAPCE_ICON_ACTIVE))
+                        }),
                         // Pattern text
                         label(move || pattern_display.clone()).style(|s| {
                             s.text_ellipsis().max_width(200.0).selectable(false)
+                        }),
+                        // Match count
+                        label(move || {
+                            let total: usize = tab_panel_result.with(|results| {
+                                results
+                                    .values()
+                                    .map(|d| d.matches.with_untracked(|m| m.len()))
+                                    .sum()
+                            });
+                            if total > 0 {
+                                format!("({total})")
+                            } else {
+                                String::new()
+                            }
+                        })
+                        .style(move |s| {
+                            s.color(config.get().color(LapceColor::EDITOR_DIM))
+                                .font_size(11.0)
                         }),
                         // Close button (X) — visible only when active or hovered
                         container(
@@ -280,13 +306,26 @@ fn search_tab_content(
                 let has_preview = gs.has_preview;
                 let preview_focused = gs.preview_focused;
 
-                resizable((
+                // Left side: toolbar + results list
+                let left_side = stack((
+                    search_toolbar(gs.clone(), config),
                     search_result(gs.clone(), config).style(move |s| {
                         s.height_pct(100.0)
                             .min_width(0)
                             .flex_basis(0)
                             .flex_grow(1.0)
                     }),
+                ))
+                .style(|s| {
+                    s.height_pct(100.0)
+                        .min_width(0)
+                        .flex_basis(0)
+                        .flex_grow(1.0)
+                        .flex_row()
+                });
+
+                resizable((
+                    left_side,
                     search_preview_editor(
                         workspace_data.clone(),
                         gs,
@@ -301,6 +340,64 @@ fn search_tab_content(
         .style(|s| s.size_pct(100.0, 100.0)),
     )
     .style(|s| s.flex_grow(1.0).min_height(0).width_pct(100.0))
+}
+
+/// Vertical toolbar on the left side of the results area.
+/// Contains a reload button and a conditional truncation warning.
+fn search_toolbar(
+    gs: GlobalSearchData,
+    config: ReadSignal<Arc<LapceConfig>>,
+) -> impl View {
+    let reload_gs = gs.clone();
+    let searching = gs.searching;
+    let panel_search_result = gs.panel_search_result;
+
+    stack((
+        // Reload button — disabled while a search is in progress
+        clickable_icon(
+            || LapceIcons::REFRESH,
+            move || reload_gs.re_search(),
+            || false,
+            move || searching.get(),
+            || "Reload search results",
+            config,
+        ),
+        // Truncation warning — only visible when results >= 1000
+        tooltip_label(
+            config,
+            container(svg(move || config.get().ui_svg(LapceIcons::WARNING)).style(
+                move |s| {
+                    let config = config.get();
+                    let size = config.ui.icon_size() as f32;
+                    s.size(size, size)
+                        .color(config.color(LapceColor::LAPCE_WARN))
+                },
+            ))
+            .style(move |s| {
+                let total: usize = panel_search_result.with(|results| {
+                    results
+                        .values()
+                        .map(|d| d.matches.with_untracked(|m| m.len()))
+                        .sum()
+                });
+                s.padding(4.0).display(if total >= 1000 {
+                    Display::Flex
+                } else {
+                    Display::None
+                })
+            }),
+            || "Results capped at 1000 matches",
+        ),
+    ))
+    .style(move |s| {
+        let config = config.get();
+        s.flex_col()
+            .height_pct(100.0)
+            .items_center()
+            .padding_vert(4.0)
+            .border_right(1.0)
+            .border_color(config.color(LapceColor::LAPCE_BORDER))
+    })
 }
 
 /// Renders the folder-tree search results using a single flat virtual_stack.

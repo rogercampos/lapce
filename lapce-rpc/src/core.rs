@@ -7,6 +7,10 @@ use std::{
     },
 };
 
+use indexmap::IndexMap;
+
+use crate::proxy::SearchMatch;
+
 pub type BackgroundTaskId = u64;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -152,6 +156,15 @@ pub enum CoreNotification {
     BackgroundTaskUpdate {
         task_id: BackgroundTaskId,
         status: BackgroundTaskStatus,
+    },
+    /// Incremental batch of global search results, sent as files are matched.
+    GlobalSearchDiffMatches {
+        search_id: u64,
+        matches: IndexMap<PathBuf, Vec<SearchMatch>>,
+    },
+    /// Signals that the current global search has completed.
+    GlobalSearchDone {
+        search_id: u64,
     },
 }
 
@@ -377,6 +390,21 @@ impl CoreRpcHandler {
             task_id,
             status: BackgroundTaskStatus::Finished,
         });
+    }
+
+    pub fn global_search_diff_matches(
+        &self,
+        search_id: u64,
+        matches: IndexMap<PathBuf, Vec<SearchMatch>>,
+    ) {
+        self.notification(CoreNotification::GlobalSearchDiffMatches {
+            search_id,
+            matches,
+        });
+    }
+
+    pub fn global_search_done(&self, search_id: u64) {
+        self.notification(CoreNotification::GlobalSearchDone { search_id });
     }
 }
 

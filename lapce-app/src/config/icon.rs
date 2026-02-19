@@ -12,6 +12,7 @@ impl LapceIcons {
     pub const ERROR: &'static str = "error";
     pub const ADD: &'static str = "add";
     pub const CLOSE: &'static str = "close";
+    pub const REFRESH: &'static str = "refresh";
     pub const PROBLEM: &'static str = "error";
     pub const START: &'static str = "start";
     pub const RUN_ERRORS: &'static str = "run_errors";

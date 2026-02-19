@@ -1628,6 +1628,39 @@ impl WorkspaceData {
                 );
                 self.projects.set(projects.clone());
             }
+            CoreNotification::GlobalSearchDiffMatches { search_id, matches } => {
+                // Route to the GlobalSearchData instance with matching search_id.
+                if self.global_search.current_search_id.get_untracked() == *search_id
+                {
+                    self.global_search.append_matches(matches.clone());
+                } else {
+                    // Check search tabs for a matching instance
+                    self.search_tabs.tabs.with_untracked(|tabs| {
+                        for gs in tabs.iter() {
+                            if gs.current_search_id.get_untracked() == *search_id {
+                                gs.append_matches(matches.clone());
+                                break;
+                            }
+                        }
+                    });
+                }
+            }
+            CoreNotification::GlobalSearchDone { search_id } => {
+                // Mark the matching GlobalSearchData as no longer searching.
+                if self.global_search.current_search_id.get_untracked() == *search_id
+                {
+                    self.global_search.searching.set(false);
+                } else {
+                    self.search_tabs.tabs.with_untracked(|tabs| {
+                        for gs in tabs.iter() {
+                            if gs.current_search_id.get_untracked() == *search_id {
+                                gs.searching.set(false);
+                                break;
+                            }
+                        }
+                    });
+                }
+            }
             CoreNotification::BackgroundTaskUpdate { task_id, status } => {
                 match status {
                     BackgroundTaskStatus::Queued { name } => {

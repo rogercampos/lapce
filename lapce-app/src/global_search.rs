@@ -3,18 +3,20 @@ use std::{
     ops::Range,
     path::{Path, PathBuf},
     rc::Rc,
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
 };
 
 use floem::{
-    ext_event::create_ext_action,
     keyboard::Modifiers,
     reactive::{Memo, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith},
     views::VirtualVector,
 };
 use indexmap::IndexMap;
 use lapce_core::{command::FocusCommand, selection::Selection};
-use lapce_rpc::proxy::{ProxyResponse, SearchMatch};
+use lapce_rpc::proxy::SearchMatch;
 use lapce_xi_rope::{Rope, find::CaseMatching};
 
 use crate::{
@@ -132,6 +134,9 @@ impl TreeEntry {
     }
 }
 
+/// Global counter for assigning unique search IDs.
+static NEXT_SEARCH_ID: AtomicU64 = AtomicU64::new(1);
+
 /// The shared search backend used by both the search modal and the search panel.
 /// Results are stored as an IndexMap<PathBuf, SearchMatchData> to maintain file
 /// order from the proxy. The `editor` is the panel's input editor, while both
@@ -178,6 +183,11 @@ pub struct GlobalSearchData {
     pub whole_words: RwSignal<bool>,
     /// Own is_regex signal for global search.
     pub is_regex: RwSignal<bool>,
+    /// The search ID of the currently active search. Streaming notifications
+    /// with a matching ID are routed to this instance.
+    pub current_search_id: RwSignal<u64>,
+    /// True while a search is in progress (between request and GlobalSearchDone).
+    pub searching: RwSignal<bool>,
 }
 
 impl std::fmt::Debug for GlobalSearchData {
@@ -278,6 +288,8 @@ impl GlobalSearchData {
         let case_matching = cx.create_rw_signal(CaseMatching::CaseInsensitive);
         let whole_words = cx.create_rw_signal(false);
         let is_regex = cx.create_rw_signal(false);
+        let current_search_id = cx.create_rw_signal(0u64);
+        let searching = cx.create_rw_signal(false);
 
         // Build the search_tree_rows Memo from panel_search_result (not
         // search_result) so the bottom panel only updates when explicitly
@@ -328,44 +340,47 @@ impl GlobalSearchData {
             case_matching,
             whole_words,
             is_regex,
+            current_search_id,
+            searching,
         };
 
         // Reactive effect: whenever the editor buffer text changes, fire a new search
-        // request to the proxy.
+        // request to the proxy. All results stream via notifications tagged with
+        // search_id, so the callback is always a no-op.
         {
             let global_search = global_search.clone();
             let buffer = global_search.editor.doc().buffer;
             cx.create_effect(move |_| {
                 let pattern = buffer.with(|buffer| buffer.to_string());
+                // Clear results: either the pattern is empty (nothing to search)
+                // or a new search is starting (results will stream in).
+                global_search.search_result.update(|r| r.clear());
+                if !global_search.modal_active.get_untracked() {
+                    global_search.panel_search_result.update(|r| r.clear());
+                }
                 if pattern.is_empty() {
-                    global_search.search_result.update(|r| r.clear());
-                    if !global_search.modal_active.get_untracked() {
-                        global_search.panel_search_result.update(|r| r.clear());
-                    }
+                    global_search.searching.set(false);
                     return;
                 }
                 let case_sensitive =
                     matches!(global_search.case_matching.get(), CaseMatching::Exact);
                 let whole_word = global_search.whole_words.get();
                 let is_regex = global_search.is_regex.get();
-                let send = {
-                    let global_search = global_search.clone();
-                    create_ext_action(cx, move |result| {
-                        if let Ok(ProxyResponse::GlobalSearchResponse { matches }) =
-                            result
-                        {
-                            global_search.update_matches(matches);
-                        }
-                    })
-                };
+                let is_modal = global_search.modal_active.get_untracked();
+                // Modal: cap at 100 results for fast feedback.
+                // Panel/tabs: cap at 1000 to prevent UI freezing on huge repos.
+                let max_results = if is_modal { Some(100) } else { Some(1000) };
+                let search_id = NEXT_SEARCH_ID.fetch_add(1, Ordering::Relaxed);
+                global_search.current_search_id.set(search_id);
+                global_search.searching.set(true);
                 global_search.common.proxy.global_search(
                     pattern,
                     case_sensitive,
                     whole_word,
                     is_regex,
-                    move |result| {
-                        send(result);
-                    },
+                    max_results,
+                    search_id,
+                    move |_result| {},
                 );
             });
         }
@@ -420,39 +435,22 @@ impl GlobalSearchData {
         global_search
     }
 
-    /// Merges new proxy results into the existing result map. Reuses existing
-    /// SearchMatchData (and its RwSignals) for files that were already present,
-    /// preserving their expanded/collapsed state across search updates.
-    fn update_matches(&self, matches: IndexMap<PathBuf, Vec<SearchMatch>>) {
-        let current = self.search_result.get_untracked();
-
-        let new_results: IndexMap<PathBuf, SearchMatchData> = matches
-            .into_iter()
-            .map(|(path, matches)| {
-                let match_data =
-                    current
-                        .get(&path)
-                        .cloned()
-                        .unwrap_or_else(|| SearchMatchData {
-                            expanded: self.common.scope.create_rw_signal(true),
-                            matches: self
-                                .common
-                                .scope
-                                .create_rw_signal(im::Vector::new()),
-                            line_height: self.common.ui_line_height,
-                        });
-
-                match_data.matches.set(matches.into());
-
-                (path, match_data)
-            })
-            .collect();
-
-        self.search_result.set(new_results.clone());
-
-        // Only propagate to the panel when the modal is not driving the search
+    /// Append a batch of incremental search results (from streaming search).
+    /// Each file path in the batch is guaranteed to be new (not already in the results).
+    pub fn append_matches(&self, matches: IndexMap<PathBuf, Vec<SearchMatch>>) {
+        self.search_result.update(|current| {
+            for (path, new_matches) in matches {
+                let match_data = SearchMatchData {
+                    expanded: self.common.scope.create_rw_signal(true),
+                    matches: self.common.scope.create_rw_signal(new_matches.into()),
+                    line_height: self.common.ui_line_height,
+                };
+                current.insert(path, match_data);
+            }
+        });
         if !self.modal_active.get_untracked() {
-            self.panel_search_result.set(new_results);
+            let results = self.search_result.get_untracked();
+            self.panel_search_result.set(results);
         }
     }
 
@@ -631,9 +629,9 @@ impl GlobalSearchData {
         gs
     }
 
-    /// Re-evaluate the search by re-firing the proxy search request
-    /// with the current pattern and options. Called when a tab becomes active.
-    pub fn re_evaluate(&self) {
+    /// Re-run the search with the current pattern and options, clearing cached
+    /// results first. Used by the toolbar reload button.
+    pub fn re_search(&self) {
         let pattern = self.editor.doc().buffer.with_untracked(|b| b.to_string());
         if pattern.is_empty() {
             return;
@@ -642,20 +640,20 @@ impl GlobalSearchData {
             matches!(self.case_matching.get_untracked(), CaseMatching::Exact);
         let whole_word = self.whole_words.get_untracked();
         let is_regex = self.is_regex.get_untracked();
-        let global_search = self.clone();
-        let send = create_ext_action(self.common.scope, move |result| {
-            if let Ok(ProxyResponse::GlobalSearchResponse { matches }) = result {
-                global_search.update_matches(matches);
-            }
-        });
+        self.search_result.update(|r| r.clear());
+        self.panel_search_result.update(|r| r.clear());
+        let max_results = Some(1000);
+        let search_id = NEXT_SEARCH_ID.fetch_add(1, Ordering::Relaxed);
+        self.current_search_id.set(search_id);
+        self.searching.set(true);
         self.common.proxy.global_search(
             pattern,
             case_sensitive,
             whole_word,
             is_regex,
-            move |result| {
-                send(result);
-            },
+            max_results,
+            search_id,
+            move |_result| {},
         );
     }
 

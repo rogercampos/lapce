@@ -335,17 +335,13 @@ impl ProxyHandler for Dispatcher {
                 case_sensitive,
                 whole_word,
                 is_regex,
+                max_results,
+                search_id,
             } => {
                 static WORKER_ID: AtomicU64 = AtomicU64::new(0);
                 let our_id = WORKER_ID.fetch_add(1, Ordering::SeqCst) + 1;
 
                 let workspace = self.workspace.clone();
-                let buffers = self
-                    .buffers
-                    .iter()
-                    .map(|p| p.0)
-                    .cloned()
-                    .collect::<Vec<PathBuf>>();
                 let proxy_rpc = self.proxy_rpc.clone();
                 let core_rpc = self.core_rpc.clone();
                 let excluded_directories = self.excluded_directories.clone();
@@ -356,40 +352,18 @@ impl ProxyHandler for Dispatcher {
                         task_id,
                         "Searching workspace".into(),
                     );
-                    let workspace_walk: Box<dyn Iterator<Item = PathBuf>> =
-                        if let Some(w) = &workspace {
-                            let overrides =
-                                Self::build_walk_overrides(w, &excluded_directories);
-                            let walker = match overrides {
-                                Some(overrides) => ignore::WalkBuilder::new(w)
-                                    .hidden(false)
-                                    .parents(false)
-                                    .require_git(false)
-                                    .overrides(overrides)
-                                    .build(),
-                                None => ignore::WalkBuilder::new(w)
-                                    .parents(false)
-                                    .require_git(false)
-                                    .build(),
-                            };
-                            Box::new(walker.flatten().map(|p| p.into_path()))
-                        } else {
-                            Box::new(std::iter::empty())
-                        };
-
-                    let result = search_in_path(
+                    let result = parallel_search(
                         our_id,
                         &WORKER_ID,
-                        workspace_walk.chain(
-                            buffers
-                                .iter()
-                                .flat_map(|p| ignore::Walk::new(p).flatten())
-                                .map(|p| p.into_path()),
-                        ),
+                        workspace.as_deref(),
+                        &excluded_directories,
                         &pattern,
                         case_sensitive,
                         whole_word,
                         is_regex,
+                        max_results,
+                        search_id,
+                        &core_rpc,
                     );
                     core_rpc.background_task_finished(task_id);
                     proxy_rpc.handle_response(id, result);
@@ -668,32 +642,36 @@ impl ProxyHandler for Dispatcher {
                         "Indexing workspace files".into(),
                     );
                     let result = if let Some(workspace) = workspace {
-                        let overrides = Self::build_walk_overrides(
+                        let overrides = Dispatcher::build_walk_overrides(
                             &workspace,
                             &excluded_directories,
                         );
 
-                        let walker = match overrides {
-                            Some(overrides) => ignore::WalkBuilder::new(&workspace)
-                                .hidden(false)
-                                .parents(false)
-                                .require_git(false)
-                                .overrides(overrides)
-                                .build(),
-                            None => ignore::WalkBuilder::new(&workspace)
-                                .parents(false)
-                                .require_git(false)
-                                .build(),
-                        };
-
-                        let mut items = Vec::new();
-                        for path in walker.flatten() {
-                            if let Some(file_type) = path.file_type() {
-                                if file_type.is_file() {
-                                    items.push(path.into_path());
-                                }
-                            }
+                        let mut walk_builder = ignore::WalkBuilder::new(&workspace);
+                        walk_builder.hidden(false).parents(false).require_git(false);
+                        if let Some(overrides) = overrides {
+                            walk_builder.overrides(overrides);
                         }
+
+                        let items: Arc<Mutex<Vec<PathBuf>>> =
+                            Arc::new(Mutex::new(Vec::new()));
+
+                        walk_builder.build_parallel().run(|| {
+                            let items = items.clone();
+                            Box::new(move |entry| {
+                                let entry = match entry {
+                                    Ok(e) => e,
+                                    Err(_) => return ignore::WalkState::Continue,
+                                };
+                                if entry.file_type().map_or(false, |ft| ft.is_file())
+                                {
+                                    items.lock().push(entry.into_path());
+                                }
+                                ignore::WalkState::Continue
+                            })
+                        });
+
+                        let items = Arc::try_unwrap(items).unwrap().into_inner();
                         Ok(ProxyResponse::GetFilesResponse { items })
                     } else {
                         Ok(ProxyResponse::GetFilesResponse { items: Vec::new() })
@@ -1390,6 +1368,180 @@ fn read_git_file_statuses(
     result
 }
 
+/// Search a single file for matches, returning the list of matches found.
+fn search_file(
+    matcher: &grep_regex::RegexMatcher,
+    path: &std::path::Path,
+) -> Vec<SearchMatch> {
+    let mut searcher = SearcherBuilder::new().build();
+    let mut line_matches = Vec::new();
+    let _ = searcher.search_path(
+        matcher,
+        path,
+        UTF8(|lnum, line| {
+            let mymatch = matcher.find(line.as_bytes())?.unwrap();
+            let (line, start, end) = if line.len() > 200 {
+                let left_keep = line[..mymatch.start()]
+                    .chars()
+                    .rev()
+                    .take(100)
+                    .map(|c| c.len_utf8())
+                    .sum::<usize>();
+                let right_keep = line[mymatch.end()..]
+                    .chars()
+                    .take(100)
+                    .map(|c| c.len_utf8())
+                    .sum::<usize>();
+                let display_range =
+                    mymatch.start() - left_keep..mymatch.end() + right_keep;
+                (
+                    line[display_range].to_string(),
+                    left_keep,
+                    left_keep + (mymatch.end() - mymatch.start()),
+                )
+            } else {
+                (line.to_string(), mymatch.start(), mymatch.end())
+            };
+            line_matches.push(SearchMatch {
+                line: lnum as usize,
+                start,
+                end,
+                line_content: line,
+            });
+            Ok(true)
+        }),
+    );
+    line_matches
+}
+
+/// Parallel global search: walks the workspace using multiple threads and
+/// searches each file as it is discovered.
+///
+/// Results are always streamed to the UI via `CoreNotification::GlobalSearchDiffMatches`
+/// (tagged with `search_id`) so the user sees matches immediately. A background
+/// flusher thread sends batches every 150ms. When `max_results` is set, the
+/// search aborts early once the cap is reached. The response is always empty
+/// (all data arrives via notifications).
+fn parallel_search(
+    id: u64,
+    current_id: &AtomicU64,
+    workspace: Option<&std::path::Path>,
+    excluded_directories: &[String],
+    pattern: &str,
+    case_sensitive: bool,
+    whole_word: bool,
+    is_regex: bool,
+    max_results: Option<usize>,
+    search_id: u64,
+    core_rpc: &CoreRpcHandler,
+) -> Result<ProxyResponse, RpcError> {
+    let mut builder = RegexMatcherBuilder::new();
+    let builder = builder.case_insensitive(!case_sensitive).word(whole_word);
+    let matcher = if is_regex {
+        builder.build(pattern)
+    } else {
+        builder.build_literals(&[&regex::escape(pattern)])
+    };
+    let matcher = matcher.map_err(|_| RpcError::new("can't build matcher"))?;
+
+    let workspace = match workspace {
+        Some(w) => w,
+        None => {
+            core_rpc.global_search_done(search_id);
+            return Ok(ProxyResponse::GlobalSearchResponse {
+                matches: IndexMap::new(),
+            });
+        }
+    };
+
+    let overrides =
+        Dispatcher::build_walk_overrides(workspace, excluded_directories);
+    let mut walk_builder = ignore::WalkBuilder::new(workspace);
+    walk_builder.hidden(false).parents(false).require_git(false);
+    if let Some(overrides) = overrides {
+        walk_builder.overrides(overrides);
+    }
+
+    // Shared state for collecting results from parallel workers.
+    let pending: Arc<Mutex<IndexMap<PathBuf, Vec<SearchMatch>>>> =
+        Arc::new(Mutex::new(IndexMap::new()));
+    let cancelled = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let match_count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+
+    // Background flusher thread: periodically drains pending results and
+    // sends them to the UI as streaming notifications.
+    let flush_pending = pending.clone();
+    let flush_core_rpc = core_rpc.clone();
+    let flush_cancelled = cancelled.clone();
+    let flusher = thread::spawn(move || {
+        while !flush_cancelled.load(Ordering::Relaxed) {
+            thread::sleep(Duration::from_millis(150));
+            let batch = {
+                let mut guard = flush_pending.lock();
+                if guard.is_empty() {
+                    continue;
+                }
+                std::mem::take(&mut *guard)
+            };
+            flush_core_rpc.global_search_diff_matches(search_id, batch);
+        }
+        // Final flush for any remaining results
+        let batch = std::mem::take(&mut *flush_pending.lock());
+        if !batch.is_empty() {
+            flush_core_rpc.global_search_diff_matches(search_id, batch);
+        }
+    });
+
+    // Parallel walk + search.
+    walk_builder.build_parallel().run(|| {
+        let matcher = matcher.clone();
+        let pending = pending.clone();
+        let match_count = match_count.clone();
+        let current_id_val = id;
+
+        Box::new(move |entry| {
+            if current_id.load(Ordering::SeqCst) != current_id_val {
+                return ignore::WalkState::Quit;
+            }
+
+            // Check if we've hit the result cap
+            if let Some(limit) = max_results {
+                if match_count.load(Ordering::Relaxed) >= limit {
+                    return ignore::WalkState::Quit;
+                }
+            }
+
+            let entry = match entry {
+                Ok(e) => e,
+                Err(_) => return ignore::WalkState::Continue,
+            };
+
+            if !entry.file_type().map_or(false, |ft| ft.is_file()) {
+                return ignore::WalkState::Continue;
+            }
+
+            let path = entry.into_path();
+            let line_matches = search_file(&matcher, &path);
+
+            if !line_matches.is_empty() {
+                match_count.fetch_add(line_matches.len(), Ordering::Relaxed);
+                pending.lock().insert(path, line_matches);
+            }
+
+            ignore::WalkState::Continue
+        })
+    });
+
+    // Stop the flusher and let it send any remaining results
+    cancelled.store(true, Ordering::Relaxed);
+    let _ = flusher.join();
+    core_rpc.global_search_done(search_id);
+    Ok(ProxyResponse::GlobalSearchResponse {
+        matches: IndexMap::new(),
+    })
+}
+
+#[cfg(test)]
 fn search_in_path(
     id: u64,
     current_id: &AtomicU64,
@@ -1400,15 +1552,14 @@ fn search_in_path(
     is_regex: bool,
 ) -> Result<ProxyResponse, RpcError> {
     let mut matches = IndexMap::new();
-    let mut matcher = RegexMatcherBuilder::new();
-    let matcher = matcher.case_insensitive(!case_sensitive).word(whole_word);
+    let mut builder = RegexMatcherBuilder::new();
+    let builder = builder.case_insensitive(!case_sensitive).word(whole_word);
     let matcher = if is_regex {
-        matcher.build(pattern)
+        builder.build(pattern)
     } else {
-        matcher.build_literals(&[&regex::escape(pattern)])
+        builder.build_literals(&[&regex::escape(pattern)])
     };
     let matcher = matcher.map_err(|_| RpcError::new("can't build matcher"))?;
-    let mut searcher = SearcherBuilder::new().build();
 
     for path in paths {
         if current_id.load(Ordering::SeqCst) != id {
@@ -1416,53 +1567,9 @@ fn search_in_path(
         }
 
         if path.is_file() {
-            let mut line_matches = Vec::new();
-            if let Err(err) = searcher.search_path(
-                &matcher,
-                path.clone(),
-                UTF8(|lnum, line| {
-                    if current_id.load(Ordering::SeqCst) != id {
-                        return Ok(false);
-                    }
-
-                    let mymatch = matcher.find(line.as_bytes())?.unwrap();
-                    let (line, start, end) = if line.len() > 200 {
-                        let left_keep = line[..mymatch.start()]
-                            .chars()
-                            .rev()
-                            .take(100)
-                            .map(|c| c.len_utf8())
-                            .sum::<usize>();
-                        let right_keep = line[mymatch.end()..]
-                            .chars()
-                            .take(100)
-                            .map(|c| c.len_utf8())
-                            .sum::<usize>();
-                        let display_range =
-                            mymatch.start() - left_keep..mymatch.end() + right_keep;
-                        (
-                            line[display_range].to_string(),
-                            left_keep,
-                            left_keep + (mymatch.end() - mymatch.start()),
-                        )
-                    } else {
-                        (line.to_string(), mymatch.start(), mymatch.end())
-                    };
-                    line_matches.push(SearchMatch {
-                        line: lnum as usize,
-                        start,
-                        end,
-                        line_content: line,
-                    });
-                    Ok(true)
-                }),
-            ) {
-                {
-                    tracing::error!("{:?}", err);
-                }
-            }
+            let line_matches = search_file(&matcher, &path);
             if !line_matches.is_empty() {
-                matches.insert(path.clone(), line_matches);
+                matches.insert(path, line_matches);
             }
         }
     }
