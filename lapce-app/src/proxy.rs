@@ -48,6 +48,7 @@ pub fn new_proxy(
     workspace: Arc<LapceWorkspace>,
     ruby_lsp_exclude_gems: bool,
     ruby_lsp_excluded_patterns: Vec<String>,
+    excluded_directories: Vec<String>,
 ) -> ProxyData {
     let proxy_rpc = ProxyRpcHandler::new();
     let core_rpc = CoreRpcHandler::new();
@@ -69,6 +70,7 @@ pub fn new_proxy(
                     1,
                     ruby_lsp_exclude_gems,
                     ruby_lsp_excluded_patterns,
+                    excluded_directories,
                 );
                 tracing::info!(
                     "[proxy] Initialize notification queued, creating dispatcher"

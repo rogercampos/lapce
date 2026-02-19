@@ -136,6 +136,8 @@ impl LapceColor {
     pub const PANEL_HOVERED_FOREGROUND: &'static str = "panel.hovered.foreground";
     pub const PANEL_HOVERED_FOREGROUND_DIM: &'static str =
         "panel.hovered.foreground.dim";
+    pub const PANEL_EXCLUDED_BACKGROUND: &'static str = "panel.excluded.background";
+    pub const PANEL_EXCLUDED_FOREGROUND: &'static str = "panel.excluded.foreground";
 
     pub const SOURCE_CONTROL_MODIFIED: &'static str = "source_control.modified";
     pub const SOURCE_CONTROL_ADDED: &'static str = "source_control.added";

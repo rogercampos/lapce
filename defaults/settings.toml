@@ -5,6 +5,7 @@ color-theme = "SourceDelve Dark"
 icon-theme = "SourceDelve Codicons"
 custom-titlebar = true
 file-explorer-double-click = false
+excluded-directories = ["vendor", "node_modules", "tmp", ".bundle", "log", "dist", "build", ".next", "**/sorbet/rbi"]
 auto-reload-plugin = false
 
 [editor]

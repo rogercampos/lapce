@@ -315,7 +315,9 @@ impl VirtualVector<(usize, SymbolInformationEntry)> for SymbolItems {
         range: Range<usize>,
     ) -> impl Iterator<Item = (usize, SymbolInformationEntry)> {
         let start = range.start;
-        self.0[range]
+        let end = range.end.min(self.0.len());
+        let start = start.min(end);
+        self.0[start..end]
             .iter()
             .cloned()
             .enumerate()

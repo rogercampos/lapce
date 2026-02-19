@@ -417,7 +417,9 @@ impl VirtualVector<(usize, FlatSearchMatch)> for FlatSearchItems {
         range: Range<usize>,
     ) -> impl Iterator<Item = (usize, FlatSearchMatch)> {
         let start = range.start;
-        self.0[range]
+        let end = range.end.min(self.0.len());
+        let start = start.min(end);
+        self.0[start..end]
             .iter()
             .cloned()
             .enumerate()

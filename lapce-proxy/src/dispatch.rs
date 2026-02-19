@@ -54,6 +54,7 @@ pub struct Dispatcher {
     lsp_rpc: LspRpcHandler,
     buffers: HashMap<PathBuf, Buffer>,
     file_watcher: FileWatcher,
+    excluded_directories: Vec<String>,
 }
 
 impl ProxyHandler for Dispatcher {
@@ -70,12 +71,14 @@ impl ProxyHandler for Dispatcher {
                 tab_id: _,
                 ruby_lsp_exclude_gems,
                 ruby_lsp_excluded_patterns,
+                excluded_directories,
             } => {
                 tracing::info!(
                     "[dispatch] Initialize start, workspace={:?}",
                     workspace
                 );
                 self.workspace = workspace;
+                self.excluded_directories = excluded_directories;
                 self.file_watcher.notify(FileWatchNotifier::new(
                     self.core_rpc.clone(),
                     self.proxy_rpc.clone(),
@@ -261,6 +264,11 @@ impl ProxyHandler for Dispatcher {
             } => {
                 self.lsp_rpc.signature_help(request_id, &path, position);
             }
+            UpdateExcludedDirectories {
+                excluded_directories,
+            } => {
+                self.excluded_directories = excluded_directories;
+            }
             Shutdown {} => {
                 self.lsp_rpc.shutdown();
                 self.proxy_rpc.shutdown();
@@ -340,6 +348,7 @@ impl ProxyHandler for Dispatcher {
                     .collect::<Vec<PathBuf>>();
                 let proxy_rpc = self.proxy_rpc.clone();
                 let core_rpc = self.core_rpc.clone();
+                let excluded_directories = self.excluded_directories.clone();
 
                 thread::spawn(move || {
                     let task_id = core_rpc.next_background_task_id();
@@ -347,18 +356,36 @@ impl ProxyHandler for Dispatcher {
                         task_id,
                         "Searching workspace".into(),
                     );
+                    let workspace_walk: Box<dyn Iterator<Item = PathBuf>> =
+                        if let Some(w) = &workspace {
+                            let overrides =
+                                Self::build_walk_overrides(w, &excluded_directories);
+                            let walker = match overrides {
+                                Some(overrides) => ignore::WalkBuilder::new(w)
+                                    .hidden(false)
+                                    .parents(false)
+                                    .require_git(false)
+                                    .overrides(overrides)
+                                    .build(),
+                                None => ignore::WalkBuilder::new(w)
+                                    .parents(false)
+                                    .require_git(false)
+                                    .build(),
+                            };
+                            Box::new(walker.flatten().map(|p| p.into_path()))
+                        } else {
+                            Box::new(std::iter::empty())
+                        };
+
                     let result = search_in_path(
                         our_id,
                         &WORKER_ID,
-                        workspace
-                            .iter()
-                            .flat_map(|w| ignore::Walk::new(w).flatten())
-                            .chain(
-                                buffers
-                                    .iter()
-                                    .flat_map(|p| ignore::Walk::new(p).flatten()),
-                            )
-                            .map(|p| p.into_path()),
+                        workspace_walk.chain(
+                            buffers
+                                .iter()
+                                .flat_map(|p| ignore::Walk::new(p).flatten())
+                                .map(|p| p.into_path()),
+                        ),
                         &pattern,
                         case_sensitive,
                         whole_word,
@@ -633,6 +660,7 @@ impl ProxyHandler for Dispatcher {
                 let workspace = self.workspace.clone();
                 let proxy_rpc = self.proxy_rpc.clone();
                 let core_rpc = self.core_rpc.clone();
+                let excluded_directories = self.excluded_directories.clone();
                 thread::spawn(move || {
                     let task_id = core_rpc.next_background_task_id();
                     core_rpc.background_task_started(
@@ -640,21 +668,19 @@ impl ProxyHandler for Dispatcher {
                         "Indexing workspace files".into(),
                     );
                     let result = if let Some(workspace) = workspace {
-                        let git_folder =
-                            ignore::overrides::OverrideBuilder::new(&workspace)
-                                .add("!.git/")
-                                .map(|git_folder| git_folder.build());
+                        let overrides = Self::build_walk_overrides(
+                            &workspace,
+                            &excluded_directories,
+                        );
 
-                        let walker = match git_folder {
-                            Ok(Ok(git_folder)) => {
-                                ignore::WalkBuilder::new(&workspace)
-                                    .hidden(false)
-                                    .parents(false)
-                                    .require_git(false)
-                                    .overrides(git_folder)
-                                    .build()
-                            }
-                            _ => ignore::WalkBuilder::new(&workspace)
+                        let walker = match overrides {
+                            Some(overrides) => ignore::WalkBuilder::new(&workspace)
+                                .hidden(false)
+                                .parents(false)
+                                .require_git(false)
+                                .overrides(overrides)
+                                .build(),
+                            None => ignore::WalkBuilder::new(&workspace)
                                 .parents(false)
                                 .require_git(false)
                                 .build(),
@@ -1108,11 +1134,24 @@ impl Dispatcher {
             lsp_rpc,
             buffers: HashMap::new(),
             file_watcher,
+            excluded_directories: Vec::new(),
         }
     }
 
     fn respond_rpc(&self, id: RequestId, result: Result<ProxyResponse, RpcError>) {
         self.proxy_rpc.handle_response(id, result);
+    }
+
+    fn build_walk_overrides(
+        workspace: &std::path::Path,
+        excluded_directories: &[String],
+    ) -> Option<ignore::overrides::Override> {
+        let mut builder = ignore::overrides::OverrideBuilder::new(workspace);
+        builder.add("!.git/").ok()?;
+        for dir in excluded_directories {
+            builder.add(&format!("!{dir}/")).ok()?;
+        }
+        builder.build().ok()
     }
 
     fn get_buffer_or_insert(&mut self, path: PathBuf) -> &mut Buffer {

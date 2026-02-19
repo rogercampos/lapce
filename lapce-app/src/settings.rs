@@ -3,8 +3,8 @@ use std::{rc::Rc, sync::Arc, time::Duration};
 use floem::{
     IntoView, View,
     action::{TimerToken, add_overlay, exec_after, remove_overlay},
-    event::EventListener,
-    keyboard::Modifiers,
+    event::{Event, EventListener, EventPropagation},
+    keyboard::{Key, Modifiers, NamedKey},
     peniko::kurbo::{Point, Rect, Size},
     reactive::{
         ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith,
@@ -20,6 +20,8 @@ use floem::{
 use inflector::Inflector;
 use serde::Serialize;
 use serde_json::Value;
+
+use lapce_core::buffer::rope_text::RopeText;
 
 use crate::{
     command::CommandExecuted,
@@ -43,6 +45,7 @@ pub enum SettingsValue {
     String(String),
     Bool(bool),
     Dropdown(DropdownInfo),
+    StringArray(Vec<String>),
     Empty,
 }
 
@@ -58,6 +61,13 @@ impl From<serde_json::Value> for SettingsValue {
             }
             serde_json::Value::String(s) => SettingsValue::String(s),
             serde_json::Value::Bool(b) => SettingsValue::Bool(b),
+            serde_json::Value::Array(arr) => {
+                let strings: Vec<String> = arr
+                    .into_iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect();
+                SettingsValue::StringArray(strings)
+            }
             _ => SettingsValue::Empty,
         }
     }
@@ -417,6 +427,14 @@ pub fn settings_view(editors: Editors, common: Rc<CommonData>) -> impl View {
     .debug_name("Settings")
 }
 
+fn save_string_array(kind: &str, field: &str, items: &[String]) {
+    let mut arr = toml_edit::Array::new();
+    for item in items {
+        arr.push(item.as_str());
+    }
+    LapceConfig::update_file(kind, field, toml_edit::Value::Array(arr));
+}
+
 fn settings_item_view(
     editors: Editors,
     settings_data: SettingsData,
@@ -438,6 +456,7 @@ fn settings_item_view(
         SettingsValue::String(s) => Some(s.to_string()),
         SettingsValue::Bool(_) => None,
         SettingsValue::Dropdown(_) => None,
+        SettingsValue::StringArray(_) => None,
         SettingsValue::Empty => None,
     };
 
@@ -525,6 +544,130 @@ fn settings_item_view(
                                 config.get().color(LapceColor::LAPCE_BORDER),
                             )
                     })
+                    .into_any()
+            } else if let SettingsValue::StringArray(initial_items) = &item.value {
+                let items = create_rw_signal(initial_items.clone());
+                let kind = item.kind.clone();
+                let field = item.field.clone();
+
+                let input_editor = editors.make_local(cx, settings_data.common);
+                let input_doc = input_editor.doc_signal();
+
+                let chips = {
+                    let kind = kind.clone();
+                    let field = field.clone();
+                    dyn_stack(
+                        move || {
+                            items.get().into_iter().enumerate().collect::<Vec<_>>()
+                        },
+                        |(i, s)| (*i, s.clone()),
+                        move |(i, s)| {
+                            let kind = kind.clone();
+                            let field = field.clone();
+                            let display = s.clone();
+                            stack((
+                                label(move || display.clone()).style(|s| {
+                                    s.padding_left(8.0).padding_vert(2.0)
+                                }),
+                                container(
+                                    svg(move || {
+                                        config.get().ui_svg(LapceIcons::CLOSE)
+                                    })
+                                    .style(
+                                        move |s| {
+                                            let config = config.get();
+                                            let size =
+                                                config.ui.icon_size() as f32 * 0.75;
+                                            s.size(size, size).color(config.color(
+                                                LapceColor::LAPCE_ICON_ACTIVE,
+                                            ))
+                                        },
+                                    ),
+                                )
+                                .on_click_stop(move |_| {
+                                    items.update(|list| {
+                                        if i < list.len() {
+                                            list.remove(i);
+                                        }
+                                    });
+                                    items.with_untracked(|list| {
+                                        save_string_array(&kind, &field, list);
+                                    });
+                                })
+                                .style(|s| {
+                                    s.padding_horiz(4.0)
+                                        .items_center()
+                                        .justify_center()
+                                        .cursor(CursorStyle::Pointer)
+                                }),
+                            ))
+                            .style(move |s| {
+                                let config = config.get();
+                                s.items_center()
+                                    .border(1.0)
+                                    .border_radius(LapceLayout::BORDER_RADIUS)
+                                    .border_color(
+                                        config.color(LapceColor::LAPCE_BORDER),
+                                    )
+                                    .margin_right(4.0)
+                                    .margin_bottom(4.0)
+                            })
+                        },
+                    )
+                    .style(|s| s.flex_row().flex_wrap(floem::style::FlexWrap::Wrap))
+                };
+
+                let input_view = TextInputBuilder::new()
+                    .build_editor(input_editor)
+                    .placeholder(|| "Add item, press Enter".to_string())
+                    .keyboard_navigable()
+                    .on_event(EventListener::KeyDown, move |event| {
+                        if let Event::KeyDown(key_event) = event {
+                            if key_event.key.logical_key
+                                == Key::Named(NamedKey::Enter)
+                            {
+                                let doc = input_doc.get_untracked();
+                                let text =
+                                    doc.buffer.with_untracked(|b| b.to_string());
+                                let text = text.trim().to_string();
+                                if !text.is_empty() {
+                                    items.update(|list| {
+                                        list.push(text);
+                                    });
+                                    items.with_untracked(|list| {
+                                        save_string_array(&kind, &field, list);
+                                    });
+                                    // Clear the input buffer
+                                    let doc = input_doc.get_untracked();
+                                    doc.buffer.update(|b| {
+                                        let len = b.len();
+                                        if len > 0 {
+                                            b.edit(
+                                                &[(
+                                                    lapce_core::selection::Selection::region(0, len),
+                                                    "",
+                                                )],
+                                                lapce_core::editor::EditType::DeleteSelection,
+                                            );
+                                        }
+                                    });
+                                }
+                                return EventPropagation::Stop;
+                            }
+                        }
+                        EventPropagation::Continue
+                    })
+                    .style(move |s| {
+                        s.width(300.0)
+                            .border(1.0)
+                            .border_radius(LapceLayout::BORDER_RADIUS)
+                            .border_color(
+                                config.get().color(LapceColor::LAPCE_BORDER),
+                            )
+                    });
+
+                stack((chips, input_view))
+                    .style(|s| s.flex_col().max_width(300.0))
                     .into_any()
             } else if let SettingsValue::Dropdown(dropdown) = &item.value {
                 let expanded = create_rw_signal(false);

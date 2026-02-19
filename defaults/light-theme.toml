@@ -204,6 +204,8 @@ dim-text = "#A0A1A7"
 "panel.hovered.active.background" = "$dim-text"
 "panel.hovered.foreground" = "$text"
 "panel.hovered.foreground.dim" = "$dim-text"
+"panel.excluded.background" = "#E4564920"
+"panel.excluded.foreground" = "#E45649"
 
 "status.background" = "$secondary-background"
 "status.foreground" = "$text"

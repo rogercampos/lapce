@@ -16,4 +16,8 @@ pub struct CoreConfig {
         desc = "Only allow double-click to open files in the file explorer"
     )]
     pub file_explorer_double_click: bool,
+    #[field_names(
+        desc = "List of directory names to exclude from Go to File and global search (e.g. [\"vendor\", \"node_modules\"])"
+    )]
+    pub excluded_directories: Vec<String>,
 }

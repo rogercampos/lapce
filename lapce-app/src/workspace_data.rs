@@ -37,7 +37,7 @@ use lapce_rpc::{
     file::{Naming, PathObject},
     plugin::PluginId,
     project::ProjectInfo,
-    proxy::{ProxyResponse, ProxyRpcHandler},
+    proxy::{ProxyNotification, ProxyResponse, ProxyRpcHandler},
 };
 use lsp_types::{
     CodeActionOrCommand, CodeLens, Diagnostic, ProgressParams, ProgressToken,
@@ -323,6 +323,7 @@ impl WorkspaceData {
             workspace.clone(),
             config.editor.ruby_lsp_exclude_gems,
             config.editor.ruby_lsp_excluded_patterns.clone(),
+            config.core.excluded_directories.clone(),
         );
         // Split config into read and write signals so that components only get
         // read access (via common.config) while only WorkspaceData can update it.
@@ -618,6 +619,11 @@ impl WorkspaceData {
         self.common.keypress.update(|keypress| {
             keypress.update_keymaps(&config);
         });
+        self.common.proxy.notification(
+            ProxyNotification::UpdateExcludedDirectories {
+                excluded_directories: config.core.excluded_directories.clone(),
+            },
+        );
         self.set_config.set(Arc::new(config));
     }
 
