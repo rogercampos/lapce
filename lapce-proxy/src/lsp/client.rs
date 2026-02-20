@@ -11,6 +11,7 @@ use std::{
         atomic::{AtomicU64, Ordering},
     },
     thread,
+    time::Duration,
 };
 
 use anyhow::{Result, anyhow};
@@ -308,7 +309,14 @@ impl LspClient {
         }
         let msg = JsonRpc::request_with_params(json_id, method, params);
         self.send_server_rpc(msg);
-        rx.recv().unwrap_or_else(|_| Err(RpcError::new("io error")))
+        match rx.recv_timeout(Duration::from_secs(30)) {
+            Ok(result) => result,
+            Err(crossbeam_channel::RecvTimeoutError::Timeout) => {
+                tracing::error!("LSP server timed out responding to {method}");
+                Err(RpcError::new("timeout waiting for LSP response"))
+            }
+            Err(_) => Err(RpcError::new("io error")),
+        }
     }
 
     pub fn server_request_async<P: Serialize>(
@@ -761,10 +769,20 @@ fn handle_server_message(
                     }
                 }
                 Progress::METHOD => {
-                    if let Ok(progress) = serde_json::from_value::<ProgressParams>(
+                    match serde_json::from_value::<ProgressParams>(
                         serde_json::to_value(params).unwrap_or_default(),
                     ) {
-                        core_rpc.work_done_progress(progress);
+                        Ok(progress) => {
+                            core_rpc.work_done_progress(
+                                progress,
+                                server_name.to_string(),
+                            );
+                        }
+                        Err(err) => {
+                            tracing::warn!(
+                                "Failed to parse $/progress from {server_name}: {err}"
+                            );
+                        }
                     }
                 }
                 ShowMessage::METHOD => {

@@ -247,6 +247,24 @@ impl LspManager {
                 continue;
             }
 
+            // Skip if a parent project exists for the same language.
+            // The parent's LSP server covers child directories, so we
+            // don't need a separate instance for the sub-project.
+            // We check `self.projects` (all detected projects, known upfront)
+            // rather than `activated_configs` to be order-independent.
+            let covered_by_parent = self.projects.iter().any(|p| {
+                !p.root.as_os_str().is_empty()
+                    && project_root.starts_with(&p.root)
+                    && p.root != *project_root
+                    && p.languages
+                        .iter()
+                        .any(|l| config.languages.contains(&l.as_str()))
+            });
+            if covered_by_parent {
+                self.activated_configs.push(activation_key);
+                continue;
+            }
+
             // Check activation condition
             match &config.activation_condition {
                 ActivationCondition::Always => {}
@@ -555,16 +573,33 @@ impl LspManager {
     }
 
     /// Look up all servers for a given language and file path.
+    /// Falls back to a parent project root's server when the deepest match
+    /// was skipped (covered by parent).
     fn find_servers_for_path(
         &self,
         language_id: &str,
         path: Option<&std::path::Path>,
     ) -> Vec<PluginId> {
         let project_root = self.effective_project_root(path);
-        let key = (language_id.to_string(), project_root);
+        let key = (language_id.to_string(), project_root.clone());
+        if let Some(ids) = self.language_project_to_server.get(&key) {
+            if !ids.is_empty() {
+                return ids.clone();
+            }
+        }
+        // No server for the exact project root — find a parent project root
+        // that has a server for this language.
+        let lang = language_id.to_string();
         self.language_project_to_server
-            .get(&key)
-            .cloned()
+            .iter()
+            .filter(|((l, root), ids)| {
+                l == &lang
+                    && !ids.is_empty()
+                    && !root.as_os_str().is_empty()
+                    && project_root.starts_with(root)
+            })
+            .max_by_key(|((_, root), _)| root.components().count())
+            .map(|(_, ids)| ids.clone())
             .unwrap_or_default()
     }
 

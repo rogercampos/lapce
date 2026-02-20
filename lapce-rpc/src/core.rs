@@ -133,6 +133,7 @@ pub enum CoreNotification {
     },
     WorkDoneProgress {
         progress: ProgressParams,
+        server_name: String,
     },
     ShowMessage {
         title: String,
@@ -343,8 +344,11 @@ impl CoreRpcHandler {
         self.notification(CoreNotification::ServerStatus { params });
     }
 
-    pub fn work_done_progress(&self, progress: ProgressParams) {
-        self.notification(CoreNotification::WorkDoneProgress { progress });
+    pub fn work_done_progress(&self, progress: ProgressParams, server_name: String) {
+        self.notification(CoreNotification::WorkDoneProgress {
+            progress,
+            server_name,
+        });
     }
 
     pub fn show_message(&self, title: String, message: ShowMessageParams) {

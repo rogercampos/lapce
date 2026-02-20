@@ -1428,7 +1428,7 @@ fn editor_gutter_diagnostics(
                 let total_len = buffer.len();
                 for (iv, diag) in diags.iter_chunks(0..total_len) {
                     let severity = match diag.severity {
-                        Some(s) if s <= DiagnosticSeverity::WARNING => s,
+                        Some(s) if s < DiagnosticSeverity::HINT => s,
                         _ => continue,
                     };
                     let line = buffer.line_of_offset(iv.start());

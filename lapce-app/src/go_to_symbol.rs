@@ -97,6 +97,10 @@ impl GoToSymbolData {
                     let filtered: Vec<_> = syms
                         .into_iter()
                         .filter(|s| is_type_or_constant(s.kind))
+                        .filter(|s| {
+                            let path = s.location.uri.path();
+                            !path.ends_with(".rbi") && !path.ends_with(".rbs")
+                        })
                         .collect();
                     symbols.set(filtered);
                 }
@@ -490,7 +494,13 @@ fn go_to_symbol_content(workspace_data: Rc<WorkspaceData>) -> impl View {
             .background(config.color(LapceColor::PALETTE_BACKGROUND))
     });
 
-    resizable_container(500.0, 450.0, 300.0, 200.0, content)
+    resizable_container(
+        LapceLayout::DEFAULT_WINDOW_WIDTH,
+        LapceLayout::DEFAULT_WINDOW_HEIGHT,
+        400.0,
+        300.0,
+        content,
+    )
 }
 
 fn go_to_symbol_input(

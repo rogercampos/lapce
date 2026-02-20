@@ -2611,7 +2611,7 @@ impl EditorData {
             for (iv, diag) in diags.iter_chunks(0..usize::MAX) {
                 if iv.start() <= offset
                     && offset < iv.end()
-                    && diag.severity <= Some(DiagnosticSeverity::WARNING)
+                    && diag.severity < Some(DiagnosticSeverity::HINT)
                 {
                     let severity =
                         diag.severity.unwrap_or(DiagnosticSeverity::WARNING);
@@ -2631,8 +2631,10 @@ impl EditorData {
             .map(|(sev, msg)| {
                 let prefix = if *sev == DiagnosticSeverity::ERROR {
                     "Error"
-                } else {
+                } else if *sev == DiagnosticSeverity::WARNING {
                     "Warning"
+                } else {
+                    "Info"
                 };
                 format!("**{prefix}**: {msg}")
             })

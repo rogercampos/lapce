@@ -199,8 +199,9 @@ pub struct WorkspaceData {
     pub update_in_progress: RwSignal<bool>,
     pub background_tasks: RwSignal<IndexMap<u64, BackgroundTaskInfo>>,
     pub bg_tasks_popup_visible: RwSignal<bool>,
-    /// Maps LSP ProgressToken to our background task IDs.
-    progress_task_map: RwSignal<HashMap<ProgressToken, u64>>,
+    /// Maps (server_name, ProgressToken) to our background task IDs,
+    /// allowing concurrent progress tracking from multiple LSP servers.
+    progress_task_map: RwSignal<HashMap<(String, ProgressToken), u64>>,
     /// Counter for generating app-side task IDs (for LSP progress items).
     local_task_id: Arc<std::sync::atomic::AtomicU64>,
     pub messages: RwSignal<Vec<(String, ShowMessageParams)>>,
@@ -1555,8 +1556,11 @@ impl WorkspaceData {
             CoreNotification::OpenFileChanged { path, content } => {
                 self.main_split.open_file_changed(path, content);
             }
-            CoreNotification::WorkDoneProgress { progress } => {
-                self.update_progress(progress);
+            CoreNotification::WorkDoneProgress {
+                progress,
+                server_name,
+            } => {
+                self.update_progress(progress, server_name);
             }
             CoreNotification::ShowMessage { title, message } => {
                 self.show_message(title, message);
@@ -2202,8 +2206,8 @@ impl WorkspaceData {
         self.alert_data.active.set(true);
     }
 
-    fn update_progress(&self, progress: &ProgressParams) {
-        let token = progress.token.clone();
+    fn update_progress(&self, progress: &ProgressParams, server_name: &str) {
+        let key = (server_name.to_string(), progress.token.clone());
         match &progress.value {
             lsp_types::ProgressParamsValue::WorkDone(progress) => match progress {
                 lsp_types::WorkDoneProgress::Begin(begin) => {
@@ -2211,7 +2215,7 @@ impl WorkspaceData {
                         .local_task_id
                         .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     self.progress_task_map.update(|m| {
-                        m.insert(token, task_id);
+                        m.insert(key, task_id);
                     });
                     let info = BackgroundTaskInfo {
                         name: begin.title.clone(),
@@ -2225,7 +2229,7 @@ impl WorkspaceData {
                 }
                 lsp_types::WorkDoneProgress::Report(report) => {
                     let task_id =
-                        self.progress_task_map.with(|m| m.get(&token).copied());
+                        self.progress_task_map.with(|m| m.get(&key).copied());
                     if let Some(task_id) = task_id {
                         self.background_tasks.update(|tasks| {
                             if let Some(info) = tasks.get_mut(&task_id) {
@@ -2237,10 +2241,10 @@ impl WorkspaceData {
                 }
                 lsp_types::WorkDoneProgress::End(_) => {
                     let task_id =
-                        self.progress_task_map.with(|m| m.get(&token).copied());
+                        self.progress_task_map.with(|m| m.get(&key).copied());
                     if let Some(task_id) = task_id {
                         self.progress_task_map.update(|m| {
-                            m.remove(&token);
+                            m.remove(&key);
                         });
                         self.background_tasks.update(|tasks| {
                             tasks.swap_remove(&task_id);
