@@ -1,7 +1,7 @@
 use std::{
     borrow::Cow,
     collections::HashMap,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::Command,
     sync::{Arc, Mutex},
 };
@@ -133,15 +133,12 @@ pub const LSP_SERVERS: &[LspServerConfig] = &[
         per_project_instance: false,
         // Settings returned via workspace/configuration (VS Code format).
         // vtsls ignores initializationOptions for these; they must come here.
+        // Note: maxTsServerMemory is computed dynamically based on the number
+        // of ts/tsx/js/jsx files in the project (see compute_server_settings).
         settings_json: Some(
             r#"{
                 "vtsls": {
                     "autoUseWorkspaceTsdk": true
-                },
-                "typescript": {
-                    "tsserver": {
-                        "maxTsServerMemory": 8192
-                    }
                 }
             }"#,
         ),
@@ -155,6 +152,93 @@ pub fn lsp_command_for_language(language_id: &str) -> Option<&'static str> {
         .iter()
         .find(|c| c.languages.contains(&language_id))
         .map(|c| c.command)
+}
+
+/// Count ts/tsx/js/jsx source files under `dir`, excluding `node_modules`.
+/// Uses a simple directory walk to avoid external dependencies.
+fn count_ts_js_files(dir: &Path) -> usize {
+    let mut count = 0;
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(current) = stack.pop() {
+        let entries = match std::fs::read_dir(&current) {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        for entry in entries.flatten() {
+            let file_type = match entry.file_type() {
+                Ok(ft) => ft,
+                Err(_) => continue,
+            };
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if file_type.is_dir() {
+                if name == "node_modules" || name.starts_with('.') {
+                    continue;
+                }
+                stack.push(entry.path());
+            } else if file_type.is_file() {
+                if name.ends_with(".ts")
+                    || name.ends_with(".tsx")
+                    || name.ends_with(".js")
+                    || name.ends_with(".jsx")
+                {
+                    count += 1;
+                }
+            }
+        }
+    }
+    count
+}
+
+/// Compute `maxTsServerMemory` (in MB) based on the number of source files.
+///
+/// Heuristic:
+///   base = 512 MB (minimum for tsserver to run comfortably)
+///   per_file = 0.5 MB per source file
+///   buffer = 1.5x multiplier (for node_modules type definitions we can't count)
+///   result = clamp(1024..=8192, (base + file_count * 0.5) * 1.5)
+fn compute_max_ts_server_memory(file_count: usize) -> u64 {
+    let raw = (512.0 + file_count as f64 * 0.5) * 1.5;
+    (raw as u64).clamp(1024, 8192)
+}
+
+/// Build the final settings JSON for a server, enriching the static
+/// `settings_json` with any dynamic values computed from the workspace.
+pub fn compute_server_settings(
+    config: &LspServerConfig,
+    workspace: Option<&Path>,
+) -> Option<String> {
+    let base_json = config.settings_json?;
+    let mut settings: Value =
+        serde_json::from_str(base_json).unwrap_or(Value::Object(Default::default()));
+
+    // For vtsls: inject computed maxTsServerMemory
+    if config.display_name == "vtsls" {
+        let file_count = workspace.map(count_ts_js_files).unwrap_or(0);
+        let memory = compute_max_ts_server_memory(file_count);
+        tracing::info!(
+            "vtsls: counted {file_count} ts/js files, setting maxTsServerMemory={memory} MB"
+        );
+
+        if let Value::Object(map) = &mut settings {
+            let ts = map
+                .entry("typescript")
+                .or_insert_with(|| Value::Object(Default::default()));
+            if let Value::Object(ts_map) = ts {
+                let tsserver = ts_map
+                    .entry("tsserver")
+                    .or_insert_with(|| Value::Object(Default::default()));
+                if let Value::Object(tsserver_map) = tsserver {
+                    tsserver_map.insert(
+                        "maxTsServerMemory".to_string(),
+                        Value::Number(memory.into()),
+                    );
+                }
+            }
+        }
+    }
+
+    Some(settings.to_string())
 }
 
 /// Manages multiple LSP server instances. Runs on a dedicated thread.
@@ -420,6 +504,8 @@ impl LspManager {
             };
 
             let init_options = self.build_init_options(config, project_root);
+            let settings =
+                compute_server_settings(config, server_workspace.as_deref());
 
             // First attempt to start the server.
             match LspClient::start(
@@ -432,6 +518,7 @@ impl LspManager {
                 init_options.clone(),
                 env.clone(),
                 config.semantic_tokens,
+                settings.clone(),
             ) {
                 Ok(client) => {
                     self.register_server(
@@ -457,6 +544,7 @@ impl LspManager {
                                 init_options,
                                 env,
                                 config.semantic_tokens,
+                                settings,
                             ) {
                                 self.register_server(
                                     client,

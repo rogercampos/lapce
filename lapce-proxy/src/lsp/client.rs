@@ -124,6 +124,7 @@ impl LspClient {
         options: Option<Value>,
         env: Arc<HashMap<String, String>>,
         semantic_tokens: bool,
+        settings: Option<String>,
     ) -> Result<LspClient> {
         let mut process =
             Self::spawn_process(workspace.as_ref(), command, args, &env)?;
@@ -138,6 +139,8 @@ impl LspClient {
         let server_pending: Arc<
             Mutex<HashMap<Id, ResponseHandler<Value, RpcError>>>,
         > = Arc::new(Mutex::new(HashMap::new()));
+        let settings: Arc<Option<Value>> =
+            Arc::new(settings.and_then(|s| serde_json::from_str::<Value>(&s).ok()));
 
         // Writer thread
         thread::spawn(move || {
@@ -170,6 +173,7 @@ impl LspClient {
         let server_name_closure = server_name.to_string();
         let command_owned = command.to_string();
         let io_tx_for_reader = io_tx.clone();
+        let settings_for_reader = settings.clone();
         thread::spawn(move || {
             let mut reader = Box::new(BufReader::new(stdout));
             loop {
@@ -181,6 +185,7 @@ impl LspClient {
                             &core_rpc,
                             &local_lsp_rpc,
                             &server_name_closure,
+                            &settings_for_reader,
                             &message_str,
                         ) {
                             if let Err(err) = io_tx_for_reader.send(resp) {
@@ -721,6 +726,7 @@ fn handle_server_message(
     core_rpc: &CoreRpcHandler,
     _lsp_rpc: &LspRpcHandler,
     server_name: &str,
+    server_settings: &Option<Value>,
     message: &str,
 ) -> Option<JsonRpc> {
     match JsonRpc::parse(message) {
@@ -742,12 +748,11 @@ fn handle_server_message(
                 }
                 WorkspaceConfiguration::METHOD => {
                     // LSP servers request configuration for specific sections.
-                    // Look up the server's settings_json from the registry.
-                    let server_settings = super::manager::LSP_SERVERS
-                        .iter()
-                        .find(|s| s.display_name == server_name)
-                        .and_then(|s| s.settings_json)
-                        .and_then(|json| serde_json::from_str::<Value>(json).ok())
+                    // Use the pre-computed settings (built at server start time
+                    // from the static config + dynamic workspace-specific values).
+                    let settings = server_settings
+                        .as_ref()
+                        .cloned()
                         .unwrap_or(Value::Object(Default::default()));
 
                     let items =
@@ -762,9 +767,9 @@ fn handle_server_message(
                         .map(|item| {
                             match item.section.as_deref() {
                                 // Empty or missing section: return all settings
-                                Some("") | None => server_settings.clone(),
+                                Some("") | None => settings.clone(),
                                 // Specific section: look it up in the settings
-                                Some(section) => server_settings
+                                Some(section) => settings
                                     .get(section)
                                     .cloned()
                                     .unwrap_or(Value::Object(Default::default())),
