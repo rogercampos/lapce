@@ -79,10 +79,13 @@ impl ProxyHandler for Dispatcher {
                 );
                 self.workspace = workspace;
                 self.excluded_directories = excluded_directories;
+                let git_status_cache =
+                    Arc::new(Mutex::new(None::<HashMap<PathBuf, GitFileStatus>>));
                 self.file_watcher.notify(FileWatchNotifier::new(
                     self.core_rpc.clone(),
                     self.proxy_rpc.clone(),
                     self.workspace.clone(),
+                    git_status_cache.clone(),
                 ));
                 if let Some(workspace) = self.workspace.as_ref() {
                     self.file_watcher
@@ -152,7 +155,8 @@ impl ProxyHandler for Dispatcher {
                             "[bg-thread] Git file statuses done ({} entries)",
                             statuses.len()
                         );
-                        core_rpc.git_file_status_changed(statuses);
+                        core_rpc.git_file_status_changed(statuses.clone());
+                        *git_status_cache.lock() = Some(statuses);
                         core_rpc.background_task_finished(task_id);
                     }
                     // Detect sub-projects
@@ -1203,7 +1207,9 @@ struct FileWatchNotifier {
     core_rpc: CoreRpcHandler,
     proxy_rpc: ProxyRpcHandler,
     workspace: Option<PathBuf>,
-    workspace_fs_change_handler: Arc<Mutex<Option<Sender<bool>>>>,
+    workspace_fs_change_handler: Arc<Mutex<Option<Sender<(bool, Vec<PathBuf>)>>>>,
+    /// Cached git file statuses. `None` = not yet initialized (need full scan).
+    git_status_cache: Arc<Mutex<Option<HashMap<PathBuf, GitFileStatus>>>>,
 }
 
 impl Notify for FileWatchNotifier {
@@ -1217,12 +1223,14 @@ impl FileWatchNotifier {
         core_rpc: CoreRpcHandler,
         proxy_rpc: ProxyRpcHandler,
         workspace: Option<PathBuf>,
+        git_status_cache: Arc<Mutex<Option<HashMap<PathBuf, GitFileStatus>>>>,
     ) -> Self {
         Self {
             core_rpc,
             proxy_rpc,
             workspace,
             workspace_fs_change_handler: Arc::new(Mutex::new(None)),
+            git_status_cache,
         }
     }
 
@@ -1299,20 +1307,20 @@ impl FileWatchNotifier {
         };
 
         // Debounce: accumulate events for 500ms, then fire once.
-        // The bool tracks whether we need to reload the file explorer tree
-        // (creates/deletes/renames). Git status is always recomputed since
-        // any file modification can change it.
+        // The tuple tracks (explorer_change, changed_paths) so we can do
+        // incremental git status updates for non-git file changes.
         let mut handler = self.workspace_fs_change_handler.lock();
         if let Some(sender) = handler.as_mut() {
-            let _ = sender.send(explorer_change);
+            let _ = sender.send((explorer_change, event.paths.clone()));
             return;
         }
         let (sender, receiver) = crossbeam_channel::unbounded();
-        let _ = sender.send(explorer_change);
+        let _ = sender.send((explorer_change, event.paths.clone()));
 
         let local_handler = self.workspace_fs_change_handler.clone();
         let core_rpc = self.core_rpc.clone();
         let workspace = self.workspace.clone();
+        let git_cache = self.git_status_cache.clone();
         thread::spawn(move || {
             thread::sleep(Duration::from_millis(500));
 
@@ -1321,21 +1329,58 @@ impl FileWatchNotifier {
             }
 
             let mut explorer_change = false;
-            for e in receiver {
+            let mut changed_paths = Vec::new();
+            for (e, paths) in receiver {
                 if e {
                     explorer_change = true;
-                    break;
                 }
+                changed_paths.extend(paths);
             }
             if explorer_change {
                 core_rpc.workspace_file_change();
             }
             if let Some(workspace) = workspace.as_ref() {
+                // Decide: full rescan or incremental?
+                // Full rescan if .git/ internals or .gitignore changed, or
+                // if the cache hasn't been initialized yet.
+                let needs_full = {
+                    let cache = git_cache.lock();
+                    cache.is_none()
+                } || changed_paths.iter().any(|p| {
+                    let rel = p.strip_prefix(workspace).unwrap_or(p);
+                    rel.starts_with(".git")
+                        || rel.file_name().map_or(false, |f| f == ".gitignore")
+                });
+
                 let task_id = core_rpc.next_background_task_id();
-                core_rpc
-                    .background_task_started(task_id, "Updating git status".into());
-                let statuses = read_git_file_statuses(workspace);
-                core_rpc.git_file_status_changed(statuses);
+                if needs_full {
+                    core_rpc.background_task_started(
+                        task_id,
+                        "Updating git status".into(),
+                    );
+                    let statuses = read_git_file_statuses(workspace);
+                    core_rpc.git_file_status_changed(statuses.clone());
+                    *git_cache.lock() = Some(statuses);
+                } else {
+                    core_rpc.background_task_started(
+                        task_id,
+                        "Updating git status".into(),
+                    );
+                    let incremental =
+                        read_git_file_statuses_for_paths(workspace, &changed_paths);
+                    let mut cache = git_cache.lock();
+                    let cache_map = cache.as_mut().unwrap();
+                    // Remove old entries for changed paths — if a file was
+                    // reverted to clean, the incremental check won't return
+                    // it, so we must clear the stale entry.
+                    for path in &changed_paths {
+                        cache_map.remove(path);
+                    }
+                    for (path, status) in incremental {
+                        cache_map.insert(path, status);
+                    }
+                    core_rpc.git_file_status_changed(cache_map.clone());
+                }
                 core_rpc.background_task_finished(task_id);
             }
         });
@@ -1372,12 +1417,62 @@ fn read_git_repo_state(workspace: &std::path::Path) -> GitRepoState {
     }
 }
 
+/// Map a git2 status bitfield to our GitFileStatus enum.
+fn map_git_status(status: git2::Status) -> Option<GitFileStatus> {
+    if status.intersects(git2::Status::CONFLICTED) {
+        Some(GitFileStatus::Conflicted)
+    } else if status
+        .intersects(git2::Status::INDEX_RENAMED | git2::Status::WT_RENAMED)
+    {
+        Some(GitFileStatus::Renamed)
+    } else if status.intersects(git2::Status::INDEX_NEW | git2::Status::WT_NEW) {
+        if status.intersects(git2::Status::WT_NEW)
+            && !status.intersects(git2::Status::INDEX_NEW)
+        {
+            Some(GitFileStatus::Untracked)
+        } else {
+            Some(GitFileStatus::Added)
+        }
+    } else if status
+        .intersects(git2::Status::INDEX_DELETED | git2::Status::WT_DELETED)
+    {
+        Some(GitFileStatus::Deleted)
+    } else if status.intersects(
+        git2::Status::INDEX_MODIFIED
+            | git2::Status::WT_MODIFIED
+            | git2::Status::INDEX_TYPECHANGE
+            | git2::Status::WT_TYPECHANGE,
+    ) {
+        Some(GitFileStatus::Modified)
+    } else if status.intersects(git2::Status::IGNORED) {
+        Some(GitFileStatus::Ignored)
+    } else {
+        None
+    }
+}
+
+/// Collect statuses from a git2::Statuses iterator into our map.
+fn collect_git_statuses(
+    workspace: &std::path::Path,
+    statuses: &git2::Statuses<'_>,
+) -> HashMap<PathBuf, GitFileStatus> {
+    let mut result = HashMap::new();
+    for entry in statuses.iter() {
+        if let Some(git_status) = map_git_status(entry.status()) {
+            if let Some(path_str) = entry.path() {
+                result.insert(workspace.join(path_str), git_status);
+            }
+        }
+    }
+    result
+}
+
+/// Full git status scan of the entire workspace.
 fn read_git_file_statuses(
     workspace: &std::path::Path,
 ) -> HashMap<PathBuf, GitFileStatus> {
-    let mut result = HashMap::new();
     let Ok(repo) = git2::Repository::open(workspace) else {
-        return result;
+        return HashMap::new();
     };
     let mut opts = git2::StatusOptions::new();
     opts.include_untracked(true);
@@ -1387,45 +1482,33 @@ fn read_git_file_statuses(
     // — individual ignored files like .env are still detected.
     opts.recurse_ignored_dirs(false);
     let Ok(statuses) = repo.statuses(Some(&mut opts)) else {
-        return result;
+        return HashMap::new();
     };
-    for entry in statuses.iter() {
-        let status = entry.status();
-        let git_status = if status.intersects(git2::Status::CONFLICTED) {
-            GitFileStatus::Conflicted
-        } else if status
-            .intersects(git2::Status::INDEX_RENAMED | git2::Status::WT_RENAMED)
-        {
-            GitFileStatus::Renamed
-        } else if status.intersects(git2::Status::INDEX_NEW | git2::Status::WT_NEW) {
-            if status.intersects(git2::Status::WT_NEW)
-                && !status.intersects(git2::Status::INDEX_NEW)
-            {
-                GitFileStatus::Untracked
-            } else {
-                GitFileStatus::Added
-            }
-        } else if status
-            .intersects(git2::Status::INDEX_DELETED | git2::Status::WT_DELETED)
-        {
-            GitFileStatus::Deleted
-        } else if status.intersects(
-            git2::Status::INDEX_MODIFIED
-                | git2::Status::WT_MODIFIED
-                | git2::Status::INDEX_TYPECHANGE
-                | git2::Status::WT_TYPECHANGE,
-        ) {
-            GitFileStatus::Modified
-        } else if status.intersects(git2::Status::IGNORED) {
-            GitFileStatus::Ignored
-        } else {
-            continue;
-        };
-        if let Some(path_str) = entry.path() {
-            result.insert(workspace.join(path_str), git_status);
+    collect_git_statuses(workspace, &statuses)
+}
+
+/// Incremental git status check for specific paths only.
+/// Much faster than a full scan — only stats the given files.
+fn read_git_file_statuses_for_paths(
+    workspace: &std::path::Path,
+    paths: &[PathBuf],
+) -> HashMap<PathBuf, GitFileStatus> {
+    let Ok(repo) = git2::Repository::open(workspace) else {
+        return HashMap::new();
+    };
+    let mut opts = git2::StatusOptions::new();
+    opts.include_untracked(true);
+    opts.include_ignored(false);
+    // Add pathspecs relative to workspace root
+    for path in paths {
+        if let Ok(relative) = path.strip_prefix(workspace) {
+            opts.pathspec(relative);
         }
     }
-    result
+    let Ok(statuses) = repo.statuses(Some(&mut opts)) else {
+        return HashMap::new();
+    };
+    collect_git_statuses(workspace, &statuses)
 }
 
 /// Search a single file for matches, returning the list of matches found.
