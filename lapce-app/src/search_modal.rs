@@ -719,21 +719,26 @@ fn search_modal_body(
             .size_full()
             .flex_col()
         }),
-        // When no matches: placeholder text
-        container(
+        // When no matches: placeholder text or searching indicator
+        container({
+            let searching = data.global_search.searching;
             label(move || {
                 let input_text = input_buffer.with(|b| b.to_string());
                 let is_empty = flat_matches.with(|items| items.is_empty());
                 if input_text.is_empty() {
                     "Type search query to find in files".to_string()
                 } else if is_empty {
-                    "No results".to_string()
+                    if searching.get() {
+                        "Searching\u{2026}".to_string()
+                    } else {
+                        "No results".to_string()
+                    }
                 } else {
                     String::new()
                 }
             })
-            .style(move |s| s.color(config.get().color(LapceColor::EDITOR_DIM))),
-        )
+            .style(move |s| s.color(config.get().color(LapceColor::EDITOR_DIM)))
+        })
         .style(move |s| {
             let config = config.get();
             s.display(if has_preview.get() {
@@ -801,43 +806,81 @@ fn search_modal_footer(
     config: ReadSignal<Arc<LapceConfig>>,
 ) -> impl View {
     let flat_matches = data.flat_matches;
+    let searching = data.global_search.searching;
+    let input_buffer = data.input_editor.doc().buffer;
 
     stack((
+        // Left: status message
         label(move || {
+            let has_query = input_buffer.with(|b| !b.to_string().is_empty());
             let count = flat_matches.with(|m| m.len());
-            if count >= 100 {
-                format!("Showing first {count} results \u{2014} Open in search panel for more")
+            let is_searching = searching.get();
+            if !has_query {
+                String::new()
+            } else if is_searching {
+                if count > 0 {
+                    format!("Found {count} results so far\u{2026}")
+                } else {
+                    "Searching\u{2026}".to_string()
+                }
+            } else if count > 0 {
+                if count >= 100 {
+                    format!("Found first {count} results")
+                } else {
+                    format!("Found {count} results")
+                }
             } else {
-                "Open in search panel".to_string()
+                String::new()
             }
         })
         .style(move |s| {
             s.color(config.get().color(LapceColor::EDITOR_DIM))
                 .font_size(12.0)
         }),
+        // Spacer
         container(text("")).style(|s| s.flex_grow(1.0)),
-        label(|| {
-            let modifier = if cfg!(target_os = "macos") {
-                "\u{2318}"
-            } else {
-                "Ctrl"
-            };
-            format!("{modifier}+Enter")
+        // Right: "Open in search panel" button
+        stack((
+            label(|| "Open in search panel".to_string()).style(move |s| {
+                s.color(config.get().color(LapceColor::EDITOR_DIM))
+                    .font_size(12.0)
+            }),
+            label(|| {
+                let modifier = if cfg!(target_os = "macos") {
+                    "\u{2318}"
+                } else {
+                    "Ctrl"
+                };
+                format!("{modifier}+Enter")
+            })
+            .style(move |s| {
+                let config = config.get();
+                s.color(config.color(LapceColor::EDITOR_DIM))
+                    .font_size(11.0)
+                    .padding_horiz(6.0)
+                    .padding_vert(2.0)
+                    .border(1.0)
+                    .border_radius(3.0)
+                    .border_color(config.color(LapceColor::LAPCE_BORDER))
+                    .margin_left(6.0)
+            }),
+        ))
+        .on_click_stop(move |_| {
+            data.open_full_results();
         })
         .style(move |s| {
-            let config = config.get();
-            s.color(config.color(LapceColor::EDITOR_DIM))
-                .font_size(11.0)
+            s.items_center()
+                .cursor(CursorStyle::Pointer)
+                .border_radius(3.0)
                 .padding_horiz(6.0)
                 .padding_vert(2.0)
-                .border(1.0)
-                .border_radius(3.0)
-                .border_color(config.color(LapceColor::LAPCE_BORDER))
+                .hover(|s| {
+                    s.background(
+                        config.get().color(LapceColor::PANEL_HOVERED_BACKGROUND),
+                    )
+                })
         }),
     ))
-    .on_click_stop(move |_| {
-        data.open_full_results();
-    })
     .style(move |s| {
         let config = config.get();
         s.width_full()
@@ -846,9 +889,5 @@ fn search_modal_footer(
             .border_top(1.0)
             .border_color(config.color(LapceColor::LAPCE_BORDER))
             .items_center()
-            .cursor(CursorStyle::Pointer)
-            .hover(|s| {
-                s.background(config.color(LapceColor::PANEL_HOVERED_BACKGROUND))
-            })
     })
 }

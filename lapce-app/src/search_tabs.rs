@@ -110,17 +110,24 @@ impl SearchTabsData {
         self.tabs.with_untracked(|tabs| tabs.get(active).cloned())
     }
 
-    /// Set the active tab. Results are cached in memory, so switching tabs
-    /// does not re-run the search.
+    /// Set the active tab. If the tab was lazily restored, triggers its search.
     pub fn activate_tab(&self, index: usize) {
         let len = self.tabs.with_untracked(|tabs| tabs.len());
         if index >= len {
             return;
         }
         self.active_tab.set(index);
+        // Activate lazy tabs on first switch
+        self.tabs.with_untracked(|tabs| {
+            if let Some(gs) = tabs.get(index) {
+                gs.activate_lazy();
+            }
+        });
     }
 
-    /// Restore tabs from persisted info. Creates new GlobalSearchData for each.
+    /// Restore tabs from persisted info. Creates lazy GlobalSearchData for each
+    /// tab, then activates only the initially active one. This avoids the
+    /// WORKER_ID cancellation cascade where each new search cancels the previous.
     pub fn restore_from_info(&self, infos: Vec<SearchTabInfo>, active: usize) {
         for info in infos {
             let case_matching = if info.case_sensitive {
@@ -128,7 +135,7 @@ impl SearchTabsData {
             } else {
                 CaseMatching::CaseInsensitive
             };
-            let gs = GlobalSearchData::new_for_tab(
+            let gs = GlobalSearchData::new_for_tab_lazy(
                 self.scope,
                 self.main_split.clone(),
                 info.pattern,
@@ -142,7 +149,14 @@ impl SearchTabsData {
         }
         let len = self.tabs.with_untracked(|tabs| tabs.len());
         if len > 0 {
-            self.active_tab.set(active.min(len - 1));
+            let active_idx = active.min(len - 1);
+            self.active_tab.set(active_idx);
+            // Activate the initially active tab so its search executes
+            self.tabs.with_untracked(|tabs| {
+                if let Some(gs) = tabs.get(active_idx) {
+                    gs.activate_lazy();
+                }
+            });
         }
     }
 

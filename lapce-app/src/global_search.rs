@@ -188,6 +188,10 @@ pub struct GlobalSearchData {
     pub current_search_id: RwSignal<u64>,
     /// True while a search is in progress (between request and GlobalSearchDone).
     pub searching: RwSignal<bool>,
+    /// When true, the reactive effect that fires searches on pattern change is
+    /// suppressed. Used for restored search tabs that shouldn't execute until
+    /// they become the active tab (avoids WORKER_ID cancellation cascade).
+    pub lazy: RwSignal<bool>,
 }
 
 impl std::fmt::Debug for GlobalSearchData {
@@ -290,6 +294,7 @@ impl GlobalSearchData {
         let is_regex = cx.create_rw_signal(false);
         let current_search_id = cx.create_rw_signal(0u64);
         let searching = cx.create_rw_signal(false);
+        let lazy = cx.create_rw_signal(false);
 
         // Build the search_tree_rows Memo from panel_search_result (not
         // search_result) so the bottom panel only updates when explicitly
@@ -342,6 +347,7 @@ impl GlobalSearchData {
             is_regex,
             current_search_id,
             searching,
+            lazy,
         };
 
         // Reactive effect: whenever the editor buffer text changes, fire a new search
@@ -352,6 +358,10 @@ impl GlobalSearchData {
             let buffer = global_search.editor.doc().buffer;
             cx.create_effect(move |_| {
                 let pattern = buffer.with(|buffer| buffer.to_string());
+                // Lazy tabs skip firing searches until explicitly activated.
+                if global_search.lazy.get_untracked() {
+                    return;
+                }
                 // Clear results: either the pattern is empty (nothing to search)
                 // or a new search is starting (results will stream in).
                 global_search.search_result.update(|r| r.clear());
@@ -627,6 +637,37 @@ impl GlobalSearchData {
         // Setting the pattern triggers the reactive effect which fires the search
         gs.set_pattern(pattern);
         gs
+    }
+
+    /// Like `new_for_tab()` but creates a lazy tab that stores the pattern
+    /// without executing the search. Call `activate_lazy()` when the tab
+    /// becomes active to trigger the actual search.
+    pub fn new_for_tab_lazy(
+        cx: Scope,
+        main_split: MainSplitData,
+        pattern: String,
+        case_matching: CaseMatching,
+        whole_words: bool,
+        is_regex: bool,
+    ) -> Self {
+        let gs = Self::new(cx, main_split);
+        gs.lazy.set(true);
+        gs.case_matching.set(case_matching);
+        gs.whole_words.set(whole_words);
+        gs.is_regex.set(is_regex);
+        // Set the pattern without triggering the search (lazy flag is set)
+        gs.set_pattern(pattern);
+        gs
+    }
+
+    /// Activate a lazy tab: clears the lazy flag and fires a search if the
+    /// pattern is non-empty.
+    pub fn activate_lazy(&self) {
+        if !self.lazy.get_untracked() {
+            return;
+        }
+        self.lazy.set(false);
+        self.re_search();
     }
 
     /// Re-run the search with the current pattern and options, clearing cached
