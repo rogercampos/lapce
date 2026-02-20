@@ -48,7 +48,7 @@ use lsp_types::{
         InlayHintRequest, InlineCompletionRequest, PrepareRenameRequest, References,
         RegisterCapability, Rename, Request, ResolveCompletionItem,
         SelectionRangeRequest, SemanticTokensFullRequest, SignatureHelpRequest,
-        WorkDoneProgressCreate, WorkspaceSymbolRequest,
+        WorkDoneProgressCreate, WorkspaceConfiguration, WorkspaceSymbolRequest,
     },
 };
 use parking_lot::Mutex;
@@ -123,6 +123,7 @@ impl LspClient {
         languages: &'static [&'static str],
         options: Option<Value>,
         env: Arc<HashMap<String, String>>,
+        semantic_tokens: bool,
     ) -> Result<LspClient> {
         let mut process =
             Self::spawn_process(workspace.as_ref(), command, args, &env)?;
@@ -174,9 +175,7 @@ impl LspClient {
             loop {
                 match read_message(&mut reader) {
                     Ok(message_str) => {
-                        if !message_str.contains("$/progress") {
-                            tracing::debug!("read from lsp: {}", message_str);
-                        }
+                        tracing::debug!("read from lsp: {}", message_str);
                         if let Some(resp) = handle_server_message(
                             &local_pending,
                             &core_rpc,
@@ -243,12 +242,12 @@ impl LspClient {
         };
 
         // Initialize the LSP server
-        client.initialize(options);
+        client.initialize(options, semantic_tokens);
 
         Ok(client)
     }
 
-    fn initialize(&mut self, options: Option<Value>) {
+    fn initialize(&mut self, options: Option<Value>, semantic_tokens: bool) {
         let root_uri = self
             .workspace
             .clone()
@@ -280,6 +279,9 @@ impl LspClient {
                 let result: InitializeResult =
                     serde_json::from_value(value).unwrap();
                 self.server_capabilities = result.capabilities;
+                if !semantic_tokens {
+                    self.server_capabilities.semantic_tokens_provider = None;
+                }
                 self.send_server_notification(
                     Initialized::METHOD,
                     Params::from(
@@ -727,8 +729,9 @@ fn handle_server_message(
             let method = value.get_method().unwrap().to_string();
             let _params = value.get_params().unwrap();
 
-            // For simple host requests (WorkDoneProgressCreate, RegisterCapability),
-            // we handle them inline since they don't need mutable access to the manager.
+            // For simple host requests (WorkDoneProgressCreate, RegisterCapability,
+            // WorkspaceConfiguration), we handle them inline since they don't need
+            // mutable access to the manager.
             let result = match method.as_str() {
                 WorkDoneProgressCreate::METHOD => Ok(Value::Null),
                 RegisterCapability::METHOD => {
@@ -736,6 +739,39 @@ fn handle_server_message(
                     // For now, just acknowledge it. The client will pick up registrations
                     // through another mechanism.
                     Ok(Value::Null)
+                }
+                WorkspaceConfiguration::METHOD => {
+                    // LSP servers request configuration for specific sections.
+                    // Look up the server's settings_json from the registry.
+                    let server_settings = super::manager::LSP_SERVERS
+                        .iter()
+                        .find(|s| s.display_name == server_name)
+                        .and_then(|s| s.settings_json)
+                        .and_then(|json| serde_json::from_str::<Value>(json).ok())
+                        .unwrap_or(Value::Object(Default::default()));
+
+                    let items =
+                        serde_json::from_value::<lsp_types::ConfigurationParams>(
+                            serde_json::to_value(_params).unwrap_or_default(),
+                        )
+                        .map(|p| p.items)
+                        .unwrap_or_default();
+
+                    let results: Vec<Value> = items
+                        .iter()
+                        .map(|item| {
+                            match item.section.as_deref() {
+                                // Empty or missing section: return all settings
+                                Some("") | None => server_settings.clone(),
+                                // Specific section: look it up in the settings
+                                Some(section) => server_settings
+                                    .get(section)
+                                    .cloned()
+                                    .unwrap_or(Value::Object(Default::default())),
+                            }
+                        })
+                        .collect();
+                    Ok(Value::Array(results))
                 }
                 _ => Err(RpcError::new(format!("request {method} not supported"))),
             };

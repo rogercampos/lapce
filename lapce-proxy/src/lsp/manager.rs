@@ -36,6 +36,21 @@ pub struct LspServerConfig {
     pub auto_install: AutoInstall,
     /// Condition that must be met for this server to activate.
     pub activation_condition: ActivationCondition,
+    /// When true, each sub-project gets its own server instance even if a
+    /// parent project exists for the same language. Required for servers
+    /// like vtsls where each sub-project has its own tsconfig.json and
+    /// a single instance at the monorepo root would be too large.
+    /// When false (default for most servers), a parent project's server
+    /// covers child sub-projects.
+    pub per_project_instance: bool,
+    /// JSON string for workspace/configuration settings, returned when
+    /// the server sends a `workspace/configuration` request.
+    /// Structure follows VS Code settings format with top-level sections
+    /// (e.g. `{"typescript": {...}, "vtsls": {...}}`).
+    pub settings_json: Option<&'static str>,
+    /// When true, discard the server's semantic tokens capability so that
+    /// tree-sitter highlighting is used instead.
+    pub semantic_tokens: bool,
 }
 
 /// Condition that must be met for a server to activate.
@@ -70,6 +85,9 @@ pub const LSP_SERVERS: &[LspServerConfig] = &[
         ),
         auto_install: AutoInstall::Gem { gem: "ruby-lsp" },
         activation_condition: ActivationCondition::Always,
+        per_project_instance: false,
+        settings_json: None,
+        semantic_tokens: false,
     },
     LspServerConfig {
         display_name: "sorbet",
@@ -79,6 +97,9 @@ pub const LSP_SERVERS: &[LspServerConfig] = &[
         init_options_json: None,
         auto_install: AutoInstall::None,
         activation_condition: ActivationCondition::GemInGemfileLock("sorbet-static"),
+        per_project_instance: false,
+        settings_json: None,
+        semantic_tokens: false,
     },
     LspServerConfig {
         display_name: "bash-language-server",
@@ -90,6 +111,41 @@ pub const LSP_SERVERS: &[LspServerConfig] = &[
             package: "bash-language-server",
         },
         activation_condition: ActivationCondition::Always,
+        per_project_instance: false,
+        settings_json: None,
+        semantic_tokens: false,
+    },
+    LspServerConfig {
+        display_name: "vtsls",
+        command: "vtsls",
+        args: &["--stdio"],
+        languages: &[
+            "typescript",
+            "typescriptreact",
+            "javascript",
+            "javascriptreact",
+        ],
+        init_options_json: None,
+        auto_install: AutoInstall::Npm {
+            package: "@vtsls/language-server",
+        },
+        activation_condition: ActivationCondition::Always,
+        per_project_instance: false,
+        // Settings returned via workspace/configuration (VS Code format).
+        // vtsls ignores initializationOptions for these; they must come here.
+        settings_json: Some(
+            r#"{
+                "vtsls": {
+                    "autoUseWorkspaceTsdk": true
+                },
+                "typescript": {
+                    "tsserver": {
+                        "maxTsServerMemory": 8192
+                    }
+                }
+            }"#,
+        ),
+        semantic_tokens: false,
     },
 ];
 
@@ -247,22 +303,35 @@ impl LspManager {
                 continue;
             }
 
-            // Skip if a parent project exists for the same language.
-            // The parent's LSP server covers child directories, so we
-            // don't need a separate instance for the sub-project.
-            // We check `self.projects` (all detected projects, known upfront)
-            // rather than `activated_configs` to be order-independent.
-            let covered_by_parent = self.projects.iter().any(|p| {
-                !p.root.as_os_str().is_empty()
-                    && project_root.starts_with(&p.root)
-                    && p.root != *project_root
-                    && p.languages
-                        .iter()
-                        .any(|l| config.languages.contains(&l.as_str()))
-            });
-            if covered_by_parent {
-                self.activated_configs.push(activation_key);
-                continue;
+            // For servers that don't use per_project_instance, skip if a
+            // parent project exists for the same language — the parent's
+            // server covers child directories (e.g., Ruby monorepos with
+            // one Gemfile at the root).
+            // For per_project_instance servers (e.g., vtsls), each
+            // sub-project gets its own instance because they may have
+            // independent configs (tsconfig.json) and a single instance at
+            // the monorepo root can crash on large projects.
+            if !config.per_project_instance {
+                let parent_root = self
+                    .projects
+                    .iter()
+                    .filter(|p| {
+                        !p.root.as_os_str().is_empty()
+                            && project_root.starts_with(&p.root)
+                            && p.root != *project_root
+                            && p.languages
+                                .iter()
+                                .any(|l| config.languages.contains(&l.as_str()))
+                    })
+                    .max_by_key(|p| p.root.components().count())
+                    .map(|p| p.root.clone());
+                if let Some(parent_root) = parent_root {
+                    self.activated_configs.push(activation_key);
+                    // Ensure the parent project's server is started so it
+                    // can cover this child project's files.
+                    self.ensure_server_for_language(language_id, &parent_root);
+                    continue;
+                }
             }
 
             // Check activation condition
@@ -362,6 +431,7 @@ impl LspManager {
                 config.languages,
                 init_options.clone(),
                 env.clone(),
+                config.semantic_tokens,
             ) {
                 Ok(client) => {
                     self.register_server(
@@ -386,6 +456,7 @@ impl LspManager {
                                 config.languages,
                                 init_options,
                                 env,
+                                config.semantic_tokens,
                             ) {
                                 self.register_server(
                                     client,
@@ -795,13 +866,10 @@ impl LspManager {
         // Ensure servers are running for this (language, project_root)
         self.ensure_server_for_language(&document.language_id, &project_root);
 
-        // Broadcast to all matching servers
-        let key = (document.language_id.clone(), project_root);
-        let server_ids = self
-            .language_project_to_server
-            .get(&key)
-            .cloned()
-            .unwrap_or_default();
+        // Broadcast to all matching servers (falls back to parent project
+        // server when this file's project root was covered by a parent).
+        let server_ids =
+            self.find_servers_for_path(&document.language_id, file_path.as_deref());
 
         for pid in server_ids {
             let path = document.uri.to_file_path().ok();

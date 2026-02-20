@@ -1197,7 +1197,7 @@ pub(crate) fn client_capabilities() -> ClientCapabilities {
             symbol: Some(WorkspaceSymbolClientCapabilities {
                 ..Default::default()
             }),
-            configuration: Some(false),
+            configuration: Some(true),
             workspace_folders: Some(true),
             ..Default::default()
         }),
@@ -1335,7 +1335,7 @@ mod tests {
         let caps = client_capabilities();
         let ws = caps.workspace.unwrap();
         assert_eq!(ws.workspace_folders, Some(true));
-        assert_eq!(ws.configuration, Some(false));
+        assert_eq!(ws.configuration, Some(true));
     }
 
     #[test]
