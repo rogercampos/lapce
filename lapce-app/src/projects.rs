@@ -29,6 +29,7 @@ fn badge(text_str: String, config: ReadSignal<Arc<LapceConfig>>) -> impl View {
 
 fn project_card(
     project: ProjectInfo,
+    depth: usize,
     workspace_path: Option<PathBuf>,
     config: ReadSignal<Arc<LapceConfig>>,
 ) -> impl View {
@@ -37,9 +38,17 @@ fn project_card(
         .and_then(|ws| project.root.strip_prefix(ws).ok())
         .map(|p| p.to_string_lossy().to_string())
         .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| project.root.to_string_lossy().to_string());
+        .unwrap_or_else(|| {
+            project
+                .root
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| project.root.to_string_lossy().to_string())
+        });
 
     let kind_label = project.kind.label().to_string();
+    let lsp_label = project.lsp_server.clone();
+    let left_pad = 12.0 + (depth as f64 * 24.0);
 
     let mut info_parts: Vec<String> = Vec::new();
     if let Some(vm) = &project.version_manager {
@@ -53,7 +62,7 @@ fn project_card(
     let info_text = info_parts.join(" · ");
 
     stack((
-        // Left: path + badge
+        // Left: path + badges
         stack((
             label(move || relative_path.clone()).style(move |s| {
                 s.font_bold()
@@ -62,6 +71,26 @@ fn project_card(
                     .min_width(0)
             }),
             badge(kind_label, config),
+            {
+                let view = label(move || lsp_label.clone().unwrap_or_default())
+                    .style(move |s| {
+                        let config = config.get();
+                        s.padding_horiz(6.0)
+                            .padding_vert(1.0)
+                            .border_radius(3.0)
+                            .font_size(
+                                (config.ui.font_size() as f32 * 0.85).max(9.0),
+                            )
+                            .background(
+                                config
+                                    .color(LapceColor::EDITOR_FOREGROUND)
+                                    .multiply_alpha(0.08),
+                            )
+                            .color(config.color(LapceColor::EDITOR_DIM))
+                            .apply_if(project.lsp_server.is_none(), |s| s.hide())
+                    });
+                view
+            },
         ))
         .style(|s| {
             s.flex_row()
@@ -83,7 +112,8 @@ fn project_card(
         s.flex_row()
             .items_center()
             .width_full()
-            .padding_horiz(12.0)
+            .padding_left(left_pad)
+            .padding_right(12.0)
             .padding_vert(8.0)
             .gap(12.0)
             .border_bottom(1.0)
@@ -97,6 +127,46 @@ fn is_project_starred(project: &ProjectInfo, starred: &HashSet<PathBuf>) -> bool
     starred.iter().any(|starred_path| {
         project.root == *starred_path || project.root.starts_with(starred_path)
     })
+}
+
+/// Builds a depth-annotated flat list from projects based on path containment.
+/// A project B is nested under project A if B's root starts with A's root.
+/// The deepest matching ancestor determines the parent. Starred projects
+/// come first among siblings at each level.
+fn build_project_tree(
+    projects: Vec<ProjectInfo>,
+    starred: &HashSet<PathBuf>,
+) -> Vec<(ProjectInfo, usize)> {
+    let mut sorted = projects;
+    sorted.sort_by(|a, b| {
+        let a_depth = a.root.components().count();
+        let b_depth = b.root.components().count();
+        // Primary: path depth (shallowest first to ensure parents come before children)
+        // Secondary: starred first. Tertiary: alphabetical by path.
+        a_depth.cmp(&b_depth).then_with(|| {
+            let a_starred = is_project_starred(a, starred);
+            let b_starred = is_project_starred(b, starred);
+            b_starred.cmp(&a_starred).then_with(|| a.root.cmp(&b.root))
+        })
+    });
+
+    let mut result: Vec<(ProjectInfo, usize)> = Vec::new();
+    // Track (root_path, depth) for parent lookup
+    let mut placed: Vec<(PathBuf, usize)> = Vec::new();
+
+    for project in sorted {
+        let depth = placed
+            .iter()
+            .rev()
+            .find(|(parent_root, _)| {
+                project.root.starts_with(parent_root) && project.root != *parent_root
+            })
+            .map(|(_, d)| d + 1)
+            .unwrap_or(0);
+        placed.push((project.root.clone(), depth));
+        result.push((project, depth));
+    }
+    result
 }
 
 pub fn projects_view(
@@ -150,27 +220,16 @@ pub fn projects_view(
                 floem::views::dyn_stack(
                     move || {
                         let starred_set = starred.get();
-                        let mut items: Vec<_> =
-                            projects.get().into_iter().enumerate().collect();
-                        items.sort_by(|(_, a), (_, b)| {
-                            let a_starred = is_project_starred(a, &starred_set);
-                            let b_starred = is_project_starred(b, &starred_set);
-                            b_starred.cmp(&a_starred).then_with(|| {
-                                a.root
-                                    .components()
-                                    .count()
-                                    .cmp(&b.root.components().count())
-                            })
-                        });
-                        items
+                        let items = projects.get();
+                        build_project_tree(items, &starred_set)
                     },
-                    |(i, p)| {
-                        format!("{}:{}:{}", i, p.root.display(), p.kind.label())
+                    |(p, depth)| {
+                        format!("{}:{}:{}", depth, p.root.display(), p.kind.label())
                     },
                     {
                         let ws = ws.clone();
-                        move |(_i, project)| {
-                            project_card(project, ws.clone(), config)
+                        move |(project, depth)| {
+                            project_card(project, depth, ws.clone(), config)
                         }
                     },
                 )
