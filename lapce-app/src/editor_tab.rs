@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     config::{LapceConfig, color::LapceColor, icon::LapceIcons},
-    doc::{Doc, DocContent},
+    doc::{Doc, DocContent, is_external_file},
     editor::{EditorData, EditorInfo, location::EditorLocation},
     id::{EditorTabId, KeymapId, ProjectsId, SettingsId, SplitId},
     main_split::{Editors, MainSplitData},
@@ -203,7 +203,7 @@ impl EditorTabChild {
                     None
                 };
                 let is_external = match (&path, &workspace_path) {
-                    (Some((p, _)), Some(ws)) => !p.starts_with(ws),
+                    (Some((p, _)), Some(ws)) => is_external_file(p, ws),
                     _ => false,
                 };
                 let (icon, color, name, is_pristine) = match path {

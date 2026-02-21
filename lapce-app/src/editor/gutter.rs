@@ -1,6 +1,6 @@
 use super::EditorData;
 use crate::config::{LapceConfig, color::LapceColor};
-use crate::doc::DocContent;
+use crate::doc::{DocContent, is_external_file};
 use floem::{
     Renderer, View, ViewId,
     context::PaintCx,
@@ -110,7 +110,7 @@ impl View for EditorGutterView {
                     .workspace
                     .path
                     .as_ref()
-                    .map(|ws| !path.starts_with(ws))
+                    .map(|ws| is_external_file(path, ws))
                     .unwrap_or(false)
             } else {
                 false

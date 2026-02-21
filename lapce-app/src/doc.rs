@@ -3,7 +3,7 @@ use std::{
     cell::RefCell,
     collections::HashMap,
     ops::Range,
-    path::PathBuf,
+    path::{Path, PathBuf},
     rc::Rc,
     sync::{
         Arc,
@@ -102,6 +102,13 @@ pub enum DocContent {
     History(DocHistory),
     /// A new file which doesn't exist in the file system
     Scratch { id: BufferId, name: String },
+}
+
+/// Returns `true` if `file_path` should be treated as external to the workspace:
+/// either it's outside the workspace root, or it's under `node_modules`.
+pub fn is_external_file(file_path: &Path, workspace_path: &Path) -> bool {
+    !file_path.starts_with(workspace_path)
+        || file_path.starts_with(workspace_path.join("node_modules"))
 }
 
 impl DocContent {
