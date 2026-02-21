@@ -160,13 +160,17 @@ impl SearchModalData {
             });
         }
 
-        // Auto-close when focus changes away
+        // Auto-close when focus changes away (but NOT when the folder picker
+        // opens on top — the search modal should stay open behind it).
         {
             let focus = common.focus;
             let modal_active = global_search.modal_active;
             cx.create_effect(move |_| {
                 let f = focus.get();
-                if f != Focus::SearchModal && visible.get_untracked() {
+                if f != Focus::SearchModal
+                    && f != Focus::FolderPicker
+                    && visible.get_untracked()
+                {
                     modal_active.set(false);
                     visible.set(false);
                 }
@@ -306,9 +310,15 @@ impl SearchModalData {
         let case_matching = self.global_search.case_matching.get_untracked();
         let (_, whole_words, is_regex) =
             self.global_search.search_options_untracked();
+        let search_path = self.global_search.search_path.get_untracked();
 
-        self.search_tabs
-            .new_tab(pattern, case_matching, whole_words, is_regex);
+        self.search_tabs.new_tab(
+            pattern,
+            case_matching,
+            whole_words,
+            is_regex,
+            search_path,
+        );
         self.close();
         self.common
             .internal_command
@@ -457,6 +467,8 @@ fn search_modal_content(workspace_data: Rc<WorkspaceData>) -> impl View {
     let content = stack((
         // Header: Search input
         search_modal_input(data.clone(), config, focus),
+        // Folder filter row
+        search_folder_filter_row(workspace_data.clone(), config),
         // Body: results list + preview (fixed size via flex_grow)
         search_modal_body(
             workspace_data.clone(),
@@ -520,6 +532,44 @@ fn search_modal_input(
             }),
     )
     .style(|s| s.padding_bottom(5.0))
+}
+
+/// A clickable row below the search input showing the current folder filter.
+/// Clicking it opens the folder picker modal. Shows "All files" when no filter
+/// is set, or the relative path when a subfolder is selected.
+fn search_folder_filter_row(
+    workspace_data: Rc<WorkspaceData>,
+    config: ReadSignal<Arc<LapceConfig>>,
+) -> impl View {
+    let search_path = workspace_data.search_modal_data.global_search.search_path;
+    let folder_picker_data = workspace_data.folder_picker_data.clone();
+    let search_path_for_callback = search_path;
+
+    container(
+        label(move || match search_path.get() {
+            Some(p) => format!("Folder: {}", p.display()),
+            None => "Folder: All files".to_string(),
+        })
+        .on_click_stop(move |_| {
+            let sp = search_path_for_callback;
+            folder_picker_data.open(move |selected| {
+                sp.set(selected);
+            });
+        })
+        .style(move |s| {
+            let config = config.get();
+            s.width_full()
+                .padding_horiz(10.0)
+                .padding_vert(4.0)
+                .cursor(CursorStyle::Pointer)
+                .color(config.color(LapceColor::EDITOR_DIM))
+                .border_bottom(1.0)
+                .border_color(config.color(LapceColor::LAPCE_BORDER))
+                .hover(|s| {
+                    s.background(config.color(LapceColor::PANEL_HOVERED_BACKGROUND))
+                })
+        }),
+    )
 }
 
 fn search_modal_body(

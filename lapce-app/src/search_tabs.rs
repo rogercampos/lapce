@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{path::PathBuf, rc::Rc};
 
 use floem::reactive::{RwSignal, Scope, SignalGet, SignalUpdate, SignalWith};
 use lapce_xi_rope::find::CaseMatching;
@@ -17,6 +17,8 @@ pub struct SearchTabInfo {
     pub case_sensitive: bool,
     pub whole_words: bool,
     pub is_regex: bool,
+    #[serde(default)]
+    pub search_path: Option<PathBuf>,
 }
 
 /// Manages multiple search result tabs in the bottom panel.
@@ -60,6 +62,7 @@ impl SearchTabsData {
         case_matching: CaseMatching,
         whole_words: bool,
         is_regex: bool,
+        search_path: Option<PathBuf>,
     ) {
         let gs = GlobalSearchData::new_for_tab(
             self.scope,
@@ -68,6 +71,7 @@ impl SearchTabsData {
             case_matching,
             whole_words,
             is_regex,
+            search_path,
         );
         let new_index = self.tabs.with_untracked(|tabs| tabs.len());
         self.tabs.update(|tabs| {
@@ -142,6 +146,7 @@ impl SearchTabsData {
                 case_matching,
                 info.whole_words,
                 info.is_regex,
+                info.search_path,
             );
             self.tabs.update(|tabs| {
                 tabs.push_back(gs);
@@ -172,6 +177,7 @@ impl SearchTabsData {
                     ),
                     whole_words: gs.whole_words.get_untracked(),
                     is_regex: gs.is_regex.get_untracked(),
+                    search_path: gs.search_path.get_untracked(),
                 })
                 .collect()
         })

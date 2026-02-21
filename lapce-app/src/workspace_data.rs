@@ -61,6 +61,7 @@ use crate::{
     doc::DocContent,
     editor::location::{EditorLocation, EditorPosition},
     file_explorer::data::FileExplorerData,
+    folder_picker::FolderPickerData,
     global_search::GlobalSearchData,
     go_to_file::GoToFileData,
     go_to_line::GoToLineData,
@@ -106,6 +107,7 @@ pub enum Focus {
     GoToLine,
     GoToSymbol,
     DefinitionPicker,
+    FolderPicker,
     Panel(PanelKind),
 }
 
@@ -198,6 +200,7 @@ pub struct WorkspaceData {
     pub go_to_symbol_data: GoToSymbolData,
     pub recent_files: RwSignal<Vec<PathBuf>>,
     pub recent_files_data: RecentFilesData,
+    pub folder_picker_data: FolderPickerData,
     pub alert_data: AlertBoxData,
     pub layout_rect: RwSignal<Rect>,
     pub title_height: RwSignal<f64>,
@@ -514,6 +517,8 @@ impl WorkspaceData {
             recent_files,
             common.clone(),
         );
+        let folder_picker_data =
+            FolderPickerData::new(cx, main_split.clone(), common.clone());
         let alert_data = AlertBoxData::new(cx, common.clone());
 
         // Restore search tabs from persisted workspace info
@@ -548,6 +553,7 @@ impl WorkspaceData {
             go_to_symbol_data,
             recent_files,
             recent_files_data,
+            folder_picker_data,
             alert_data,
             layout_rect: cx.create_rw_signal(Rect::ZERO),
             title_height,
@@ -1000,6 +1006,26 @@ impl WorkspaceData {
                 self.toggle_container_visual(&PanelContainerPosition::Bottom);
             }
             ToggleSearchFocus => {
+                // If a folder is selected in the file explorer, pre-fill
+                // the search path filter with it.
+                let selected_folder = self
+                    .file_explorer
+                    .select
+                    .get_untracked()
+                    .and_then(|kind| kind.path().map(|p| p.to_path_buf()))
+                    .filter(|p| p.is_dir())
+                    .and_then(|p| {
+                        self.common
+                            .workspace
+                            .path
+                            .as_ref()
+                            .and_then(|ws| p.strip_prefix(ws).ok())
+                            .map(|rel| rel.to_path_buf())
+                    });
+                self.search_modal_data
+                    .global_search
+                    .search_path
+                    .set(selected_folder);
                 self.search_modal_data.open();
             }
             SearchModalOpenFullResults => {
@@ -1800,6 +1826,9 @@ impl WorkspaceData {
             Focus::DefinitionPicker => {
                 let picker = self.definition_picker.get_untracked();
                 Some(keypress.key_down(event, &picker))
+            }
+            Focus::FolderPicker => {
+                Some(keypress.key_down(event, &self.folder_picker_data))
             }
             Focus::Panel(PanelKind::Search) => {
                 if let Some(active_search) = self.search_tabs.active_search() {

@@ -349,6 +349,7 @@ impl ProxyHandler for Dispatcher {
                 is_regex,
                 max_results,
                 search_id,
+                search_path,
             } => {
                 static WORKER_ID: AtomicU64 = AtomicU64::new(0);
                 let our_id = WORKER_ID.fetch_add(1, Ordering::SeqCst) + 1;
@@ -375,6 +376,7 @@ impl ProxyHandler for Dispatcher {
                         is_regex,
                         max_results,
                         search_id,
+                        search_path.as_deref(),
                         &core_rpc,
                     );
                     core_rpc.background_task_finished(task_id);
@@ -1198,6 +1200,44 @@ impl ProxyHandler for Dispatcher {
                 let resp = ProxyResponse::ReferencesResolveResponse { items };
                 self.proxy_rpc.handle_response(id, Ok(resp));
             }
+            ListAllFolders {} => {
+                let workspace = self.workspace.clone();
+                let proxy_rpc = self.proxy_rpc.clone();
+                let excluded_directories = self.excluded_directories.clone();
+                thread::spawn(move || {
+                    let mut folders = Vec::new();
+                    if let Some(workspace) = workspace.as_ref() {
+                        let overrides = Dispatcher::build_walk_overrides(
+                            workspace,
+                            &excluded_directories,
+                        );
+                        let mut walk_builder = ignore::WalkBuilder::new(workspace);
+                        walk_builder.hidden(false).parents(false).require_git(false);
+                        if let Some(overrides) = overrides {
+                            walk_builder.overrides(overrides);
+                        }
+                        for entry in walk_builder.build() {
+                            let entry = match entry {
+                                Ok(e) => e,
+                                Err(_) => continue,
+                            };
+                            if entry.file_type().map_or(false, |ft| ft.is_dir()) {
+                                let path = entry.into_path();
+                                if path != *workspace {
+                                    if let Ok(rel) = path.strip_prefix(workspace) {
+                                        folders.push(rel.to_path_buf());
+                                    }
+                                }
+                            }
+                        }
+                        folders.sort();
+                    }
+                    proxy_rpc.handle_response(
+                        id,
+                        Ok(ProxyResponse::ListAllFoldersResponse { folders }),
+                    );
+                });
+            }
         }
     }
 }
@@ -1633,6 +1673,7 @@ fn parallel_search(
     is_regex: bool,
     max_results: Option<usize>,
     search_id: u64,
+    search_path: Option<&std::path::Path>,
     core_rpc: &CoreRpcHandler,
 ) -> Result<ProxyResponse, RpcError> {
     let mut builder = RegexMatcherBuilder::new();
@@ -1656,7 +1697,12 @@ fn parallel_search(
 
     let overrides =
         Dispatcher::build_walk_overrides(workspace, excluded_directories);
-    let mut walk_builder = ignore::WalkBuilder::new(workspace);
+    // When a search_path is specified, restrict the walk to that subfolder
+    let walk_root = match search_path {
+        Some(rel) => workspace.join(rel),
+        None => workspace.to_path_buf(),
+    };
+    let mut walk_builder = ignore::WalkBuilder::new(&walk_root);
     walk_builder.hidden(false).parents(false).require_git(false);
     if let Some(overrides) = overrides {
         walk_builder.overrides(overrides);

@@ -14,6 +14,7 @@ pub mod file_explorer;
 pub mod file_icon;
 pub mod find;
 pub mod focus_text;
+pub mod folder_picker;
 pub mod global_search;
 pub mod go_to_file;
 pub mod go_to_line;
