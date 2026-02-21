@@ -1,5 +1,20 @@
 use std::{collections::HashMap, path::Path};
 
+/// Search for an executable in the PATH from the given environment map.
+pub fn find_command_in_env(
+    cmd: &str,
+    env: &HashMap<String, String>,
+) -> Option<String> {
+    let path_var = env.get("PATH")?;
+    for dir in std::env::split_paths(path_var) {
+        let candidate = dir.join(cmd);
+        if candidate.is_file() {
+            return Some(candidate.to_string_lossy().into_owned());
+        }
+    }
+    None
+}
+
 /// Resolves the user's login shell environment by spawning an interactive
 /// login shell with an explicit `cd` into the workspace directory. This
 /// ensures:

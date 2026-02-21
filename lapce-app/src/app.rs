@@ -173,36 +173,44 @@ impl AppData {
             .title("SourceDelve")
     }
 
-    pub fn new_window(&self, folder: Option<PathBuf>) {
-        let config = self
-            .active_window()
-            .map(|window| {
-                self.default_window_config()
-                    .size(window.common.size.get_untracked())
-                    .position(window.position.get_untracked() + (50.0, 50.0))
-            })
-            .or_else(|| {
-                let db: Arc<LapceDb> =
-                    use_context().expect("LapceDb must be provided as context");
-                db.get_window().ok().map(|info| {
-                    self.default_window_config()
-                        .size(info.size)
-                        .position(info.pos)
-                })
-            })
-            .unwrap_or_else(|| {
-                self.default_window_config().size(Size::new(
-                    LapceLayout::DEFAULT_WINDOW_WIDTH,
-                    LapceLayout::DEFAULT_WINDOW_HEIGHT,
-                ))
-            });
-        let config = if cfg!(target_os = "macos")
+    /// Build a window config with size, position, and platform-appropriate
+    /// titlebar visibility.
+    fn configure_window(&self, size: Size, pos: Point) -> WindowConfig {
+        let config = self.default_window_config().size(size).position(pos);
+        if cfg!(target_os = "macos")
             || self.config.get_untracked().core.custom_titlebar
         {
             config.show_titlebar(false)
         } else {
             config
-        };
+        }
+    }
+
+    pub fn new_window(&self, folder: Option<PathBuf>) {
+        let config = self
+            .active_window()
+            .map(|window| {
+                self.configure_window(
+                    window.common.size.get_untracked(),
+                    window.position.get_untracked() + (50.0, 50.0),
+                )
+            })
+            .or_else(|| {
+                let db: Arc<LapceDb> =
+                    use_context().expect("LapceDb must be provided as context");
+                db.get_window()
+                    .ok()
+                    .map(|info| self.configure_window(info.size, info.pos))
+            })
+            .unwrap_or_else(|| {
+                self.configure_window(
+                    Size::new(
+                        LapceLayout::DEFAULT_WINDOW_WIDTH,
+                        LapceLayout::DEFAULT_WINDOW_HEIGHT,
+                    ),
+                    Point::ZERO,
+                )
+            });
         let workspace = LapceWorkspace {
             path: folder,
             ..Default::default()
@@ -337,17 +345,7 @@ impl AppData {
 
                 pos += (50.0, 50.0);
 
-                let config = self
-                    .default_window_config()
-                    .size(info.size)
-                    .position(info.pos);
-                let config = if cfg!(target_os = "macos")
-                    || self.config.get_untracked().core.custom_titlebar
-                {
-                    config.show_titlebar(false)
-                } else {
-                    config
-                };
+                let config = self.configure_window(info.size, info.pos);
                 let app_data = self.clone();
                 let files = files.take().unwrap_or_default();
                 app = app.window(
@@ -361,17 +359,7 @@ impl AppData {
             match db.get_app() {
                 Ok(app_info) => {
                     for info in app_info.windows {
-                        let config = self
-                            .default_window_config()
-                            .size(info.size)
-                            .position(info.pos);
-                        let config = if cfg!(target_os = "macos")
-                            || self.config.get_untracked().core.custom_titlebar
-                        {
-                            config.show_titlebar(false)
-                        } else {
-                            config
-                        };
+                        let config = self.configure_window(info.size, info.pos);
                         let app_data = self.clone();
                         app = app.window(
                             move |window_id| {
@@ -405,17 +393,7 @@ impl AppData {
                 active_tab: 0,
                 workspaces: vec![LapceWorkspace::default()],
             };
-            let config = self
-                .default_window_config()
-                .size(info.size)
-                .position(info.pos);
-            let config = if cfg!(target_os = "macos")
-                || self.config.get_untracked().core.custom_titlebar
-            {
-                config.show_titlebar(false)
-            } else {
-                config
-            };
+            let config = self.configure_window(info.size, info.pos);
             let app_data = self.clone();
             app = app.window(
                 move |window_id| {

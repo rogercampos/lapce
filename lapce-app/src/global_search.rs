@@ -680,6 +680,16 @@ impl GlobalSearchData {
         self.re_search();
     }
 
+    /// Read the current search options without tracking.
+    /// Returns (case_sensitive, whole_word, is_regex).
+    pub fn search_options_untracked(&self) -> (bool, bool, bool) {
+        let case_sensitive =
+            matches!(self.case_matching.get_untracked(), CaseMatching::Exact);
+        let whole_word = self.whole_words.get_untracked();
+        let is_regex = self.is_regex.get_untracked();
+        (case_sensitive, whole_word, is_regex)
+    }
+
     /// Re-run the search with the current pattern and options, clearing cached
     /// results first. Used by the toolbar reload button.
     pub fn re_search(&self) {
@@ -687,10 +697,7 @@ impl GlobalSearchData {
         if pattern.is_empty() {
             return;
         }
-        let case_sensitive =
-            matches!(self.case_matching.get_untracked(), CaseMatching::Exact);
-        let whole_word = self.whole_words.get_untracked();
-        let is_regex = self.is_regex.get_untracked();
+        let (case_sensitive, whole_word, is_regex) = self.search_options_untracked();
         self.search_result.update(|r| r.clear());
         self.panel_search_result.update(|r| r.clear());
         let max_results = Some(1000);

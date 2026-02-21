@@ -163,9 +163,7 @@ impl RecentFilesData {
 
     pub fn close(&self) {
         self.visible.set(false);
-        if self.common.focus.get_untracked() == Focus::RecentFiles {
-            self.common.focus.set(Focus::Workbench);
-        }
+        Focus::restore_if_matching(&self.common.focus, Focus::RecentFiles);
     }
 
     pub fn select(&self) {

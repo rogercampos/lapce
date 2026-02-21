@@ -1,8 +1,4 @@
-use std::{
-    ops::Range,
-    rc::Rc,
-    sync::{Arc, atomic::AtomicU64},
-};
+use std::{ops::Range, rc::Rc, sync::Arc};
 
 use floem::{
     View,
@@ -119,16 +115,13 @@ pub(super) fn window_message_view(
             })
         };
 
-    let id = AtomicU64::new(0);
     container(
         container(
             container(
                 scroll(
                     dyn_stack(
                         move || messages.get().into_iter().enumerate(),
-                        move |_| {
-                            id.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-                        },
+                        move |(i, _)| *i,
                         view_fn,
                     )
                     .style(|s| s.flex_col().width_full()),
@@ -195,14 +188,13 @@ pub(super) fn completion_kind_to_str(kind: CompletionItemKind) -> &'static str {
 pub(super) fn hover(workspace_data: Rc<WorkspaceData>) -> impl View {
     let hover_data = workspace_data.common.hover.clone();
     let config = workspace_data.common.config;
-    let id = AtomicU64::new(0);
     let layout_rect = workspace_data.common.hover.layout_rect;
 
     scroll(
         dyn_stack(
-            move || hover_data.content.get(),
-            move |_| id.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
-            move |content| match content {
+            move || hover_data.content.get().into_iter().enumerate(),
+            move |(i, _)| *i,
+            move |(_i, content)| match content {
                 MarkdownContent::Text(text_layout) => container(
                     rich_text(move || text_layout.clone())
                         .style(|s| s.max_width(600.0)),

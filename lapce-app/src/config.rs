@@ -645,29 +645,16 @@ impl LapceConfig {
 
     pub fn reset_setting(parent: &str, key: &str) -> Option<()> {
         let mut main_table = Self::get_file_table().unwrap_or_default();
-
-        // Find the container table
-        let mut table = main_table.as_table_mut();
-        for key in parent.split('.') {
-            if !table.contains_key(key) {
-                table.insert(
-                    key,
-                    toml_edit::Item::Table(toml_edit::Table::default()),
-                );
-            }
-            table = table.get_mut(key)?.as_table_mut()?;
-        }
-
+        let table = get_or_create_table_at(&mut main_table, parent)?;
         table.remove(key);
 
-        // Store
         let path = Self::settings_file()?;
         std::fs::write(path, main_table.to_string().as_bytes()).ok()?;
 
         Some(())
     }
 
-    /// Update the config file with the given edit.  
+    /// Update the config file with the given edit.
     /// This should be called whenever the configuration is changed, so that it is persisted.
     pub fn update_file(
         parent: &str,
@@ -675,23 +662,9 @@ impl LapceConfig {
         value: toml_edit::Value,
     ) -> Option<()> {
         let mut main_table = Self::get_file_table().unwrap_or_default();
-
-        // Find the container table
-        let mut table = main_table.as_table_mut();
-        for key in parent.split('.') {
-            if !table.contains_key(key) {
-                table.insert(
-                    key,
-                    toml_edit::Item::Table(toml_edit::Table::default()),
-                );
-            }
-            table = table.get_mut(key)?.as_table_mut()?;
-        }
-
-        // Update key
+        let table = get_or_create_table_at(&mut main_table, parent)?;
         table.insert(key, toml_edit::Item::Value(value));
 
-        // Store
         let path = Self::settings_file()?;
         std::fs::write(path, main_table.to_string().as_bytes()).ok()?;
 
@@ -703,6 +676,23 @@ impl LapceConfig {
     pub fn test_default() -> LapceConfig {
         DEFAULT_LAPCE_CONFIG.clone()
     }
+}
+
+/// Navigate a TOML document to the table at the given dotted key path,
+/// creating intermediate tables as needed. Returns `None` if any
+/// existing intermediate key is not a table.
+fn get_or_create_table_at<'a>(
+    doc: &'a mut toml_edit::Document,
+    dotted_key: &str,
+) -> Option<&'a mut toml_edit::Table> {
+    let mut table = doc.as_table_mut();
+    for key in dotted_key.split('.') {
+        if !table.contains_key(key) {
+            table.insert(key, toml_edit::Item::Table(toml_edit::Table::default()));
+        }
+        table = table.get_mut(key)?.as_table_mut()?;
+    }
+    Some(table)
 }
 
 #[cfg(test)]

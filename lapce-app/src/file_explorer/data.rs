@@ -1,7 +1,5 @@
 use std::{
-    borrow::Cow,
     collections::{HashMap, HashSet},
-    ffi::OsStr,
     path::{Path, PathBuf},
     rc::Rc,
     sync::Arc,
@@ -167,7 +165,14 @@ impl FileExplorerData {
         data
     }
 
-    /// Reload the file explorer data via reading the root directory.  
+    /// Get the naming editor text as an `OsString` suitable for path operations.
+    fn editor_text_as_os_string(&self) -> std::ffi::OsString {
+        let rope = self.naming_editor_data.text();
+        let s: String = rope.slice_to_cow(..).into_owned();
+        s.into()
+    }
+
+    /// Reload the file explorer data via reading the root directory.
     /// Note that this will not update immediately.
     pub fn reload(&self) {
         let path = self.root.with_untracked(|root| root.path.clone());
@@ -256,29 +261,33 @@ impl FileExplorerData {
                     return;
                 };
 
+                // Compile the exclude glob once per callback, not per tree-node update.
+                let exclude_matcher = Glob::new(&config.get().editor.files_exclude)
+                    .map(|g| g.compile_matcher())
+                    .map_err(|e| {
+                        tracing::error!(
+                            target: "files_exclude",
+                            "Failed to compile glob: {}",
+                            e
+                        );
+                    })
+                    .ok();
+
                 root.update(|root| {
                     if let Some(node) = root.get_file_node_mut(&path) {
-                        // TODO: do not recreate glob every time we read a directory
-                        // Retain only items that are not excluded from view by the configuration
-                        match Glob::new(&config.get().editor.files_exclude) {
-                            Ok(glob) => {
-                                let matcher = glob.compile_matcher();
-                                items.retain(|i| !matcher.is_match(&i.path));
-                            }
-                            Err(e) => tracing::error!(
-                                target:"files_exclude",
-                                "Failed to compile glob: {}",
-                                e
-                            ),
+                        if let Some(ref matcher) = exclude_matcher {
+                            items.retain(|i| !matcher.is_match(&i.path));
                         }
 
                         node.read = true;
 
                         // Remove paths that no longer exist on disk
+                        let new_paths: HashSet<&PathBuf> =
+                            items.iter().map(|i| &i.path).collect();
                         let removed_paths: Vec<PathBuf> = node
                             .children
                             .keys()
-                            .filter(|p| !items.iter().any(|i| &&i.path == p))
+                            .filter(|p| !new_paths.contains(p))
                             .map(PathBuf::from)
                             .collect();
                         for path in removed_paths {
@@ -330,23 +339,11 @@ impl FileExplorerData {
                 }
             }
             Naming::NewNode(n) => {
-                let relative_path = self.naming_editor_data.text();
-                let relative_path: Cow<OsStr> = match relative_path.slice_to_cow(..)
-                {
-                    Cow::Borrowed(path) => Cow::Borrowed(path.as_ref()),
-                    Cow::Owned(path) => Cow::Owned(path.into()),
-                };
-
+                let relative_path = self.editor_text_as_os_string();
                 Some(n.base_path.join(relative_path))
             }
             Naming::Duplicating(d) => {
-                let relative_path = self.naming_editor_data.text();
-                let relative_path: Cow<OsStr> = match relative_path.slice_to_cow(..)
-                {
-                    Cow::Borrowed(path) => Cow::Borrowed(path.as_ref()),
-                    Cow::Owned(path) => Cow::Owned(path.into()),
-                };
-
+                let relative_path = self.editor_text_as_os_string();
                 let new_path =
                     d.path.parent().unwrap_or("".as_ref()).join(relative_path);
 
@@ -363,13 +360,7 @@ impl FileExplorerData {
                 let current_file_name = current_path.file_name().unwrap_or_default();
                 // `new_relative_path` is the new path relative to the parent directory, unless the
                 // user has entered an absolute path.
-                let new_relative_path = self.naming_editor_data.text();
-
-                let new_relative_path: Cow<OsStr> =
-                    match new_relative_path.slice_to_cow(..) {
-                        Cow::Borrowed(path) => Cow::Borrowed(path.as_ref()),
-                        Cow::Owned(path) => Cow::Owned(path.into()),
-                    };
+                let new_relative_path = self.editor_text_as_os_string();
 
                 if new_relative_path == current_file_name {
                     RenamedPath::NameUnchanged

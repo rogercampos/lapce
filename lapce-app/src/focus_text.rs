@@ -33,10 +33,12 @@ enum FocusTextState {
     SyntaxColors(Vec<(usize, usize, Color)>),
 }
 
-pub fn focus_text(
+/// Create the base FocusText with effects for text, focus_color, and focus_indices.
+fn create_focus_text_base(
     text: impl Fn() -> String + 'static,
     focus_indices: impl Fn() -> Vec<usize> + 'static,
     focus_color: impl Fn() -> Color + 'static,
+    focus_highlight: Option<(Color, Color, f64)>,
 ) -> FocusText {
     let id = ViewId::new();
 
@@ -62,13 +64,21 @@ pub fn focus_text(
         focus_color: Color::BLACK,
         focus_indices: Vec::new(),
         syntax_colors: Vec::new(),
-        focus_highlight: None,
+        focus_highlight,
         text_node: None,
         available_text: None,
         available_width: None,
         available_text_layout: None,
         style: Default::default(),
     }
+}
+
+pub fn focus_text(
+    text: impl Fn() -> String + 'static,
+    focus_indices: impl Fn() -> Vec<usize> + 'static,
+    focus_color: impl Fn() -> Color + 'static,
+) -> FocusText {
+    create_focus_text_base(text, focus_indices, focus_color, None)
 }
 
 /// Like `focus_text`, but also accepts syntax highlighting color spans.
@@ -80,42 +90,13 @@ pub fn focus_text_with_syntax(
     focus_color: impl Fn() -> Color + 'static,
     syntax_colors: impl Fn() -> Vec<(usize, usize, Color)> + 'static,
 ) -> FocusText {
-    let id = ViewId::new();
-
-    create_effect(move |_| {
-        let new_text = text();
-        id.update_state(FocusTextState::Text(new_text));
-    });
-
-    create_effect(move |_| {
-        let focus_color = focus_color();
-        id.update_state(FocusTextState::FocusColor(focus_color));
-    });
-
-    create_effect(move |_| {
-        let focus_indices = focus_indices();
-        id.update_state(FocusTextState::FocusIndices(focus_indices));
-    });
-
+    let ft = create_focus_text_base(text, focus_indices, focus_color, None);
+    let id = ft.id;
     create_effect(move |_| {
         let colors = syntax_colors();
         id.update_state(FocusTextState::SyntaxColors(colors));
     });
-
-    FocusText {
-        id,
-        text: "".to_string(),
-        text_layout: None,
-        focus_color: Color::BLACK,
-        focus_indices: Vec::new(),
-        syntax_colors: Vec::new(),
-        focus_highlight: None,
-        text_node: None,
-        available_text: None,
-        available_width: None,
-        available_text_layout: None,
-        style: Default::default(),
-    }
+    ft
 }
 
 /// Like `focus_text_with_syntax`, but highlights focus indices with a background color
@@ -129,42 +110,14 @@ pub fn focus_text_highlighted(
     focus_bg_color: Color,
     row_height: f64,
 ) -> FocusText {
-    let id = ViewId::new();
-
-    create_effect(move |_| {
-        let new_text = text();
-        id.update_state(FocusTextState::Text(new_text));
-    });
-
-    create_effect(move |_| {
-        let focus_color = focus_color();
-        id.update_state(FocusTextState::FocusColor(focus_color));
-    });
-
-    create_effect(move |_| {
-        let focus_indices = focus_indices();
-        id.update_state(FocusTextState::FocusIndices(focus_indices));
-    });
-
+    let highlight = Some((focus_text_color, focus_bg_color, row_height));
+    let ft = create_focus_text_base(text, focus_indices, focus_color, highlight);
+    let id = ft.id;
     create_effect(move |_| {
         let colors = syntax_colors();
         id.update_state(FocusTextState::SyntaxColors(colors));
     });
-
-    FocusText {
-        id,
-        text: "".to_string(),
-        text_layout: None,
-        focus_color: Color::BLACK,
-        focus_indices: Vec::new(),
-        syntax_colors: Vec::new(),
-        focus_highlight: Some((focus_text_color, focus_bg_color, row_height)),
-        text_node: None,
-        available_text: None,
-        available_width: None,
-        available_text_layout: None,
-        style: Default::default(),
-    }
+    ft
 }
 
 /// A text view that highlights specific character positions (fuzzy match indices) in bold

@@ -1,6 +1,6 @@
 use std::{
     borrow::Cow,
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     path::{Path, PathBuf},
     process::Command,
     sync::{Arc, Mutex},
@@ -22,6 +22,7 @@ use serde_json::Value;
 use dyn_clone::clone_box;
 
 use super::{ClonableCallback, LspRpcHandler, RpcCallback, client::LspClient};
+use crate::shell_env::find_command_in_env;
 
 /// Describes one built-in LSP server.
 pub struct LspServerConfig {
@@ -51,6 +52,9 @@ pub struct LspServerConfig {
     /// When true, discard the server's semantic tokens capability so that
     /// tree-sitter highlighting is used instead.
     pub semantic_tokens: bool,
+    /// Optional callback to enrich settings with dynamic values computed
+    /// from the workspace. Called after parsing `settings_json`.
+    pub compute_settings: Option<fn(&mut Value, Option<&Path>)>,
 }
 
 /// Condition that must be met for a server to activate.
@@ -88,6 +92,7 @@ pub const LSP_SERVERS: &[LspServerConfig] = &[
         per_project_instance: false,
         settings_json: None,
         semantic_tokens: false,
+        compute_settings: None,
     },
     LspServerConfig {
         display_name: "sorbet",
@@ -100,6 +105,7 @@ pub const LSP_SERVERS: &[LspServerConfig] = &[
         per_project_instance: false,
         settings_json: None,
         semantic_tokens: false,
+        compute_settings: None,
     },
     LspServerConfig {
         display_name: "bash-language-server",
@@ -114,6 +120,7 @@ pub const LSP_SERVERS: &[LspServerConfig] = &[
         per_project_instance: false,
         settings_json: None,
         semantic_tokens: false,
+        compute_settings: None,
     },
     LspServerConfig {
         display_name: "vtsls",
@@ -134,7 +141,7 @@ pub const LSP_SERVERS: &[LspServerConfig] = &[
         // Settings returned via workspace/configuration (VS Code format).
         // vtsls ignores initializationOptions for these; they must come here.
         // Note: maxTsServerMemory is computed dynamically based on the number
-        // of ts/tsx/js/jsx files in the project (see compute_server_settings).
+        // of ts/tsx/js/jsx files in the project (see compute_settings).
         settings_json: Some(
             r#"{
                 "vtsls": {
@@ -143,6 +150,7 @@ pub const LSP_SERVERS: &[LspServerConfig] = &[
             }"#,
         ),
         semantic_tokens: false,
+        compute_settings: Some(compute_vtsls_settings),
     },
     LspServerConfig {
         display_name: "eslint",
@@ -180,6 +188,7 @@ pub const LSP_SERVERS: &[LspServerConfig] = &[
             }"#,
         ),
         semantic_tokens: false,
+        compute_settings: Some(compute_eslint_settings),
     },
 ];
 
@@ -248,6 +257,78 @@ fn compute_max_ts_server_memory(file_count: usize) -> u64 {
     (raw as u64).clamp(1024, 8192)
 }
 
+/// Compute dynamic vtsls settings: inject maxTsServerMemory based on file count.
+fn compute_vtsls_settings(settings: &mut Value, workspace: Option<&Path>) {
+    let file_count = workspace.map(count_ts_js_files).unwrap_or(0);
+    let memory = compute_max_ts_server_memory(file_count);
+    tracing::info!(
+        "vtsls: counted {file_count} ts/js files, setting maxTsServerMemory={memory} MB"
+    );
+
+    if let Value::Object(map) = settings {
+        let ts = map
+            .entry("typescript")
+            .or_insert_with(|| Value::Object(Default::default()));
+        if let Value::Object(ts_map) = ts {
+            let tsserver = ts_map
+                .entry("tsserver")
+                .or_insert_with(|| Value::Object(Default::default()));
+            if let Value::Object(tsserver_map) = tsserver {
+                tsserver_map.insert(
+                    "maxTsServerMemory".to_string(),
+                    Value::Number(memory.into()),
+                );
+            }
+        }
+    }
+}
+
+/// Compute dynamic eslint settings: inject workspaceFolder, workingDirectory,
+/// and detect flat config.
+fn compute_eslint_settings(settings: &mut Value, workspace: Option<&Path>) {
+    let Some(ws) = workspace else { return };
+    let Value::Object(map) = settings else { return };
+
+    // workspaceFolder at root level — the server uses this to
+    // determine how far to traverse up the filesystem for config.
+    let uri = lsp_types::Url::from_directory_path(ws)
+        .map(|u| u.to_string())
+        .unwrap_or_else(|_| format!("file://{}", ws.display()));
+    let name = ws
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    map.insert(
+        "workspaceFolder".to_string(),
+        serde_json::json!({ "uri": uri, "name": name }),
+    );
+
+    // workingDirectory at root level — tells the server how
+    // to resolve the cwd for eslint execution.
+    map.insert(
+        "workingDirectory".to_string(),
+        serde_json::json!({ "mode": "auto" }),
+    );
+
+    // Detect flat config (eslint.config.{js,mjs,cjs,ts,mts,cts})
+    let flat_config_names = [
+        "eslint.config.js",
+        "eslint.config.mjs",
+        "eslint.config.cjs",
+        "eslint.config.ts",
+        "eslint.config.mts",
+        "eslint.config.cts",
+    ];
+    let has_flat_config = flat_config_names.iter().any(|f| ws.join(f).exists());
+    if has_flat_config {
+        map.insert(
+            "experimental".to_string(),
+            serde_json::json!({ "useFlatConfig": true }),
+        );
+        tracing::info!("eslint: detected flat config in {}", ws.display());
+    }
+}
+
 /// Build the final settings JSON for a server, enriching the static
 /// `settings_json` with any dynamic values computed from the workspace.
 pub fn compute_server_settings(
@@ -258,83 +339,8 @@ pub fn compute_server_settings(
     let mut settings: Value =
         serde_json::from_str(base_json).unwrap_or(Value::Object(Default::default()));
 
-    // For vtsls: inject computed maxTsServerMemory
-    if config.display_name == "vtsls" {
-        let file_count = workspace.map(count_ts_js_files).unwrap_or(0);
-        let memory = compute_max_ts_server_memory(file_count);
-        tracing::info!(
-            "vtsls: counted {file_count} ts/js files, setting maxTsServerMemory={memory} MB"
-        );
-
-        if let Value::Object(map) = &mut settings {
-            let ts = map
-                .entry("typescript")
-                .or_insert_with(|| Value::Object(Default::default()));
-            if let Value::Object(ts_map) = ts {
-                let tsserver = ts_map
-                    .entry("tsserver")
-                    .or_insert_with(|| Value::Object(Default::default()));
-                if let Value::Object(tsserver_map) = tsserver {
-                    tsserver_map.insert(
-                        "maxTsServerMemory".to_string(),
-                        Value::Number(memory.into()),
-                    );
-                }
-            }
-        }
-    }
-
-    // For eslint: inject workspaceFolder, workingDirectory, and detect flat config.
-    // These must be at the root level of the settings (not inside the "eslint" key)
-    // because the server reads them from the top-level configuration object.
-    if config.display_name == "eslint" {
-        if let Some(ws) = workspace {
-            if let Value::Object(map) = &mut settings {
-                // workspaceFolder at root level — the server uses this to
-                // determine how far to traverse up the filesystem for config.
-                let uri = lsp_types::Url::from_directory_path(ws)
-                    .map(|u| u.to_string())
-                    .unwrap_or_else(|_| format!("file://{}", ws.display()));
-                let name = ws
-                    .file_name()
-                    .map(|n| n.to_string_lossy().into_owned())
-                    .unwrap_or_default();
-                map.insert(
-                    "workspaceFolder".to_string(),
-                    serde_json::json!({ "uri": uri, "name": name }),
-                );
-
-                // workingDirectory at root level — tells the server how
-                // to resolve the cwd for eslint execution.
-                map.insert(
-                    "workingDirectory".to_string(),
-                    serde_json::json!({ "mode": "auto" }),
-                );
-
-                // Detect flat config (eslint.config.{js,mjs,cjs,ts,mts,cts})
-                let flat_config_names = [
-                    "eslint.config.js",
-                    "eslint.config.mjs",
-                    "eslint.config.cjs",
-                    "eslint.config.ts",
-                    "eslint.config.mts",
-                    "eslint.config.cts",
-                ];
-                let has_flat_config =
-                    flat_config_names.iter().any(|f| ws.join(f).exists());
-                if has_flat_config {
-                    // The server reads settings.experimental.useFlatConfig
-                    map.insert(
-                        "experimental".to_string(),
-                        serde_json::json!({ "useFlatConfig": true }),
-                    );
-                    tracing::info!(
-                        "eslint: detected flat config in {}",
-                        ws.display()
-                    );
-                }
-            }
-        }
+    if let Some(compute) = config.compute_settings {
+        compute(&mut settings, workspace);
     }
 
     Some(settings.to_string())
@@ -353,7 +359,7 @@ pub struct LspManager {
     /// Maps (language_id, project_root) → Vec<PluginId> for multi-server routing
     language_project_to_server: HashMap<(String, PathBuf), Vec<PluginId>>,
     /// Tracks which (config_index, project_root) pairs have been activated
-    activated_configs: Vec<(usize, PathBuf)>,
+    activated_configs: HashSet<(usize, PathBuf)>,
     /// Detected projects
     projects: Vec<ProjectInfo>,
     /// Whether to exclude all gems from ruby-lsp indexing
@@ -375,7 +381,7 @@ impl LspManager {
             lsp_rpc,
             servers: HashMap::new(),
             language_project_to_server: HashMap::new(),
-            activated_configs: Vec::new(),
+            activated_configs: HashSet::new(),
             projects,
             ruby_lsp_exclude_gems,
             ruby_lsp_excluded_patterns,
@@ -506,7 +512,7 @@ impl LspManager {
                     .max_by_key(|p| p.root.components().count())
                     .map(|p| p.root.clone());
                 if let Some(parent_root) = parent_root {
-                    self.activated_configs.push(activation_key);
+                    self.activated_configs.insert(activation_key);
                     // Ensure the parent project's server is started so it
                     // can cover this child project's files.
                     self.ensure_server_for_language(language_id, &parent_root);
@@ -520,7 +526,7 @@ impl LspManager {
                 ActivationCondition::GemInGemfileLock(gem) => {
                     if !gemfile_lock_contains_gem(project_root, gem) {
                         // Mark as activated so we don't re-check on every file open
-                        self.activated_configs.push(activation_key);
+                        self.activated_configs.insert(activation_key);
                         continue;
                     }
                 }
@@ -691,7 +697,7 @@ impl LspManager {
         project_root: &PathBuf,
     ) {
         let plugin_id = client.plugin_id;
-        self.activated_configs.push(activation_key);
+        self.activated_configs.insert(activation_key);
 
         for lang in config.languages {
             self.language_project_to_server
@@ -1182,18 +1188,6 @@ pub fn parse_gemfile_lock_gems(
     }
 
     Ok(gems)
-}
-
-/// Search for an executable in the PATH from the given environment map.
-fn find_command_in_env(cmd: &str, env: &HashMap<String, String>) -> Option<String> {
-    let path_var = env.get("PATH")?;
-    for dir in std::env::split_paths(path_var) {
-        let candidate = dir.join(cmd);
-        if candidate.is_file() {
-            return Some(candidate.to_string_lossy().into_owned());
-        }
-    }
-    None
 }
 
 /// Check whether a gem is listed in the project's Gemfile.lock.

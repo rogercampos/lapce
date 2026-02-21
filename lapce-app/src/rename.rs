@@ -124,9 +124,7 @@ impl RenameData {
 
     fn cancel(&self) {
         self.active.set(false);
-        if let Focus::Rename = self.common.focus.get_untracked() {
-            self.common.focus.set(Focus::Workbench);
-        }
+        Focus::restore_if_matching(&self.common.focus, Focus::Rename);
     }
 
     fn confirm(&self) {

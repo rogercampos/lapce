@@ -1,8 +1,4 @@
-use std::{
-    fmt,
-    rc::Rc,
-    sync::{Arc, atomic::AtomicU64},
-};
+use std::{fmt, rc::Rc, sync::Arc};
 
 use floem::{
     View,
@@ -64,7 +60,6 @@ pub fn alert_box(alert_data: AlertBoxData) -> impl View {
     let title = alert_data.title;
     let msg = alert_data.msg;
     let buttons = alert_data.buttons;
-    let button_id = AtomicU64::new(0);
 
     container({
         container({
@@ -84,11 +79,9 @@ pub fn alert_box(alert_data: AlertBoxData) -> impl View {
                 label(move || msg.get())
                     .style(move |s| s.width_pct(100.0).margin_top(10.0)),
                 dyn_stack(
-                    move || buttons.get(),
-                    move |_button| {
-                        button_id.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-                    },
-                    move |button| {
+                    move || buttons.get().into_iter().enumerate(),
+                    move |(i, _button)| *i,
+                    move |(_i, button)| {
                         label(move || button.text.clone())
                             .on_click_stop(move |_| {
                                 (button.action)();

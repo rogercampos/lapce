@@ -321,14 +321,13 @@ impl CompletionData {
             return;
         }
 
-        let completion_lens = completion_lens_text(
+        match completion_lens_text(
             doc.rope_text(),
             cursor_offset,
             self,
             doc.completion_lens().as_deref(),
-        );
-        match completion_lens {
-            Some(Some(lens)) => {
+        ) {
+            CompletionLensResult::Set(lens) => {
                 let offset = self.offset + self.input.len();
                 // TODO: will need to be adjusted to use visual line.
                 //   Could just store the offset in doc.
@@ -336,28 +335,34 @@ impl CompletionData {
 
                 doc.set_completion_lens(lens, line, col);
             }
-            // Unchanged
-            Some(None) => {}
-            None => {
+            CompletionLensResult::Unchanged => {}
+            CompletionLensResult::Hide => {
                 doc.clear_completion_lens();
             }
         }
     }
 }
 
-/// Get the text of the completion lens (ghost text shown inline after the cursor).
-/// The three-level return type optimizes re-rendering:
-/// - `None` = hide the lens (no valid completion or cursor moved away)
-/// - `Some(None)` = lens text is unchanged, skip the DOM update
-/// - `Some(Some(text))` = update the lens to show this new text
-/// This avoids flickering by not clearing and re-setting the same text on every keystroke.
+/// Result of computing the completion lens text.
+enum CompletionLensResult {
+    /// Hide the lens (no valid completion or cursor moved away).
+    Hide,
+    /// Lens text is unchanged, skip the DOM update.
+    Unchanged,
+    /// Update the lens to show this new text.
+    Set(String),
+}
+
 fn completion_lens_text(
     rope_text: impl RopeText,
     cursor_offset: usize,
     completion: &CompletionData,
     current_completion: Option<&str>,
-) -> Option<Option<String>> {
-    let item = &completion.current_item()?.item;
+) -> CompletionLensResult {
+    let Some(current) = completion.current_item() else {
+        return CompletionLensResult::Hide;
+    };
+    let item = &current.item;
 
     let item: Cow<str> = if let Some(edit) = &item.text_edit {
         // A text edit is used, because that is what will actually be inserted.
@@ -368,7 +373,7 @@ fn completion_lens_text(
 
         // We don't display insert and replace
         let CompletionTextEdit::Edit(edit) = edit else {
-            return None;
+            return CompletionLensResult::Hide;
         };
         // The completion offset can be different from the current cursor offset.
         let completion_offset = completion.offset;
@@ -381,7 +386,7 @@ fn completion_lens_text(
         // This captures most cases that we want, even if it skips over some
         // displayable edits.
         if start_offset != edit_start && completion_offset != edit_start {
-            return None;
+            return CompletionLensResult::Hide;
         }
 
         match text_format {
@@ -392,7 +397,9 @@ fn completion_lens_text(
             }
             InsertTextFormat::SNIPPET => {
                 // Parse the snippet. Bail if it's invalid.
-                let snippet = Snippet::from_str(&edit.new_text).ok()?;
+                let Some(snippet) = Snippet::from_str(&edit.new_text).ok() else {
+                    return CompletionLensResult::Hide;
+                };
 
                 let text = snippet.text();
 
@@ -400,7 +407,7 @@ fn completion_lens_text(
             }
             _ => {
                 // We don't know how to support this text format.
-                return None;
+                return CompletionLensResult::Hide;
             }
         }
     } else {
@@ -410,16 +417,17 @@ fn completion_lens_text(
     // We strip the prefix of the current input from the label.
     // So that, for example, `p` with a completion of `println` only sets the lens text to `rintln`.
     // If the text does not include a prefix in the expected position, then we do not display it.
-    let item = item.as_ref().strip_prefix(&completion.input)?;
+    let Some(item) = item.as_ref().strip_prefix(&completion.input) else {
+        return CompletionLensResult::Hide;
+    };
 
     // Get only the first line of text, because Lapce does not currently support
     // multi-line phantom text.
     let item = item.lines().next().unwrap_or(item);
 
     if Some(item) == current_completion {
-        // If the item is the same as the current completion, then we don't display it.
-        Some(None)
+        CompletionLensResult::Unchanged
     } else {
-        Some(Some(item.to_string()))
+        CompletionLensResult::Set(item.to_string())
     }
 }

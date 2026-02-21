@@ -125,9 +125,7 @@ impl DefinitionPickerData {
 
     fn cancel(&self) {
         self.status.set(DefinitionPickerStatus::Inactive);
-        if let Focus::DefinitionPicker = self.common.focus.get_untracked() {
-            self.common.focus.set(Focus::Workbench);
-        }
+        Focus::restore_if_matching(&self.common.focus, Focus::DefinitionPicker);
     }
 
     pub fn select(&self) {

@@ -122,12 +122,15 @@ impl CodeActionData {
         self.active.set(new);
     }
 
-    pub fn next_page(&self) {
+    fn display_count(&self) -> usize {
         let config = self.common.config.get_untracked();
-        let count = ((self.layout_rect.size().height
-            / config.editor.line_height() as f64)
+        ((self.layout_rect.size().height / config.editor.line_height() as f64)
             .floor() as usize)
-            .saturating_sub(1);
+            .saturating_sub(1)
+    }
+
+    pub fn next_page(&self) {
+        let count = self.display_count();
         let active = self.active.get_untracked();
         let new = Movement::Down.update_index(
             active,
@@ -139,11 +142,7 @@ impl CodeActionData {
     }
 
     pub fn previous_page(&self) {
-        let config = self.common.config.get_untracked();
-        let count = ((self.layout_rect.size().height
-            / config.editor.line_height() as f64)
-            .floor() as usize)
-            .saturating_sub(1);
+        let count = self.display_count();
         let active = self.active.get_untracked();
         let new = Movement::Up.update_index(
             active,
@@ -178,9 +177,7 @@ impl CodeActionData {
 
     fn cancel(&self) {
         self.status.set(CodeActionStatus::Inactive);
-        if let Focus::CodeAction = self.common.focus.get_untracked() {
-            self.common.focus.set(Focus::Workbench);
-        }
+        Focus::restore_if_matching(&self.common.focus, Focus::CodeAction);
     }
 
     pub fn select(&self) {

@@ -77,4 +77,11 @@ impl SvgStore {
 
         self.svgs_on_disk.get(path).unwrap().clone()
     }
+
+    /// Clear the on-disk SVG cache so changed SVGs are re-read after config
+    /// reload. Embedded SVGs are never cleared since they can't change at
+    /// runtime.
+    pub fn clear_disk_cache(&mut self) {
+        self.svgs_on_disk.clear();
+    }
 }

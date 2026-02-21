@@ -224,9 +224,7 @@ impl SearchModalData {
     pub fn close(&self) {
         self.global_search.modal_active.set(false);
         self.visible.set(false);
-        if self.common.focus.get_untracked() == Focus::SearchModal {
-            self.common.focus.set(Focus::Workbench);
-        }
+        Focus::restore_if_matching(&self.common.focus, Focus::SearchModal);
     }
 
     pub fn select(&self) {
@@ -306,8 +304,8 @@ impl SearchModalData {
             return;
         }
         let case_matching = self.global_search.case_matching.get_untracked();
-        let whole_words = self.global_search.whole_words.get_untracked();
-        let is_regex = self.global_search.is_regex.get_untracked();
+        let (_, whole_words, is_regex) =
+            self.global_search.search_options_untracked();
 
         self.search_tabs
             .new_tab(pattern, case_matching, whole_words, is_regex);

@@ -225,17 +225,8 @@ pub fn status(
             .on_click_stop(move |_| {
                 go_to_line_data.open();
             });
-            let line_ending_info = label(move || {
-                if let Some(editor) = editor.get() {
-                    let doc = editor.doc_signal().get();
-                    doc.buffer.with(|b| b.line_ending()).as_str().to_string()
-                } else {
-                    String::new()
-                }
-            })
-            .style(move |s| {
-                let config = config.get();
-                let display = if editor
+            let has_file_editor = move || -> Display {
+                if editor
                     .get()
                     .map(|editor| {
                         editor.doc_signal().get().content.with(|c| {
@@ -251,8 +242,19 @@ pub fn status(
                     Display::Flex
                 } else {
                     Display::None
-                };
-                s.display(display)
+                }
+            };
+            let line_ending_info = label(move || {
+                if let Some(editor) = editor.get() {
+                    let doc = editor.doc_signal().get();
+                    doc.buffer.with(|b| b.line_ending()).as_str().to_string()
+                } else {
+                    String::new()
+                }
+            })
+            .style(move |s| {
+                let config = config.get();
+                s.display(has_file_editor())
                     .height_full()
                     .padding_horiz(10.0)
                     .items_center()
@@ -269,24 +271,7 @@ pub fn status(
             })
             .style(move |s| {
                 let config = config.get();
-                let display = if editor
-                    .get()
-                    .map(|editor| {
-                        editor.doc_signal().get().content.with(|c| {
-                            use crate::doc::DocContent;
-                            matches!(
-                                c,
-                                DocContent::File { .. } | DocContent::Scratch { .. }
-                            )
-                        })
-                    })
-                    .unwrap_or(false)
-                {
-                    Display::Flex
-                } else {
-                    Display::None
-                };
-                s.display(display)
+                s.display(has_file_editor())
                     .height_full()
                     .padding_horiz(10.0)
                     .items_center()

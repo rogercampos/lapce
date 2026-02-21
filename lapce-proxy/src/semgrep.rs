@@ -15,6 +15,8 @@ use lsp_types::{
 use parking_lot::Mutex;
 use serde::Deserialize;
 
+use crate::shell_env::find_command_in_env;
+
 pub struct SemgrepRunner {
     /// Channel sender for the single worker thread
     sender: crossbeam_channel::Sender<PathBuf>,
@@ -66,7 +68,7 @@ impl SemgrepRunner {
         };
 
         // Find semgrep binary in PATH
-        let semgrep_bin = find_in_env("semgrep", &env)?;
+        let semgrep_bin = find_command_in_env("semgrep", &env)?;
 
         tracing::info!(
             "[semgrep] Found config at {:?}, binary at {:?}",
@@ -249,16 +251,4 @@ fn to_diagnostic(result: SemgrepResult) -> Diagnostic {
         message: result.extra.message,
         ..Default::default()
     }
-}
-
-/// Find a command binary by searching the PATH from the shell environment.
-fn find_in_env(cmd: &str, env: &HashMap<String, String>) -> Option<String> {
-    let path_var = env.get("PATH")?;
-    for dir in std::env::split_paths(path_var) {
-        let candidate = dir.join(cmd);
-        if candidate.is_file() {
-            return Some(candidate.to_string_lossy().into_owned());
-        }
-    }
-    None
 }

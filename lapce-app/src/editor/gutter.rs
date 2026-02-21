@@ -8,8 +8,8 @@ use floem::{
     reactive::{Memo, SignalGet, SignalWith},
     text::{Attrs, AttrsList, FamilyOwned, TextLayout},
 };
-use im::HashMap;
 use lapce_core::buffer::rope_text::RopeText;
+use std::collections::BTreeMap;
 
 /// Custom view for rendering line numbers in the editor gutter.
 /// Line numbers are right-aligned within the gutter width, and the current line
@@ -238,9 +238,9 @@ impl FoldingRanges {
         FoldedRanges(range)
     }
     pub fn to_display_items(&self) -> Vec<FoldingDisplayItem> {
-        let mut folded = HashMap::new();
-        let mut unfold_start: HashMap<u32, FoldingDisplayItem> = HashMap::new();
-        let mut unfold_end = HashMap::new();
+        let mut folded = BTreeMap::new();
+        let mut unfold_start: BTreeMap<u32, FoldingDisplayItem> = BTreeMap::new();
+        let mut unfold_end = BTreeMap::new();
         let mut limit_line = 0;
         for item in &self.0 {
             if item.start.line < limit_line && limit_line > 0 {

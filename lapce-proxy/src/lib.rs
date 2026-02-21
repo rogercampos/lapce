@@ -56,8 +56,10 @@ pub fn register_lapce_path() -> Result<()> {
     let current_path = std::env::var("PATH")?;
     let paths = std::env::split_paths(&current_path);
     for path in paths {
-        if exedir == path.canonicalize()? {
-            return Ok(());
+        if let Ok(canonical) = path.canonicalize() {
+            if exedir == canonical {
+                return Ok(());
+            }
         }
     }
     // Prepend (not append) so our binary takes priority
@@ -92,13 +94,24 @@ pub fn get_url<T: reqwest::IntoUrl + Clone>(
         builder = builder.user_agent(user_agent);
     }
     let client = builder.build()?;
-    let mut try_time = 0;
-    loop {
-        let rs = client.get(url.clone()).send();
-        if rs.is_ok() || try_time > 3 {
-            return Ok(rs?);
-        } else {
-            try_time += 1;
+    let mut last_err = None;
+    for attempt in 0..3 {
+        match client.get(url.clone()).send() {
+            Ok(response) => return Ok(response),
+            Err(e) => {
+                // Only retry on connection/timeout errors, not client errors
+                if e.is_connect() || e.is_timeout() {
+                    last_err = Some(e);
+                    if attempt < 2 {
+                        std::thread::sleep(std::time::Duration::from_millis(
+                            500 * (attempt as u64 + 1),
+                        ));
+                    }
+                } else {
+                    return Err(e.into());
+                }
+            }
         }
     }
+    Err(last_err.unwrap().into())
 }

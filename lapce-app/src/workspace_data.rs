@@ -109,6 +109,17 @@ pub enum Focus {
     Panel(PanelKind),
 }
 
+impl Focus {
+    /// If `focus` currently matches `expected`, restore it to `Focus::Workbench`.
+    /// Used by popup cancel/close methods to avoid stealing focus if something
+    /// else has already taken it.
+    pub fn restore_if_matching(focus: &RwSignal<Focus>, expected: Focus) {
+        if focus.get_untracked() == expected {
+            focus.set(Focus::Workbench);
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum BackgroundTaskState {
     Queued,

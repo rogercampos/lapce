@@ -355,8 +355,11 @@ impl Find {
     /// them to `occurrences`. The "slop" expands the search range by 2x the search string
     /// length on each side -- this catches matches that span the region boundaries
     /// (e.g., a match that starts just before `start` and ends within the range).
+    /// Core search loop: scan `text` from `start` to `end` for occurrences of
+    /// `search` and add them to `occurrences`. The "slop" expands the search
+    /// range by 2x the search string length on each side.
     #[allow(clippy::too_many_arguments)]
-    pub fn find(
+    fn search_in_range(
         text: &Rope,
         search: &FindSearchString,
         start: usize,
@@ -410,21 +413,12 @@ impl Find {
             // in case of ambiguous search results (e.g. search "aba" in "ababa"),
             // the search result closer to the beginning of the file wins
             if e != end {
-                // Skip the search result and keep the occurrence that is closer to
-                // the beginning of the file. Re-align the cursor to the kept
-                // occurrence
                 find_cursor.set(e);
                 raw_lines = text.lines_raw(find_cursor.pos()..to);
                 continue;
             }
 
-            // in case current cursor matches search result (for example query a* matches)
-            // all cursor positions, then cursor needs to be increased so that search
-            // continues at next position. Otherwise, search will result in overflow since
-            // search will always repeat at current cursor position.
             if start == end {
-                // determine whether end of text is reached and stop search or increase
-                // cursor manually
                 if end + 1 >= text.len() {
                     break;
                 } else {
@@ -432,9 +426,31 @@ impl Find {
                 }
             }
 
-            // update line iterator so that line starts at current cursor position
             raw_lines = text.lines_raw(find_cursor.pos()..to);
         }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn find(
+        text: &Rope,
+        search: &FindSearchString,
+        start: usize,
+        end: usize,
+        case_matching: CaseMatching,
+        whole_words: bool,
+        include_slop: bool,
+        occurrences: &mut Selection,
+    ) {
+        Self::search_in_range(
+            text,
+            search,
+            start,
+            end,
+            case_matching,
+            whole_words,
+            include_slop,
+            occurrences,
+        );
     }
 
     /// Execute the search on the provided text in the range provided by `start` and `end`.
@@ -451,78 +467,19 @@ impl Find {
         }
 
         let search = self.search_string.get_untracked().unwrap();
-        let search_string = &search.content;
-        // extend the search by twice the string length (twice, because case matching may increase
-        // the length of an occurrence)
-        let slop = if include_slop {
-            search.content.len() * 2
-        } else {
-            0
-        };
-
-        // expand region to be able to find occurrences around the region's edges
-        let expanded_start = max(start, slop) - slop;
-        let expanded_end = min(end.saturating_add(slop), text.len());
-        let from = text
-            .at_or_prev_codepoint_boundary(expanded_start)
-            .unwrap_or(0);
-        let to = text
-            .at_or_next_codepoint_boundary(expanded_end)
-            .unwrap_or_else(|| text.len());
-        let mut to_cursor = Cursor::new(text, to);
-        let _ = to_cursor.next_leaf();
-
-        let sub_text = text.subseq(Interval::new(0, to_cursor.pos()));
-        let mut find_cursor = Cursor::new(&sub_text, from);
-
-        let mut raw_lines = text.lines_raw(from..to);
-
         let case_matching = self.case_matching.get_untracked();
         let whole_words = self.whole_words.get_untracked();
-        while let Some(start) = find(
-            &mut find_cursor,
-            &mut raw_lines,
+
+        Self::search_in_range(
+            text,
+            &search,
+            start,
+            end,
             case_matching,
-            search_string,
-            search.regex.as_ref(),
-        ) {
-            let end = find_cursor.pos();
-
-            if whole_words && !Self::is_matching_whole_words(text, start, end) {
-                raw_lines = text.lines_raw(find_cursor.pos()..to);
-                continue;
-            }
-
-            let region = SelRegion::new(start, end, None);
-            let (_, e) = occurrences.add_range_distinct(region);
-            // in case of ambiguous search results (e.g. search "aba" in "ababa"),
-            // the search result closer to the beginning of the file wins
-            if e != end {
-                // Skip the search result and keep the occurrence that is closer to
-                // the beginning of the file. Re-align the cursor to the kept
-                // occurrence
-                find_cursor.set(e);
-                raw_lines = text.lines_raw(find_cursor.pos()..to);
-                continue;
-            }
-
-            // in case current cursor matches search result (for example query a* matches)
-            // all cursor positions, then cursor needs to be increased so that search
-            // continues at next position. Otherwise, search will result in overflow since
-            // search will always repeat at current cursor position.
-            if start == end {
-                // determine whether end of text is reached and stop search or increase
-                // cursor manually
-                if end + 1 >= text.len() {
-                    break;
-                } else {
-                    find_cursor.set(end + 1);
-                }
-            }
-
-            // update line iterator so that line starts at current cursor position
-            raw_lines = text.lines_raw(find_cursor.pos()..to);
-        }
+            whole_words,
+            include_slop,
+            occurrences,
+        );
     }
 }
 

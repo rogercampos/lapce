@@ -1,5 +1,6 @@
 use std::{
     ops::Range,
+    path::PathBuf,
     rc::Rc,
     sync::{
         Arc,
@@ -108,12 +109,51 @@ impl GoToSymbolData {
         }
 
         // Watch input buffer changes → debounce → send workspace symbol request
+        //
+        // A single persistent debounce thread receives (rev, path, query)
+        // tuples and sleeps 150ms before issuing the request. If a newer
+        // query arrives while sleeping, the channel drains and the stale
+        // request is skipped. This avoids spawning a thread per keystroke.
         {
             let doc = input_editor.doc();
             let buffer = doc.buffer;
             let proxy = common.proxy.clone();
             let query_rev = query_rev.clone();
             let main_split = main_split.clone();
+
+            type DebounceMsg = (usize, PathBuf, String);
+            let (debounce_tx, debounce_rx) =
+                crossbeam_channel::unbounded::<DebounceMsg>();
+
+            // Persistent debounce worker thread
+            {
+                let query_rev = query_rev.clone();
+                let proxy = proxy.clone();
+                let result_tx = result_tx.clone();
+                std::thread::spawn(move || {
+                    while let Ok((rev, path, query)) = debounce_rx.recv() {
+                        std::thread::sleep(Duration::from_millis(150));
+                        // Drain any newer messages that arrived during sleep
+                        let mut latest = (rev, path, query);
+                        while let Ok(msg) = debounce_rx.try_recv() {
+                            latest = msg;
+                        }
+                        let (rev, path, query) = latest;
+                        if query_rev.load(Ordering::SeqCst) != rev {
+                            continue;
+                        }
+                        let result_tx = result_tx.clone();
+                        proxy.get_workspace_symbols(path, query, move |result| {
+                            if let Ok(ProxyResponse::GetWorkspaceSymbolsResponse {
+                                symbols,
+                            }) = result
+                            {
+                                let _ = result_tx.send(symbols);
+                            }
+                        });
+                    }
+                });
+            }
 
             cx.create_effect(move |prev: Option<String>| {
                 let content = buffer.with(|b| b.to_string());
@@ -145,28 +185,7 @@ impl GoToSymbolData {
                     return content;
                 };
 
-                // Debounce: wait 150ms before sending the request.
-                // If another keystroke arrives in that window, this
-                // thread exits early (query_rev will have advanced).
-                let query_rev = query_rev.clone();
-                let proxy = proxy.clone();
-                let result_tx = result_tx.clone();
-                let query = content.clone();
-                std::thread::spawn(move || {
-                    std::thread::sleep(Duration::from_millis(150));
-                    if query_rev.load(Ordering::SeqCst) != rev {
-                        return;
-                    }
-                    proxy.get_workspace_symbols(path, query, move |result| {
-                        if let Ok(ProxyResponse::GetWorkspaceSymbolsResponse {
-                            symbols,
-                        }) = result
-                        {
-                            let _ = result_tx.send(symbols);
-                        }
-                    });
-                });
-
+                let _ = debounce_tx.send((rev, path, content.clone()));
                 content
             });
         }
