@@ -28,7 +28,7 @@ use floem::{
     style::CursorStyle,
     views::{
         Decorators, container, drag_resize_window_area, drag_window_area, empty,
-        label, stack,
+        label, scroll, stack, svg,
     },
     window::{ResizeDirection, WindowConfig, WindowId},
 };
@@ -44,7 +44,7 @@ use tracing_subscriber::{filter::Targets, reload::Handle};
 
 use crate::{
     about, alert,
-    command::{InternalCommand, LapceWorkbenchCommand},
+    command::{InternalCommand, LapceWorkbenchCommand, WindowCommand},
     config::{
         LapceConfig, color::LapceColor, layout::LapceLayout, watcher::ConfigWatcher,
     },
@@ -53,6 +53,7 @@ use crate::{
     go_to_file, go_to_line, go_to_symbol,
     listener::Listener,
     panel::{position::PanelContainerPosition, view::panel_container_view},
+    path::display_path,
     recent_files,
     status::status,
     title::title,
@@ -239,7 +240,8 @@ impl AppData {
                     return;
                 }
                 let db: Arc<LapceDb> = use_context().unwrap();
-                if self.windows.with_untracked(|w| w.len()) == 1 {
+                let is_last = self.windows.with_untracked(|w| w.len()) == 1;
+                if is_last {
                     if let Err(err) = db.insert_app(self.clone()) {
                         tracing::error!("{:?}", err);
                     }
@@ -253,6 +255,12 @@ impl AppData {
                 }
                 if let Err(err) = db.save_app(self) {
                     tracing::error!("{:?}", err);
+                }
+                // Always keep at least one window open. When the user closes
+                // the last window, reopen the empty workspace landing page.
+                // To actually quit, use Cmd+Q / the Quit menu item.
+                if is_last {
+                    self.new_window(None);
                 }
             }
             AppCommand::CloseWindow(window_id) => {
@@ -276,7 +284,9 @@ impl AppData {
         db: Arc<LapceDb>,
         paths: Vec<PathObject>,
     ) -> floem::Application {
-        let mut app = floem::Application::new();
+        let mut app = floem::Application::new_with_config(
+            floem::AppConfig::default().exit_on_close(false),
+        );
 
         let mut initial_windows = 0;
 
@@ -695,49 +705,142 @@ fn workbench(workspace_data: Rc<WorkspaceData>) -> impl View {
 fn empty_workspace_view(workspace_data: Rc<WorkspaceData>) -> impl View {
     let config = workspace_data.common.config;
     let workbench_command = workspace_data.common.workbench_command;
+    let window_command = workspace_data.common.window_common.window_command;
 
-    drag_window_area(
-        container(
-            label(|| "Open Workspace".to_string())
+    let db: Arc<LapceDb> = use_context().unwrap();
+    let recent_workspaces = db
+        .recent_workspaces()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|w| w.path.is_some())
+        .take(8)
+        .collect::<Vec<_>>();
+
+    let logo = svg(move || config.get().logo_svg()).style(move |s| {
+        s.size(64.0, 64.0).color(
+            config
+                .get()
+                .color(LapceColor::EDITOR_FOREGROUND)
+                .multiply_alpha(0.15),
+        )
+    });
+
+    let section_label = |text: &'static str| {
+        let config = config;
+        label(move || text.to_string()).style(move |s| {
+            s.font_bold()
+                .font_size((config.get().ui.font_size() - 1) as f32)
+                .color(config.get().color(LapceColor::EDITOR_DIM))
+                .margin_bottom(8.0)
+        })
+    };
+
+    let open_folder_btn = label(move || "Open Workspace".to_string())
+        .on_event_stop(EventListener::PointerDown, |_| {})
+        .on_click_stop(move |_| {
+            workbench_command.send(LapceWorkbenchCommand::OpenFolder);
+        })
+        .style(move |s| {
+            let config = config.get();
+            s.padding_horiz(20.0)
+                .padding_vert(8.0)
+                .border_radius(LapceLayout::BORDER_RADIUS)
+                .border(1.0)
+                .border_color(config.color(LapceColor::LAPCE_BORDER))
+                .color(config.color(LapceColor::EDITOR_FOREGROUND))
+                .hover(|s| {
+                    s.cursor(CursorStyle::Pointer).background(
+                        config.color(LapceColor::PANEL_HOVERED_BACKGROUND),
+                    )
+                })
+                .active(|s| {
+                    s.background(
+                        config.color(LapceColor::PANEL_HOVERED_ACTIVE_BACKGROUND),
+                    )
+                })
+        });
+
+    let actions = stack((section_label("Start"), open_folder_btn))
+        .style(|s| s.flex_col().items_start());
+
+    let recent_section = if recent_workspaces.is_empty() {
+        container(empty()).into_any()
+    } else {
+        let items = recent_workspaces
+            .into_iter()
+            .map(|ws| {
+                let path = ws.path.clone().unwrap();
+                let name = path
+                    .file_name()
+                    .unwrap_or(path.as_os_str())
+                    .to_string_lossy()
+                    .to_string();
+                let folder = display_path(&path);
+                let window_command = window_command;
+                let ws_clone = ws.clone();
+
+                stack((
+                    label(move || name.clone()).style(move |s| {
+                        s.color(config.get().color(LapceColor::EDITOR_FOREGROUND))
+                    }),
+                    label(move || folder.clone()).style(move |s| {
+                        s.color(config.get().color(LapceColor::EDITOR_DIM))
+                            .font_size((config.get().ui.font_size() - 2) as f32)
+                            .margin_top(2.0)
+                    }),
+                ))
                 .on_event_stop(EventListener::PointerDown, |_| {})
                 .on_click_stop(move |_| {
-                    workbench_command.send(LapceWorkbenchCommand::OpenFolder);
+                    window_command.send(WindowCommand::SetWorkspace {
+                        workspace: ws_clone.clone(),
+                    });
                 })
                 .style(move |s| {
                     let config = config.get();
-                    s.padding_horiz(20.0)
-                        .padding_vert(10.0)
+                    s.flex_col()
+                        .width_full()
+                        .padding_horiz(10.0)
+                        .padding_vert(6.0)
                         .border_radius(LapceLayout::BORDER_RADIUS)
-                        .color(
-                            config
-                                .color(LapceColor::LAPCE_BUTTON_PRIMARY_FOREGROUND),
-                        )
-                        .background(
-                            config
-                                .color(LapceColor::LAPCE_BUTTON_PRIMARY_BACKGROUND),
-                        )
-                        .font_size((config.ui.font_size() + 2) as f32)
                         .hover(|s| {
                             s.cursor(CursorStyle::Pointer).background(
-                                config
-                                    .color(
-                                        LapceColor::LAPCE_BUTTON_PRIMARY_BACKGROUND,
-                                    )
-                                    .multiply_alpha(0.8),
+                                config.color(LapceColor::PANEL_HOVERED_BACKGROUND),
                             )
                         })
                         .active(|s| {
                             s.background(
-                                config
-                                    .color(
-                                        LapceColor::LAPCE_BUTTON_PRIMARY_BACKGROUND,
-                                    )
-                                    .multiply_alpha(0.6),
+                                config.color(
+                                    LapceColor::PANEL_HOVERED_ACTIVE_BACKGROUND,
+                                ),
                             )
                         })
-                }),
-        )
-        .style(|s| s.size_full().flex_col().items_center().justify_center()),
+                })
+            })
+            .collect::<Vec<_>>();
+
+        stack((
+            section_label("Recent"),
+            scroll(
+                floem::views::stack_from_iter(items)
+                    .style(|s| s.flex_col().width_full()),
+            )
+            .style(|s| s.width_full().max_height(300.0)),
+        ))
+        .style(|s| s.flex_col().items_start().width_full())
+        .into_any()
+    };
+
+    let content = stack((logo, actions, recent_section)).style(|s| {
+        s.flex_col()
+            .items_center()
+            .gap(25.0)
+            .max_width(380.0)
+            .width_full()
+    });
+
+    drag_window_area(
+        container(content)
+            .style(|s| s.size_full().flex_col().items_center().justify_center()),
     )
 }
 

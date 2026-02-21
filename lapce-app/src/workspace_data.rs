@@ -1482,6 +1482,7 @@ impl WorkspaceData {
             }
             InternalCommand::CloseAllSearchTabs => {
                 self.search_tabs.close_all_tabs();
+                self.hide_panel(PanelKind::Search);
             }
         }
     }
