@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     fs, io,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{
         Arc,
         atomic::{AtomicU64, Ordering},
@@ -41,6 +41,7 @@ use parking_lot::Mutex;
 use crate::{
     buffer::{Buffer, get_mod_time, load_file},
     lsp::{LspRpcHandler, manager::LspManager},
+    semgrep::SemgrepRunner,
     watcher::{FileWatcher, Notify, WatchToken},
 };
 
@@ -55,6 +56,8 @@ pub struct Dispatcher {
     buffers: HashMap<PathBuf, Buffer>,
     file_watcher: FileWatcher,
     excluded_directories: Vec<String>,
+    semgrep_initialized: bool,
+    semgrep: Option<SemgrepRunner>,
 }
 
 impl ProxyHandler for Dispatcher {
@@ -239,9 +242,10 @@ impl ProxyHandler for Dispatcher {
                         match load_file(&buffer.path) {
                             Ok(content) => {
                                 self.core_rpc.open_file_changed(
-                                    path,
+                                    path.clone(),
                                     FileChanged::Change(content),
                                 );
+                                self.maybe_scan_semgrep(&path);
                             }
                             Err(err) => {
                                 tracing::event!(
@@ -328,11 +332,12 @@ impl ProxyHandler for Dispatcher {
                     content.clone(),
                 );
                 self.file_watcher.watch(&path, false, OPEN_FILE_EVENT_TOKEN);
-                self.buffers.insert(path, buffer);
+                self.buffers.insert(path.clone(), buffer);
                 self.respond_rpc(
                     id,
                     Ok(ProxyResponse::NewBufferResponse { content, read_only }),
                 );
+                self.maybe_scan_semgrep(&path);
             }
             BufferHead { .. } => {
                 self.respond_rpc(id, Err(RpcError::new("git support removed")));
@@ -820,12 +825,14 @@ impl ProxyHandler for Dispatcher {
                 path,
                 create_parents,
             } => {
+                let mut save_ok = false;
                 let result = match self.buffers.get_mut(&path) {
                     Some(buffer) => buffer
                         .save(rev, create_parents)
                         .map(|_r| {
                             self.lsp_rpc
                                 .did_save_text_document(&path, buffer.rope.clone());
+                            save_ok = true;
                             ProxyResponse::SaveResponse {}
                         })
                         .map_err(|e| RpcError::new(e.to_string())),
@@ -834,6 +841,9 @@ impl ProxyHandler for Dispatcher {
                     }
                 };
                 self.respond_rpc(id, result);
+                if save_ok {
+                    self.maybe_scan_semgrep(&path);
+                }
             }
             SaveBufferAs {
                 buffer_id,
@@ -1180,6 +1190,8 @@ impl Dispatcher {
             buffers: HashMap::new(),
             file_watcher,
             excluded_directories: Vec::new(),
+            semgrep_initialized: false,
+            semgrep: None,
         }
     }
 
@@ -1197,6 +1209,24 @@ impl Dispatcher {
             builder.add(&format!("!{dir}/")).ok()?;
         }
         builder.build().ok()
+    }
+
+    fn init_semgrep(&mut self) {
+        self.semgrep_initialized = true;
+        if let Some(workspace) = self.workspace.as_ref() {
+            let env = self.lsp_rpc.shell_env_for_project(Some(workspace));
+            self.semgrep =
+                SemgrepRunner::new(workspace.clone(), self.core_rpc.clone(), env);
+        }
+    }
+
+    fn maybe_scan_semgrep(&mut self, path: &Path) {
+        if !self.semgrep_initialized {
+            self.init_semgrep();
+        }
+        if let Some(ref semgrep) = self.semgrep {
+            semgrep.scan_file(path.to_path_buf());
+        }
     }
 
     fn get_buffer_or_insert(&mut self, path: PathBuf) -> &mut Buffer {
