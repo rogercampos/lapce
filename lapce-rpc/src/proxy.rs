@@ -82,6 +82,9 @@ pub enum ProxyRequest {
         /// Unique ID for this search request. Used to route streaming
         /// notifications back to the correct `GlobalSearchData` instance.
         search_id: u64,
+        /// When set, restrict the search to this subfolder (relative to
+        /// the workspace root). `None` means search the entire workspace.
+        search_path: Option<PathBuf>,
     },
     GlobalReplace {
         pattern: String,
@@ -224,6 +227,9 @@ pub enum ProxyRequest {
         path: PathBuf,
         query: String,
     },
+    /// List all directories in the workspace (recursively) using a fast
+    /// filesystem walk.  Used by the folder picker for search/filter.
+    ListAllFolders {},
 }
 
 /// Fire-and-forget messages from the UI to the proxy (no response expected).
@@ -382,6 +388,9 @@ pub enum ProxyResponse {
     },
     GetWorkspaceSymbolsResponse {
         symbols: Vec<SymbolInformationEntry>,
+    },
+    ListAllFoldersResponse {
+        folders: Vec<PathBuf>,
     },
 }
 
@@ -651,6 +660,7 @@ impl ProxyRpcHandler {
         is_regex: bool,
         max_results: Option<usize>,
         search_id: u64,
+        search_path: Option<PathBuf>,
         f: impl ProxyCallback + 'static,
     ) {
         self.request_async(
@@ -661,6 +671,7 @@ impl ProxyRpcHandler {
                 is_regex,
                 max_results,
                 search_id,
+                search_path,
             },
             f,
         );
@@ -976,6 +987,10 @@ impl ProxyRpcHandler {
         f: impl ProxyCallback + 'static,
     ) {
         self.request_async(ProxyRequest::GetWorkspaceSymbols { path, query }, f);
+    }
+
+    pub fn list_all_folders(&self, f: impl ProxyCallback + 'static) {
+        self.request_async(ProxyRequest::ListAllFolders {}, f);
     }
 }
 

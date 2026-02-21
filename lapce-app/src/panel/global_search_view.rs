@@ -306,14 +306,25 @@ fn search_tab_content(
                 let has_preview = gs.has_preview;
                 let preview_focused = gs.preview_focused;
 
-                // Left side: toolbar + results list
+                // Left side: toolbar + folder filter + results list
                 let left_side = stack((
                     search_toolbar(gs.clone(), config),
-                    search_result(gs.clone(), config).style(move |s| {
+                    stack((
+                        panel_folder_filter_row(
+                            workspace_data.clone(),
+                            gs.clone(),
+                            config,
+                        ),
+                        search_result(gs.clone(), config).style(move |s| {
+                            s.min_height(0).min_width(0).flex_basis(0).flex_grow(1.0)
+                        }),
+                    ))
+                    .style(|s| {
                         s.height_pct(100.0)
                             .min_width(0)
                             .flex_basis(0)
                             .flex_grow(1.0)
+                            .flex_col()
                     }),
                 ))
                 .style(|s| {
@@ -396,6 +407,46 @@ fn search_toolbar(
             .items_center()
             .padding_vert(4.0)
             .border_right(1.0)
+            .border_color(config.color(LapceColor::LAPCE_BORDER))
+    })
+}
+
+/// Clickable row in the search panel showing the current folder filter for a tab.
+fn panel_folder_filter_row(
+    workspace_data: Rc<WorkspaceData>,
+    gs: GlobalSearchData,
+    config: ReadSignal<Arc<LapceConfig>>,
+) -> impl View {
+    let search_path = gs.search_path;
+    let folder_picker_data = workspace_data.folder_picker_data.clone();
+
+    container(
+        label(move || match search_path.get() {
+            Some(p) => format!("Folder: {}", p.display()),
+            None => "Folder: All files".to_string(),
+        })
+        .on_click_stop(move |_| {
+            let sp = search_path;
+            folder_picker_data.open(move |selected| {
+                sp.set(selected);
+            });
+        })
+        .style(move |s| {
+            let config = config.get();
+            s.width_full()
+                .padding_horiz(8.0)
+                .padding_vert(4.0)
+                .cursor(CursorStyle::Pointer)
+                .color(config.color(LapceColor::EDITOR_DIM))
+                .hover(|s| {
+                    s.background(config.color(LapceColor::PANEL_HOVERED_BACKGROUND))
+                })
+        }),
+    )
+    .style(move |s| {
+        let config = config.get();
+        s.width_full()
+            .border_bottom(1.0)
             .border_color(config.color(LapceColor::LAPCE_BORDER))
     })
 }

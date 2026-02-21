@@ -187,6 +187,10 @@ pub struct GlobalSearchData {
     /// suppressed. Used for restored search tabs that shouldn't execute until
     /// they become the active tab (avoids WORKER_ID cancellation cascade).
     pub lazy: RwSignal<bool>,
+    /// Optional subfolder filter (relative to workspace root). When `Some`,
+    /// the proxy only searches inside this subfolder. `None` means search
+    /// the entire workspace.
+    pub search_path: RwSignal<Option<PathBuf>>,
 }
 
 impl std::fmt::Debug for GlobalSearchData {
@@ -290,6 +294,7 @@ impl GlobalSearchData {
         let current_search_id = cx.create_rw_signal(0u64);
         let searching = cx.create_rw_signal(false);
         let lazy = cx.create_rw_signal(false);
+        let search_path: RwSignal<Option<PathBuf>> = cx.create_rw_signal(None);
 
         // Build the search_tree_rows Memo from panel_search_result (not
         // search_result) so the bottom panel only updates when explicitly
@@ -343,6 +348,7 @@ impl GlobalSearchData {
             current_search_id,
             searching,
             lazy,
+            search_path,
         };
 
         // Reactive effect: whenever the editor buffer text changes, fire a new search
@@ -353,6 +359,11 @@ impl GlobalSearchData {
             let buffer = global_search.editor.doc().buffer;
             cx.create_effect(move |_| {
                 let pattern = buffer.with(|buffer| buffer.to_string());
+                // Always track search_path so the effect re-runs when the
+                // subfolder filter changes, even if the pattern is currently
+                // empty.  Moving this before the early returns ensures the
+                // reactive subscription is never dropped.
+                let search_path = global_search.search_path.get();
                 // Lazy tabs skip firing searches until explicitly activated.
                 if global_search.lazy.get_untracked() {
                     return;
@@ -391,6 +402,7 @@ impl GlobalSearchData {
                     is_regex,
                     max_results,
                     search_id,
+                    search_path,
                     move |_result| {},
                 );
             });
@@ -639,11 +651,13 @@ impl GlobalSearchData {
         case_matching: CaseMatching,
         whole_words: bool,
         is_regex: bool,
+        search_path: Option<PathBuf>,
     ) -> Self {
         let gs = Self::new(cx, main_split);
         gs.case_matching.set(case_matching);
         gs.whole_words.set(whole_words);
         gs.is_regex.set(is_regex);
+        gs.search_path.set(search_path);
         // Setting the pattern triggers the reactive effect which fires the search
         gs.set_pattern(pattern);
         gs
@@ -659,12 +673,14 @@ impl GlobalSearchData {
         case_matching: CaseMatching,
         whole_words: bool,
         is_regex: bool,
+        search_path: Option<PathBuf>,
     ) -> Self {
         let gs = Self::new(cx, main_split);
         gs.lazy.set(true);
         gs.case_matching.set(case_matching);
         gs.whole_words.set(whole_words);
         gs.is_regex.set(is_regex);
+        gs.search_path.set(search_path);
         // Set the pattern without triggering the search (lazy flag is set)
         gs.set_pattern(pattern);
         gs
@@ -698,6 +714,7 @@ impl GlobalSearchData {
             return;
         }
         let (case_sensitive, whole_word, is_regex) = self.search_options_untracked();
+        let search_path = self.search_path.get_untracked();
         self.search_result.update(|r| r.clear());
         self.panel_search_result.update(|r| r.clear());
         let max_results = Some(1000);
@@ -711,6 +728,7 @@ impl GlobalSearchData {
             is_regex,
             max_results,
             search_id,
+            search_path,
             move |_result| {},
         );
     }

@@ -868,6 +868,7 @@ fn workspace_view(workspace_data: Rc<WorkspaceData>) -> impl View {
             go_to_file::go_to_file_popup(workspace_data.clone()),
             crate::search_modal::search_modal_popup(workspace_data.clone()),
             crate::replace_modal::replace_modal_popup(workspace_data.clone()),
+            crate::folder_picker::folder_picker_popup(workspace_data.clone()),
             recent_files::recent_files_popup(workspace_data.clone()),
             go_to_line::go_to_line_popup(workspace_data.clone()),
             go_to_symbol::go_to_symbol_popup(workspace_data.clone()),
