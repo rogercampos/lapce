@@ -468,7 +468,9 @@ impl HighlightIter<'_> {
                         let layer = self.layers.remove(i + 1);
                         PARSER.with(|ts_parser| {
                             let highlighter = &mut ts_parser.borrow_mut();
-                            highlighter.cursors.push(layer.cursor);
+                            if highlighter.cursors.len() < 8 {
+                                highlighter.cursors.push(layer.cursor);
+                            }
                         });
                     }
                     break;
@@ -481,7 +483,9 @@ impl HighlightIter<'_> {
                 let layer = self.layers.remove(0);
                 PARSER.with(|ts_parser| {
                     let highlighter = &mut ts_parser.borrow_mut();
-                    highlighter.cursors.push(layer.cursor);
+                    if highlighter.cursors.len() < 8 {
+                        highlighter.cursors.push(layer.cursor);
+                    }
                 });
             }
         }

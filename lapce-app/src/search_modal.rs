@@ -264,6 +264,10 @@ impl SearchModalData {
 
     fn previous(&self) {
         self.preview_focused.set(false);
+        let len = self.flat_matches.with_untracked(|items| items.len());
+        if len == 0 {
+            return;
+        }
         let index = self.index.get_untracked();
         if index > 0 {
             self.index.set(index - 1);

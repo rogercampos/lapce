@@ -167,9 +167,9 @@ pub struct KeyPressData {
 }
 
 impl KeyPressData {
-    pub fn new(cx: Scope, config: &LapceConfig) -> Self {
+    pub fn new(cx: Scope) -> Self {
         let (keymaps, command_keymaps) =
-            Self::get_keymaps(config).unwrap_or((IndexMap::new(), IndexMap::new()));
+            Self::get_keymaps().unwrap_or((IndexMap::new(), IndexMap::new()));
         let mut keypress = Self {
             pending_keypress: cx.create_rw_signal((Vec::new(), None)),
             keymaps: Rc::new(keymaps),
@@ -182,8 +182,8 @@ impl KeyPressData {
         keypress
     }
 
-    pub fn update_keymaps(&mut self, config: &LapceConfig) {
-        if let Ok((new_keymaps, new_command_keymaps)) = Self::get_keymaps(config) {
+    pub fn update_keymaps(&mut self) {
+        if let Ok((new_keymaps, new_command_keymaps)) = Self::get_keymaps() {
             self.keymaps = Rc::new(new_keymaps);
             self.command_keymaps = Rc::new(new_command_keymaps);
             self.load_commands();
@@ -327,6 +327,10 @@ impl KeyPressData {
                         last_time.take();
                         pending_keypress.clear();
                     });
+                // Commands are already in reverse order (later-loaded bindings
+                // first) from match_keymap(), so iterating forwards here tries
+                // the highest-priority binding first and stops on the first one
+                // that reports CommandExecuted::Yes.
                 for command in commands {
                     let handled = self.run_command(command, None, mods, focus)
                         == CommandExecuted::Yes;
@@ -505,7 +509,11 @@ impl KeyPressData {
             && matches.iter().filter(|m| m.key != keypresses).count() == 0
         {
             // Multiple keymaps all match exactly (same key, different conditions
-            // all passing). Try them in reverse so later-loaded bindings win.
+            // all passing). Reverse the order so later-loaded bindings (which
+            // appear later in the keymaps IndexMap) are tried first. This gives
+            // user overrides and OS-specific bindings priority over common
+            // defaults. The caller (handle_keymatch) iterates this list forwards,
+            // so the first element here = highest priority = last loaded.
             KeymapMatch::Multiple(
                 matches.iter().rev().map(|m| m.command.clone()).collect(),
             )
@@ -568,9 +576,7 @@ impl KeyPressData {
     /// Later loads can override or unbind earlier ones using the "-command"
     /// prefix syntax (see KeyMapLoader::load_from_str).
     #[allow(clippy::type_complexity)]
-    fn get_keymaps(
-        _config: &LapceConfig,
-    ) -> Result<(
+    fn get_keymaps() -> Result<(
         IndexMap<Vec<KeyMapPress>, Vec<KeyMap>>,
         IndexMap<String, Vec<KeyMap>>,
     )> {

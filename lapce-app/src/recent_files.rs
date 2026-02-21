@@ -197,6 +197,10 @@ impl RecentFilesData {
     }
 
     fn previous(&self) {
+        let len = self.filtered_items.with_untracked(|items| items.len());
+        if len == 0 {
+            return;
+        }
         let index = self.index.get_untracked();
         if index > 0 {
             self.index.set(index - 1);

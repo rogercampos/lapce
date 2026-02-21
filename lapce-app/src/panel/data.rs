@@ -165,6 +165,14 @@ impl PanelData {
         }
     }
 
+    /// Returns whether a panel container (e.g., Left, Bottom, Right) has any
+    /// visible panel position.
+    ///
+    /// The `tracked` parameter controls signal subscription behavior:
+    /// - `tracked=true`: Use in view/style closures so the UI re-renders when
+    ///   visibility changes (calls `signal.get()` which subscribes to updates).
+    /// - `tracked=false`: Use in command handlers and initialization code where
+    ///   re-rendering is not desired (calls `signal.get_untracked()`).
     pub fn is_container_shown(
         &self,
         position: &PanelContainerPosition,
@@ -174,6 +182,10 @@ impl PanelData {
             || self.is_position_shown(&position.second(), tracked)
     }
 
+    /// Returns whether a panel position slot has no panels assigned.
+    ///
+    /// `tracked=true` for view/style closures, `tracked=false` for command handlers.
+    /// See `is_container_shown()` for details on the tracking pattern.
     pub fn is_position_empty(
         &self,
         position: &PanelPosition,
@@ -190,6 +202,10 @@ impl PanelData {
         }
     }
 
+    /// Returns whether a panel position is currently shown (visible).
+    ///
+    /// `tracked=true` for view/style closures, `tracked=false` for command handlers.
+    /// See `is_container_shown()` for details on the tracking pattern.
     pub fn is_position_shown(
         &self,
         position: &PanelPosition,
@@ -258,8 +274,10 @@ impl PanelData {
         }
     }
 
-    /// Get the active panel kind at that position, if any.  
-    /// `tracked` decides whether it should track the signal or not.
+    /// Get the active panel kind at that position, if any.
+    ///
+    /// `tracked=true` for view/style closures, `tracked=false` for command handlers.
+    /// See `is_container_shown()` for details on the tracking pattern.
     pub fn active_panel_at_position(
         &self,
         position: &PanelPosition,
@@ -341,6 +359,12 @@ impl PanelData {
                 .unwrap_or(false)
     }
 
+    /// Toggles the visibility of an entire panel container (Left, Bottom, or Right).
+    /// When hiding, calls `hide_panel` on each position's active panel first
+    /// (to handle peer-position cleanup), then explicitly sets both positions to
+    /// hidden as a safety net. The `hide_panel` calls handle peer-empty logic
+    /// and the final `styles.update` ensures both positions are definitively hidden
+    /// regardless of the order `hide_panel` processes them.
     pub fn toggle_container_visual(&self, position: &PanelContainerPosition) {
         let is_hidden = !self.is_container_shown(position, false);
         if is_hidden {
@@ -373,6 +397,10 @@ impl PanelData {
     /// Returns the signal controlling whether a panel section is folded open or closed.
     /// Creates the signal lazily (defaulting to open) if it has not been persisted,
     /// which handles newly added sections that have no saved state.
+    ///
+    /// Note: Lazily created signals are never cleaned up, but this is acceptable
+    /// because `PanelSection` is a fixed small enum (not dynamically generated),
+    /// so the number of signals is bounded by the number of enum variants.
     pub fn section_open(&self, section: PanelSection) -> RwSignal<bool> {
         let open = self
             .sections

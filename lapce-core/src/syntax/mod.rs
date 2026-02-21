@@ -808,7 +808,9 @@ impl SyntaxLayers {
             }
 
             // Return the cursor back in the pool.
-            ts_parser.cursors.push(cursor);
+            if ts_parser.cursors.len() < 8 {
+                ts_parser.cursors.push(cursor);
+            }
 
             // Remove all untouched layers
             self.layers.retain(|id, _| touched.contains(&id));

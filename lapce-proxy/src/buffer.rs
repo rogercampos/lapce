@@ -142,6 +142,12 @@ impl Buffer {
         rev: u64,
     ) -> Option<TextDocumentContentChangeEvent> {
         if self.rev + 1 != rev {
+            tracing::warn!(
+                "Out-of-order edit for {:?}: expected rev {}, got {}",
+                self.path,
+                self.rev + 1,
+                rev
+            );
             return None;
         }
         self.rev += 1;

@@ -37,6 +37,9 @@ pub enum KeyMapKey {
 
 impl std::hash::Hash for KeyMapKey {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        // Hash the discriminant first to prevent collisions between variants
+        // whose inner values might hash identically.
+        std::mem::discriminant(self).hash(state);
         match self {
             Self::Pointer(btn) => (btn.mouse_button() as u8).hash(state),
             Self::Logical(key) => key.hash(state),
@@ -125,7 +128,7 @@ impl KeyMapPress {
     pub fn parse(key: &str) -> Vec<Self> {
         key.split(' ')
             .filter_map(|k| {
-                let (modifiers, key) = if k == "+" {
+                let (modifiers, key_part) = if k == "+" {
                     ("", "+")
                 } else if let Some(remaining) = k.strip_suffix("++") {
                     (remaining, "+")
@@ -136,11 +139,13 @@ impl KeyMapPress {
                     }
                 };
 
-                let key = match key.parse().ok() {
+                let parsed_key = match key_part.parse().ok() {
                     Some(key) => key,
                     None => {
                         // Skip past unrecognized key definitions
-                        tracing::warn!("Unrecognized key: {key}");
+                        tracing::warn!(
+                            "Unrecognized key '{key_part}' in binding '{key}'"
+                        );
                         return None;
                     }
                 };
@@ -158,7 +163,10 @@ impl KeyMapPress {
                     }
                 }
 
-                Some(KeyMapPress { key, mods })
+                Some(KeyMapPress {
+                    key: parsed_key,
+                    mods,
+                })
             })
             .collect()
     }
@@ -1502,6 +1510,28 @@ mod tests {
             mods: Modifiers::ALT,
         };
         assert!(!kp.is_char());
+    }
+
+    #[test]
+    fn hash_discriminant_differentiates_variants() {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        fn compute_hash(key: &KeyMapKey) -> u64 {
+            let mut hasher = DefaultHasher::new();
+            key.hash(&mut hasher);
+            hasher.finish()
+        }
+
+        // A Logical key and a Pointer key should hash differently
+        // even though their inner values might coincidentally be similar
+        let logical = KeyMapKey::Logical(Key::Character("a".into()));
+        let pointer = KeyMapKey::Pointer(PointerButton::Mouse(MouseButton::Primary));
+
+        // They should not be equal
+        assert_ne!(logical, pointer);
+        // Their hashes should differ (with extremely high probability)
+        assert_ne!(compute_hash(&logical), compute_hash(&pointer));
     }
 
     #[test]

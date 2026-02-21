@@ -180,7 +180,10 @@ impl InlineCompletionData {
             active
         };
 
-        let item = &self.items[active];
+        let Some(item) = self.items.get(active) else {
+            doc.clear_inline_completion();
+            return;
+        };
         let text = item.insert_text.clone();
 
         // TODO: is range really meant to be used for this?
@@ -279,10 +282,11 @@ fn inline_completion_text(
         }
     };
 
-    let range = start_offset..rope_text.offset_line_end(start_offset, true);
+    // The prefix is the text from the completion start to the current cursor position,
+    // representing what the user has already typed. We strip this from the completion text
+    // so that, for example, `p` with a completion of `println` will show `rintln`.
+    let range = start_offset..cursor_offset;
     let prefix = rope_text.slice_to_cow(range);
-    // We strip the prefix of the current input from the label.
-    // So that, for example `p` with a completion of `println` will show `rintln`.
     let Some(text) = text.strip_prefix(prefix.as_ref()) else {
         return ICompletionRes::Hide;
     };

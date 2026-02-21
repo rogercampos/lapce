@@ -324,7 +324,7 @@ impl Editors {
     }
 
     pub fn remove(&self, id: EditorId) -> Option<EditorData> {
-        self.0.try_update(|editors| editors.remove(&id)).unwrap()
+        self.0.try_update(|editors| editors.remove(&id)).flatten()
     }
 
     pub fn get_editor_id_by_path(&self, path: &Path) -> Option<EditorId> {
@@ -749,7 +749,10 @@ impl MainSplitData {
             let editor_tab_id = EditorTabId::next();
             let editor_tab = self.new_editor_tab(editor_tab_id, self.root_split);
             let root_split = self.splits.with_untracked(|splits| {
-                splits.get(&self.root_split).cloned().unwrap()
+                splits
+                    .get(&self.root_split)
+                    .cloned()
+                    .expect("root split must exist in splits map")
             });
             root_split.update(|root_split| {
                 root_split.children = vec![(
@@ -759,10 +762,27 @@ impl MainSplitData {
             });
             self.active_editor_tab.set(Some(editor_tab_id));
             editor_tab
-        } else {
-            let (editor_tab_id, editor_tab) = editor_tabs.iter().next().unwrap();
+        } else if let Some((editor_tab_id, editor_tab)) = editor_tabs.iter().next() {
             self.active_editor_tab.set(Some(*editor_tab_id));
             *editor_tab
+        } else {
+            // No editor tabs exist at all — create a fresh one
+            let editor_tab_id = EditorTabId::next();
+            let editor_tab = self.new_editor_tab(editor_tab_id, self.root_split);
+            let root_split = self.splits.with_untracked(|splits| {
+                splits
+                    .get(&self.root_split)
+                    .cloned()
+                    .expect("root split must exist in splits map")
+            });
+            root_split.update(|root_split| {
+                root_split.children = vec![(
+                    root_split.scope.create_rw_signal(1.0),
+                    SplitContent::EditorTab(editor_tab_id),
+                )];
+            });
+            self.active_editor_tab.set(Some(editor_tab_id));
+            editor_tab
         }
     }
 

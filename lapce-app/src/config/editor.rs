@@ -304,10 +304,13 @@ impl EditorConfig {
     /// controlled by SCALE_OR_SIZE_LIMIT and matches the convention used by
     /// many editors.
     pub fn line_height(&self) -> usize {
-        let line_height = if self.line_height < SCALE_OR_SIZE_LIMIT {
-            self.line_height * self.font_size as f64
+        // Clamp to a minimum of 0.1 to prevent a zero line_height from producing
+        // a zero result in multiplier mode (0.0 * font_size = 0.0).
+        let clamped = self.line_height.max(0.1);
+        let line_height = if clamped < SCALE_OR_SIZE_LIMIT {
+            clamped * self.font_size as f64
         } else {
-            self.line_height
+            clamped
         };
 
         // Prevent overlapping lines
@@ -573,6 +576,32 @@ mod tests {
         let mut cfg = EditorConfig::test_default();
         cfg.blink_interval = 1000;
         assert_eq!(cfg.blink_interval(), 1000);
+    }
+
+    // -- WrapStyle --
+
+    // -- line_height() zero / negative edge cases --
+
+    #[test]
+    fn line_height_zero_multiplier() {
+        // Zero line_height in multiplier mode should be clamped to minimum
+        let mut cfg = EditorConfig::test_default();
+        cfg.font_size = 14;
+        cfg.line_height = 0.0;
+        // With the fix, 0.0 is clamped to 0.1, so 0.1 * 14 = 1.4 -> round -> 1
+        // Then max(1, 14) = 14 (the font_size floor)
+        assert_eq!(cfg.line_height(), 14);
+        // Key point: it shouldn't panic or return 0
+        assert!(cfg.line_height() > 0);
+    }
+
+    #[test]
+    fn line_height_negative_value() {
+        let mut cfg = EditorConfig::test_default();
+        cfg.font_size = 14;
+        cfg.line_height = -1.0;
+        // Negative values are clamped by .max(0.1) -> 0.1 * 14 = 1.4 -> 1 -> max(1, 14) = 14
+        assert_eq!(cfg.line_height(), 14);
     }
 
     // -- WrapStyle --

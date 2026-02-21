@@ -182,7 +182,8 @@ impl AppData {
                     .position(window.position.get_untracked() + (50.0, 50.0))
             })
             .or_else(|| {
-                let db: Arc<LapceDb> = use_context().unwrap();
+                let db: Arc<LapceDb> =
+                    use_context().expect("LapceDb must be provided as context");
                 db.get_window().ok().map(|info| {
                     self.default_window_config()
                         .size(info.size)
@@ -230,7 +231,8 @@ impl AppData {
     pub fn run_app_command(&self, cmd: AppCommand) {
         match cmd {
             AppCommand::SaveApp => {
-                let db: Arc<LapceDb> = use_context().unwrap();
+                let db: Arc<LapceDb> =
+                    use_context().expect("LapceDb must be provided as context");
                 if let Err(err) = db.save_app(self) {
                     tracing::error!("{:?}", err);
                 }
@@ -239,7 +241,8 @@ impl AppData {
                 if self.app_terminated.get_untracked() {
                     return;
                 }
-                let db: Arc<LapceDb> = use_context().unwrap();
+                let db: Arc<LapceDb> =
+                    use_context().expect("LapceDb must be provided as context");
                 let is_last = self.windows.with_untracked(|w| w.len()) == 1;
                 if is_last {
                     if let Err(err) = db.insert_app(self.clone()) {
@@ -707,14 +710,18 @@ fn empty_workspace_view(workspace_data: Rc<WorkspaceData>) -> impl View {
     let workbench_command = workspace_data.common.workbench_command;
     let window_command = workspace_data.common.window_common.window_command;
 
-    let db: Arc<LapceDb> = use_context().unwrap();
-    let recent_workspaces = db
+    let db: Arc<LapceDb> =
+        use_context().expect("LapceDb must be provided as context");
+    let recent_workspaces: Vec<_> = db
         .recent_workspaces()
         .unwrap_or_default()
         .into_iter()
-        .filter(|w| w.path.is_some())
+        .filter_map(|ws| {
+            let path = ws.path.clone()?;
+            Some((ws, path))
+        })
         .take(8)
-        .collect::<Vec<_>>();
+        .collect();
 
     let logo = svg(move || config.get().logo_svg()).style(move |s| {
         s.size(64.0, 64.0).color(
@@ -768,8 +775,7 @@ fn empty_workspace_view(workspace_data: Rc<WorkspaceData>) -> impl View {
     } else {
         let items = recent_workspaces
             .into_iter()
-            .map(|ws| {
-                let path = ws.path.clone().unwrap();
+            .map(|(ws, path)| {
                 let name = path
                     .file_name()
                     .unwrap_or(path.as_os_str())
@@ -1097,27 +1103,27 @@ pub fn launch() {
         #[cfg(target_os = "windows")]
         cmd.creation_flags(windows::Win32::System::Threading::CREATE_NO_WINDOW);
 
-        let stderr_file_path =
-            Directory::logs_directory().unwrap().join("stderr.log");
-        let stderr_file = std::fs::OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .create(true)
-            .read(true)
-            .open(stderr_file_path)
-            .unwrap();
-        let stderr = Stdio::from(stderr_file);
-
-        let stdout_file_path =
-            Directory::logs_directory().unwrap().join("stdout.log");
-        let stdout_file = std::fs::OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .create(true)
-            .read(true)
-            .open(stdout_file_path)
-            .unwrap();
-        let stdout = Stdio::from(stdout_file);
+        let (stderr, stdout) = if let Some(logs_dir) = Directory::logs_directory() {
+            let stderr_file = std::fs::OpenOptions::new()
+                .write(true)
+                .truncate(true)
+                .create(true)
+                .read(true)
+                .open(logs_dir.join("stderr.log"))
+                .map(Stdio::from)
+                .unwrap_or_else(|_| Stdio::inherit());
+            let stdout_file = std::fs::OpenOptions::new()
+                .write(true)
+                .truncate(true)
+                .create(true)
+                .read(true)
+                .open(logs_dir.join("stdout.log"))
+                .map(Stdio::from)
+                .unwrap_or_else(|_| Stdio::inherit());
+            (stderr_file, stdout_file)
+        } else {
+            (Stdio::inherit(), Stdio::inherit())
+        };
 
         if let Err(why) = cmd
             .args(&args[1..])

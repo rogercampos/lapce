@@ -146,36 +146,13 @@ impl Snippet {
 
         let str = &str[pos..];
         if let Some(matched) = REGEX_FIRST.find(str) {
-            // SAFETY:
-            // * The start index is guaranteed not to exceed the end index, since we
-            //   compare with the `$ ...` pattern, and, therefore, the first element
-            //   is always equal to the symbol `$`;
-            // * The indices are within the bounds of the original slice and lie on
-            //   UTF-8 sequence boundaries, since we take the entire slice, with the
-            //   exception of the first `$` char which is 1 byte in accordance with
-            //   the UTF-8 standard.
-            let n = unsafe {
-                matched.as_str().get_unchecked(1..).parse::<usize>().ok()?
-            };
+            let n = matched.as_str().get(1..)?.parse::<usize>().ok()?;
             let end = pos + matched.end();
             return Some((SnippetElement::Tabstop(n), end));
         }
         if let Some(matched) = REGEX_SECOND.find(str) {
             let matched = matched.as_str();
-            // SAFETY:
-            // * The start index is guaranteed not to exceed the end index, since we
-            //   compare with the `${...}` pattern, and, therefore, the first two elements
-            //   are always equal to the `${` and the last one is equal to `}`;
-            // * The indices are within the bounds of the original slice and lie on UTF-8
-            //   sequence boundaries, since we take the entire slice, with the exception
-            //   of the first two `${` and last one `}` chars each of which is 1 byte in
-            //   accordance with the UTF-8 standard.
-            let n = unsafe {
-                matched
-                    .get_unchecked(2..matched.len() - 1)
-                    .parse::<usize>()
-                    .ok()?
-            };
+            let n = matched.get(2..matched.len() - 1)?.parse::<usize>().ok()?;
             let end = pos + matched.len();
             return Some((SnippetElement::Tabstop(n), end));
         }
@@ -869,5 +846,33 @@ mod tests {
             None,
             Snippet::extract_text(s, end + 1, &['$', '{', '}', '\\'], &[])
         );
+    }
+
+    #[test]
+    fn test_extract_tabstop_edge_cases() {
+        // Single digit tabstop
+        let s = "$1";
+        let parsed = Snippet::from_str(s).unwrap();
+        assert_eq!(parsed.tabs(0), vec![(1, (0, 0))]);
+
+        // Large tabstop number
+        let s = "$99";
+        let parsed = Snippet::from_str(s).unwrap();
+        assert_eq!(parsed.tabs(0), vec![(99, (0, 0))]);
+
+        // Braced tabstop
+        let s = "${1}";
+        let parsed = Snippet::from_str(s).unwrap();
+        assert_eq!(parsed.tabs(0), vec![(1, (0, 0))]);
+
+        // Braced tabstop with large number
+        let s = "${42}";
+        let parsed = Snippet::from_str(s).unwrap();
+        assert_eq!(parsed.tabs(0), vec![(42, (0, 0))]);
+
+        // Only text, no tabstops
+        let s = "just text";
+        let parsed = Snippet::from_str(s).unwrap();
+        assert!(parsed.tabs(0).is_empty());
     }
 }

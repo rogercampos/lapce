@@ -103,6 +103,8 @@ impl DefinitionPickerData {
 
         self.active.set(0);
         self.offset = offset;
+        // LSP positions use u32 for line/character, so they are always non-negative.
+        // No additional validation is needed beyond what the LSP protocol guarantees.
         self.items = locations
             .into_iter()
             .map(|location| {

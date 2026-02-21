@@ -461,9 +461,12 @@ impl TextInput {
         let actual_size = text_rect.size();
         let width = text_rect.width();
         let height = text_rect.height();
-        let child_size = self
-            .text_layout
-            .with_untracked(|text_layout| text_layout.as_ref().unwrap().size());
+        let child_size = self.text_layout.with_untracked(|text_layout| {
+            text_layout
+                .as_ref()
+                .map(|tl| tl.size())
+                .unwrap_or(Size::ZERO)
+        });
 
         let mut text_viewport = text_viewport;
         if width >= child_size.width {
@@ -600,29 +603,37 @@ impl View for TextInput {
 
             let text_layout = self.text_layout;
             text_layout.with_untracked(|text_layout| {
-                let text_layout = text_layout.as_ref().unwrap();
+                if let Some(text_layout) = text_layout.as_ref() {
+                    let offset = self.cursor().get_untracked().offset();
+                    let cursor_point = text_layout.hit_position(offset).point;
+                    if cursor_point != self.cursor_pos {
+                        self.cursor_pos = cursor_point;
+                        self.ensure_cursor_visible();
+                    }
 
-                let offset = self.cursor().get_untracked().offset();
-                let cursor_point = text_layout.hit_position(offset).point;
-                if cursor_point != self.cursor_pos {
-                    self.cursor_pos = cursor_point;
-                    self.ensure_cursor_visible();
+                    let size = text_layout.size();
+                    let height = size.height as f32;
+
+                    if self.text_node.is_none() {
+                        self.text_node = Some(self.id.new_taffy_node());
+                    }
+
+                    let text_node = self.text_node.unwrap();
+
+                    let style = Style::new().height(height).to_taffy_style();
+                    self.id.set_taffy_style(text_node, style);
+                } else {
+                    if self.text_node.is_none() {
+                        self.text_node = Some(self.id.new_taffy_node());
+                    }
                 }
-
-                let size = text_layout.size();
-                let height = size.height as f32;
-
-                if self.text_node.is_none() {
-                    self.text_node = Some(self.id.new_taffy_node());
-                }
-
-                let text_node = self.text_node.unwrap();
-
-                let style = Style::new().height(height).to_taffy_style();
-                self.id.set_taffy_style(text_node, style);
             });
 
-            vec![self.text_node.unwrap()]
+            if let Some(text_node) = self.text_node {
+                vec![text_node]
+            } else {
+                vec![]
+            }
         })
     }
 
@@ -651,28 +662,34 @@ impl View for TextInput {
 
         self.clamp_text_viewport(self.text_viewport);
 
-        let text_node = self.text_node.unwrap();
+        let Some(text_node) = self.text_node else {
+            return None;
+        };
         let location = self.id.taffy_layout(text_node).unwrap_or_default().location;
         self.layout_rect = size
             .to_rect()
             .with_origin(Point::new(location.x as f64, location.y as f64));
         let offset = self.cursor().with_untracked(|c| c.offset());
         let cursor_line = self.text_layout.with_untracked(|text_layout| {
-            let hit_position = text_layout.as_ref().unwrap().hit_position(offset);
-            let point = Point::new(location.x as f64, location.y as f64)
-                - self.text_viewport.origin().to_vec2();
-            let cursor_point = hit_position.point + point.to_vec2();
+            if let Some(text_layout) = text_layout.as_ref() {
+                let hit_position = text_layout.hit_position(offset);
+                let point = Point::new(location.x as f64, location.y as f64)
+                    - self.text_viewport.origin().to_vec2();
+                let cursor_point = hit_position.point + point.to_vec2();
 
-            Line::new(
-                Point::new(
-                    cursor_point.x,
-                    cursor_point.y - hit_position.glyph_ascent,
-                ),
-                Point::new(
-                    cursor_point.x,
-                    cursor_point.y + hit_position.glyph_descent,
-                ),
-            )
+                Line::new(
+                    Point::new(
+                        cursor_point.x,
+                        cursor_point.y - hit_position.glyph_ascent,
+                    ),
+                    Point::new(
+                        cursor_point.x,
+                        cursor_point.y + hit_position.glyph_descent,
+                    ),
+                )
+            } else {
+                Line::new(Point::ZERO, Point::ZERO)
+            }
         });
         self.cursor_line.set(cursor_line);
 
@@ -734,13 +751,18 @@ impl View for TextInput {
     fn paint(&mut self, cx: &mut floem::context::PaintCx) {
         cx.save();
         cx.clip(&self.text_rect.inflate(1.0, 0.0));
-        let text_node = self.text_node.unwrap();
+        let Some(text_node) = self.text_node else {
+            cx.restore();
+            return;
+        };
         let location = self.id.taffy_layout(text_node).unwrap_or_default().location;
         let point = Point::new(location.x as f64, location.y as f64)
             - self.text_viewport.origin().to_vec2();
 
         self.text_layout.with_untracked(|text_layout| {
-            let text_layout = text_layout.as_ref().unwrap();
+            let Some(text_layout) = text_layout.as_ref() else {
+                return;
+            };
             let height = text_layout.size().height;
             let config = self.config.get_untracked();
 
@@ -765,7 +787,11 @@ impl View for TextInput {
             if !self.content.is_empty() {
                 cx.draw_text(text_layout, point);
             } else if !self.placeholder.is_empty() {
-                cx.draw_text(self.placeholder_text_layout.as_ref().unwrap(), point);
+                if let Some(placeholder_layout) =
+                    self.placeholder_text_layout.as_ref()
+                {
+                    cx.draw_text(placeholder_layout, point);
+                }
             }
 
             if let Some((start, end)) = self.preedit_range {

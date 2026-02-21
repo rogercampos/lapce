@@ -94,6 +94,10 @@ impl RenameData {
     ) {
         // Pre-fill the editor with the current symbol name and select it all,
         // so the user can immediately type the new name to replace it.
+        if placeholder.is_empty() {
+            tracing::warn!("Rename placeholder is empty, skipping reload");
+            return;
+        }
         self.editor.doc().reload(Rope::from(&placeholder), true);
         self.editor.cursor().update(|cursor| {
             cursor.set_insert(Selection::region(0, placeholder.len()))

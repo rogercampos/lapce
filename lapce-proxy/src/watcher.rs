@@ -135,7 +135,8 @@ impl FileWatcher {
         // (e.g., watching a file that hasn't been created yet).
         let path = match path.canonicalize() {
             Ok(ref p) => p.to_owned(),
-            Err(_) => {
+            Err(err) => {
+                tracing::warn!("Failed to canonicalize path {:?}: {}", path, err);
                 return;
             }
         };

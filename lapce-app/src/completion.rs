@@ -237,7 +237,7 @@ impl CompletionData {
                     })
                     .collect()
             })
-            .unwrap();
+            .unwrap_or_default();
         // Sort all the items by their score, then their label score, then their length.
         items.sort_by(|a, b| {
             b.score

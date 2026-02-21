@@ -522,17 +522,27 @@ impl ProxyHandler for Dispatcher {
             }
             GetInlayHints { path } => {
                 let proxy_rpc = self.proxy_rpc.clone();
-                let buffer = self.buffers.get(&path).unwrap();
-                let range = Range {
-                    start: Position::new(0, 0),
-                    end: buffer.offset_to_position(buffer.len()),
-                };
-                self.lsp_rpc
-                    .get_inlay_hints(&path, range, move |_, result| {
-                        let result = result
-                            .map(|hints| ProxyResponse::GetInlayHints { hints });
-                        proxy_rpc.handle_response(id, result);
-                    });
+                if let Some(buffer) = self.buffers.get(&path) {
+                    let range = Range {
+                        start: Position::new(0, 0),
+                        end: buffer.offset_to_position(buffer.len()),
+                    };
+                    self.lsp_rpc
+                        .get_inlay_hints(&path, range, move |_, result| {
+                            let result = result
+                                .map(|hints| ProxyResponse::GetInlayHints { hints });
+                            proxy_rpc.handle_response(id, result);
+                        });
+                } else {
+                    tracing::warn!("Buffer not found for path: {:?}", path);
+                    self.respond_rpc(
+                        id,
+                        Err(RpcError::new(format!(
+                            "Buffer not found for path: {:?}",
+                            path
+                        ))),
+                    );
+                }
             }
             GetDocumentDiagnostics { path } => {
                 let proxy_rpc = self.proxy_rpc.clone();
@@ -575,37 +585,37 @@ impl ProxyHandler for Dispatcher {
                 );
             }
             GetSemanticTokens { path } => {
-                let buffer = self.buffers.get(&path).unwrap();
-                let text = buffer.rope.clone();
-                let rev = buffer.rev;
-                let len = buffer.len();
-                let local_path = path.clone();
-                let proxy_rpc = self.proxy_rpc.clone();
-                let lsp_rpc = self.lsp_rpc.clone();
+                if let Some(buffer) = self.buffers.get(&path) {
+                    let text = buffer.rope.clone();
+                    let rev = buffer.rev;
+                    let len = buffer.len();
+                    let local_path = path.clone();
+                    let proxy_rpc = self.proxy_rpc.clone();
+                    let lsp_rpc = self.lsp_rpc.clone();
 
-                let handle_tokens =
-                    move |result: Result<Vec<LineStyle>, RpcError>| match result {
-                        Ok(styles) => {
-                            proxy_rpc.handle_response(
-                                id,
-                                Ok(ProxyResponse::GetSemanticTokens {
-                                    styles: SemanticStyles {
-                                        rev,
-                                        path: local_path,
-                                        styles,
-                                        len,
-                                    },
-                                }),
-                            );
-                        }
-                        Err(e) => {
-                            proxy_rpc.handle_response(id, Err(e));
-                        }
-                    };
+                    let handle_tokens =
+                        move |result: Result<Vec<LineStyle>, RpcError>| match result
+                        {
+                            Ok(styles) => {
+                                proxy_rpc.handle_response(
+                                    id,
+                                    Ok(ProxyResponse::GetSemanticTokens {
+                                        styles: SemanticStyles {
+                                            rev,
+                                            path: local_path,
+                                            styles,
+                                            len,
+                                        },
+                                    }),
+                                );
+                            }
+                            Err(e) => {
+                                proxy_rpc.handle_response(id, Err(e));
+                            }
+                        };
 
-                let proxy_rpc = self.proxy_rpc.clone();
-                self.lsp_rpc
-                    .get_semantic_tokens(
+                    let proxy_rpc = self.proxy_rpc.clone();
+                    self.lsp_rpc.get_semantic_tokens(
                         &path,
                         move |plugin_id, result| match result {
                             Ok(result) => {
@@ -621,6 +631,16 @@ impl ProxyHandler for Dispatcher {
                             }
                         },
                     );
+                } else {
+                    tracing::warn!("Buffer not found for path: {:?}", path);
+                    self.respond_rpc(
+                        id,
+                        Err(RpcError::new(format!(
+                            "Buffer not found for path: {:?}",
+                            path
+                        ))),
+                    );
+                }
             }
             GetCodeActions {
                 path,
@@ -859,6 +879,12 @@ impl ProxyHandler for Dispatcher {
                     .save(rev, create_parents)
                     .map(|_| ProxyResponse::Success {})
                     .map_err(|e| RpcError::new(e.to_string()));
+                self.lsp_rpc.did_open_document(
+                    &path,
+                    buffer.language_id.to_string(),
+                    buffer.rev as i32,
+                    buffer.rope.to_string(),
+                );
                 self.buffers.insert(path, buffer);
                 self.respond_rpc(id, result);
             }
@@ -1373,19 +1399,19 @@ impl FileWatchNotifier {
                 core_rpc.workspace_file_change();
             }
             if let Some(workspace) = workspace.as_ref() {
+                let task_id = core_rpc.next_background_task_id();
+                let mut cache = git_cache.lock();
+
                 // Decide: full rescan or incremental?
                 // Full rescan if .git/ internals or .gitignore changed, or
                 // if the cache hasn't been initialized yet.
-                let needs_full = {
-                    let cache = git_cache.lock();
-                    cache.is_none()
-                } || changed_paths.iter().any(|p| {
-                    let rel = p.strip_prefix(workspace).unwrap_or(p);
-                    rel.starts_with(".git")
-                        || rel.file_name().map_or(false, |f| f == ".gitignore")
-                });
+                let needs_full = cache.is_none()
+                    || changed_paths.iter().any(|p| {
+                        let rel = p.strip_prefix(workspace).unwrap_or(p);
+                        rel.starts_with(".git")
+                            || rel.file_name().map_or(false, |f| f == ".gitignore")
+                    });
 
-                let task_id = core_rpc.next_background_task_id();
                 if needs_full {
                     core_rpc.background_task_started(
                         task_id,
@@ -1393,16 +1419,14 @@ impl FileWatchNotifier {
                     );
                     let statuses = read_git_file_statuses(workspace);
                     core_rpc.git_file_status_changed(statuses.clone());
-                    *git_cache.lock() = Some(statuses);
-                } else {
+                    *cache = Some(statuses);
+                } else if let Some(cache_map) = cache.as_mut() {
                     core_rpc.background_task_started(
                         task_id,
                         "Updating git status".into(),
                     );
                     let incremental =
                         read_git_file_statuses_for_paths(workspace, &changed_paths);
-                    let mut cache = git_cache.lock();
-                    let cache_map = cache.as_mut().unwrap();
                     // Remove old entries for changed paths — if a file was
                     // reverted to clean, the incremental check won't return
                     // it, so we must clear the stale entry.

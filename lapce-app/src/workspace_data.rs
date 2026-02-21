@@ -316,7 +316,7 @@ impl WorkspaceData {
         let lapce_command = Listener::new_empty(cx);
         let workbench_command = Listener::new_empty(cx);
         let internal_command = Listener::new_empty(cx);
-        let keypress = cx.create_rw_signal(KeyPressData::new(cx, &config));
+        let keypress = cx.create_rw_signal(KeyPressData::new(cx));
 
         // Start the proxy backend (runs as a thread in-process for local workspaces).
         // The proxy handles LSP, plugins, file watching, and global search.
@@ -618,7 +618,7 @@ impl WorkspaceData {
     pub fn reload_config(&self) {
         let config = LapceConfig::load(&self.workspace);
         self.common.keypress.update(|keypress| {
-            keypress.update_keymaps(&config);
+            keypress.update_keymaps();
         });
         self.common.proxy.notification(
             ProxyNotification::UpdateExcludedDirectories {

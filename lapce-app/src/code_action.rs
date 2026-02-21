@@ -67,16 +67,13 @@ impl KeyPressFocus for CodeActionData {
         _count: Option<usize>,
         _mods: Modifiers,
     ) -> crate::command::CommandExecuted {
+        // Only Focus commands are handled; all other command kinds are
+        // intentionally ignored since the code action popup is a simple list.
         match &command.kind {
-            CommandKind::Workbench(_) => {}
-            CommandKind::Edit(_) => {}
-            CommandKind::Move(_) => {}
-            CommandKind::Scroll(_) => {}
             CommandKind::Focus(cmd) => {
                 self.run_focus_command(cmd);
             }
-            CommandKind::MotionMode(_) => {}
-            CommandKind::MultiSelection(_) => {}
+            _ => {}
         }
         CommandExecuted::Yes
     }

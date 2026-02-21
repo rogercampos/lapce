@@ -1,6 +1,5 @@
 use anyhow::{Result, anyhow};
 use indexmap::IndexMap;
-use tracing::error;
 
 use super::keymap::{KeyMap, KeyMapPress};
 
@@ -29,6 +28,7 @@ impl KeyMapLoader {
             .and_then(|v| v.as_array_of_tables())
             .ok_or_else(|| anyhow!("no keymaps"))?;
 
+        let mut parse_failures = 0usize;
         for toml_keymap in toml_keymaps {
             let keymap = match Self::get_keymap(toml_keymap) {
                 Ok(Some(keymap)) => keymap,
@@ -37,7 +37,8 @@ impl KeyMapLoader {
                     continue;
                 }
                 Err(err) => {
-                    error!("Could not parse keymap: {err}");
+                    parse_failures += 1;
+                    tracing::warn!("Could not parse keymap: {err}");
                     continue;
                 }
             };
@@ -59,21 +60,23 @@ impl KeyMapLoader {
                     self.keymaps.entry(key).or_default().push(keymap.clone());
                 }
             } else {
-                // Unbind: remove the matching keymap from both lookup tables.
+                // Unbind: remove ALL matching keymaps from both lookup tables.
                 let is_keymap = |k: &KeyMap| -> bool {
                     k.when == keymap.when && k.key == keymap.key
                 };
-                if let Some(index) = current_keymaps.iter().position(is_keymap) {
-                    current_keymaps.remove(index);
-                }
+                current_keymaps.retain(|k| !is_keymap(k));
                 for i in 1..keymap.key.len() + 1 {
                     if let Some(keymaps) = self.keymaps.get_mut(&keymap.key[..i]) {
-                        if let Some(index) = keymaps.iter().position(is_keymap) {
-                            keymaps.remove(index);
-                        }
+                        keymaps.retain(|k| !is_keymap(k));
                     }
                 }
             }
+        }
+
+        if parse_failures > 0 {
+            tracing::warn!(
+                "{parse_failures} keymap(s) failed to parse, check logs for details"
+            );
         }
 
         Ok(self)
@@ -381,6 +384,60 @@ command = "save_all"
         // The full chord should also be registered
         let full = KeyMapPress::parse("Ctrl+k Ctrl+s");
         assert!(keymaps.contains_key(&full));
+    }
+
+    #[test]
+    fn test_unbinding_removes_all_duplicates() {
+        // Load the same binding twice from two sources
+        let source1 = r#"
+[[keymaps]]
+key = "Ctrl+s"
+command = "save"
+        "#;
+        let source2 = r#"
+[[keymaps]]
+key = "Ctrl+s"
+command = "save"
+        "#;
+        let unbind = r#"
+[[keymaps]]
+key = "Ctrl+s"
+command = "-save"
+        "#;
+
+        let keypress = KeyMapPress::parse("Ctrl+s");
+
+        // Verify we have 2 bindings before unbinding
+        {
+            let mut loader = KeyMapLoader::new();
+            loader.load_from_str(source1).unwrap();
+            loader.load_from_str(source2).unwrap();
+            let (keymaps, _) = loader.finalize();
+            assert_eq!(
+                keymaps.get(&keypress).unwrap().len(),
+                2,
+                "Should have 2 bindings before unbind"
+            );
+        }
+
+        let mut loader = KeyMapLoader::new();
+        loader.load_from_str(source1).unwrap();
+        loader.load_from_str(source2).unwrap();
+        loader.load_from_str(unbind).unwrap();
+
+        let (keymaps, command_keymaps) = loader.finalize();
+
+        // Both duplicates should be removed
+        let entries = keymaps.get(&keypress);
+        assert!(
+            entries.is_none() || entries.unwrap().is_empty(),
+            "Both duplicate Ctrl+s bindings should be removed"
+        );
+        let save_bindings = command_keymaps.get("save");
+        assert!(
+            save_bindings.is_none() || save_bindings.unwrap().is_empty(),
+            "All save command bindings should be removed"
+        );
     }
 
     #[test]

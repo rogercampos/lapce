@@ -384,16 +384,7 @@ const LANGUAGES: &[SyntaxProperties] = &[
         id: LapceLanguage::Clojure,
         indent: Indent::space(2),
         files: &[],
-        extensions: &[
-            "clj",
-            "edn",
-            "cljs",
-            "cljc",
-            "cljd",
-            "edn",
-            "bb",
-            "clj_kondo",
-        ],
+        extensions: &["clj", "edn", "cljs", "cljc", "cljd", "bb", "clj_kondo"],
         comment: comment_properties!(";"),
         tree_sitter: TreeSitterProperties::DEFAULT,
     },
@@ -1182,7 +1173,7 @@ impl LapceLanguage {
     fn properties(&self) -> &SyntaxProperties {
         let i = *self as usize;
         let l = &LANGUAGES[i];
-        debug_assert!(
+        assert!(
             l.id == *self,
             "LANGUAGES[{i}]: Setting::id mismatch: {:?} != {:?}",
             l.id,
@@ -2034,5 +2025,32 @@ mod tests {
         assert_eq!(styles.len(), 2);
         assert_eq!(styles[0].start, 0);
         assert_eq!(styles[1].start, 5);
+    }
+
+    #[test]
+    fn no_duplicate_extensions_in_any_language() {
+        use std::collections::HashSet;
+
+        for lang in super::LANGUAGES {
+            let mut seen = HashSet::new();
+            for ext in lang.extensions {
+                assert!(
+                    seen.insert(*ext),
+                    "Language {:?} has duplicate extension: {:?}",
+                    lang.id,
+                    ext
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn properties_matches_all_variants() {
+        // Verify that calling properties() on every variant succeeds
+        // (the assert inside properties() checks array ordering)
+        for lang in super::LANGUAGES {
+            let props = lang.id.properties();
+            assert_eq!(props.id, lang.id, "properties() mismatch for {:?}", lang.id);
+        }
     }
 }

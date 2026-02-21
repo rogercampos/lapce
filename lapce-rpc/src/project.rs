@@ -27,7 +27,7 @@ impl ProjectKind {
             ProjectKind::Python => &["pyproject.toml", "setup.py", "setup.cfg"],
             ProjectKind::Elixir => &["mix.exs"],
             ProjectKind::Java => &["pom.xml", "build.gradle", "build.gradle.kts"],
-            ProjectKind::CSharp => &[],
+            ProjectKind::CSharp => &["global.json"],
             ProjectKind::Swift => &["Package.swift"],
         }
     }
@@ -471,4 +471,32 @@ fn extract_dotnet_versions(env: &HashMap<String, String>) -> Vec<(String, String
     }
 
     versions
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ProjectKind;
+
+    #[test]
+    fn all_project_kinds_have_non_empty_marker_files() {
+        let all_variants = [
+            ProjectKind::Rust,
+            ProjectKind::Ruby,
+            ProjectKind::JavaScript,
+            ProjectKind::Go,
+            ProjectKind::Python,
+            ProjectKind::Elixir,
+            ProjectKind::Java,
+            ProjectKind::CSharp,
+            ProjectKind::Swift,
+        ];
+
+        for kind in &all_variants {
+            assert!(
+                !kind.marker_files().is_empty(),
+                "{:?} has empty marker_files()",
+                kind
+            );
+        }
+    }
 }

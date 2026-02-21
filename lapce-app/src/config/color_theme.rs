@@ -73,13 +73,15 @@ impl ThemeBaseConfig {
                 }
                 Ok(None) => {
                     tracing::warn!(
-                        "Failed to resolve color theme variable for ({key}: {value})"
+                        "Failed to resolve color theme variable for ({key}: {value}), inserting HOT_PINK fallback"
                     );
+                    base.0.insert(key.to_string(), css::HOT_PINK);
                 }
                 Err(err) => {
                     tracing::error!(
-                        "Failed to resolve color theme variable ({key}: {value}): {err}"
+                        "Failed to resolve color theme variable ({key}: {value}): {err}, inserting HOT_PINK fallback"
                     );
+                    base.0.insert(key.to_string(), css::HOT_PINK);
                 }
             }
         }
@@ -161,7 +163,13 @@ impl ColorThemeConfig {
                 let color = if let Some(stripped) = hex.strip_prefix('$') {
                     base.get(stripped)
                 } else {
-                    Color::from_str(hex).ok()
+                    let parsed = Color::from_str(hex).ok();
+                    if parsed.is_none() {
+                        tracing::warn!(
+                            "Failed to parse hex color for UI/syntax key '{name}': '{hex}', falling back to default or black"
+                        );
+                    }
+                    parsed
                 };
 
                 let color = color
@@ -375,6 +383,49 @@ mod tests {
         let theme = make_base(&[("bg", "$red"), ("red", "#FF0000")]);
         let base = theme.resolve(None);
         assert_eq!(base.get("bg").unwrap(), Color::from_rgb8(0xFF, 0, 0));
+    }
+
+    // --- HOT_PINK fallback ---
+
+    #[test]
+    fn resolve_inserts_hot_pink_for_missing_variable() {
+        // Create a theme with a reference to a non-existent variable
+        let theme = make_base(&[("bg", "$nonexistent")]);
+
+        // After resolving, "bg" should be set to HOT_PINK (the fallback)
+        let resolved = theme.resolve(None);
+        let color = resolved.get("bg");
+        assert!(color.is_some(), "bg key should exist after resolution");
+        assert_eq!(
+            color.unwrap(),
+            css::HOT_PINK,
+            "Missing variable should resolve to HOT_PINK"
+        );
+    }
+
+    #[test]
+    fn resolve_inserts_hot_pink_for_recursion_limit() {
+        // Build a chain that exceeds THEME_RECURSION_LIMIT
+        let theme = make_base(&[
+            ("a", "$b"),
+            ("b", "$c"),
+            ("c", "$d"),
+            ("d", "$e"),
+            ("e", "$f"),
+            ("f", "$g"),
+            ("g", "$h"),
+            ("h", "$z"),
+            ("z", "#000000"),
+        ]);
+
+        let resolved = theme.resolve(None);
+        let color = resolved.get("a");
+        assert!(color.is_some(), "a key should exist after resolution");
+        assert_eq!(
+            color.unwrap(),
+            css::HOT_PINK,
+            "Recursion limit exceeded should resolve to HOT_PINK"
+        );
     }
 
     // --- existing integration test ---

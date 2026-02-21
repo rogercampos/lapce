@@ -385,11 +385,9 @@ impl EditorData {
 
     pub fn doc(&self) -> Rc<Doc> {
         let doc = self.editor.doc();
-        let Ok(doc) = (doc as Rc<dyn ::std::any::Any>).downcast() else {
-            panic!("doc is not Rc<Doc>");
-        };
-
-        doc
+        (doc as Rc<dyn ::std::any::Any>)
+            .downcast::<Doc>()
+            .expect("EditorData doc must always be Rc<Doc>")
     }
 
     /// The signal for the editor's document.  
@@ -511,10 +509,12 @@ impl EditorData {
             self.snippet.update(|snippet| {
                 let offset = self.editor.cursor.get_untracked().offset();
                 let mut within_region = false;
-                for (_, (start, end)) in snippet.as_mut().unwrap() {
-                    if offset >= *start && offset <= *end {
-                        within_region = true;
-                        break;
+                if let Some(placeholders) = snippet.as_mut() {
+                    for (_, (start, end)) in placeholders {
+                        if offset >= *start && offset <= *end {
+                            within_region = true;
+                            break;
+                        }
                     }
                 }
                 if !within_region {
@@ -1542,7 +1542,9 @@ impl EditorData {
                 return;
             }
 
-            let placeholders = snippet.as_mut().unwrap();
+            let Some(placeholders) = snippet.as_mut() else {
+                return;
+            };
 
             let mut current = 0;
             let offset = self.cursor().get_untracked().offset();
@@ -1615,11 +1617,12 @@ impl EditorData {
     fn update_snippet_offset(&self, delta: &RopeDelta) {
         if self.snippet.with_untracked(|s| s.is_some()) {
             self.snippet.update(|snippet| {
+                let Some(current) = snippet.as_ref() else {
+                    return;
+                };
                 let mut transformer = Transformer::new(delta);
                 *snippet = Some(
-                    snippet
-                        .as_ref()
-                        .unwrap()
+                    current
                         .iter()
                         .map(|(tab, (start, end))| {
                             (

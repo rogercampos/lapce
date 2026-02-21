@@ -348,7 +348,13 @@ impl LspRpcHandler {
         path: Option<PathBuf>,
         f: impl FnOnce(PluginId, Result<Value, RpcError>) + Send + DynClone + 'static,
     ) {
-        let params = serde_json::to_value(params).unwrap();
+        let params = match serde_json::to_value(params) {
+            Ok(v) => v,
+            Err(err) => {
+                tracing::error!("Failed to serialize request params: {:?}", err);
+                return;
+            }
+        };
         let rpc = LspRpc::ServerRequest {
             plugin_id,
             method: method.into(),
@@ -370,7 +376,16 @@ impl LspRpcHandler {
         language_id: Option<String>,
         path: Option<PathBuf>,
     ) {
-        let params = serde_json::to_value(params).unwrap();
+        let params = match serde_json::to_value(params) {
+            Ok(v) => v,
+            Err(err) => {
+                tracing::error!(
+                    "Failed to serialize notification params: {:?}",
+                    err
+                );
+                return;
+            }
+        };
         let rpc = LspRpc::ServerNotification {
             plugin_id,
             method: method.into(),

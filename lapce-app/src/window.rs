@@ -159,7 +159,8 @@ impl WindowData {
     pub fn run_window_command(&self, cmd: WindowCommand) {
         match cmd {
             WindowCommand::SetWorkspace { workspace } => {
-                let db: Arc<LapceDb> = use_context().unwrap();
+                let db: Arc<LapceDb> =
+                    use_context().expect("LapceDb must be provided as context");
                 if let Err(err) = db.update_recent_workspace(&workspace) {
                     tracing::error!("{:?}", err);
                 }
@@ -177,7 +178,8 @@ impl WindowData {
             }
             WindowCommand::ReloadWindow => {
                 // Reload replaces the current workspace in-place within this window
-                let db: Arc<LapceDb> = use_context().unwrap();
+                let db: Arc<LapceDb> =
+                    use_context().expect("LapceDb must be provided as context");
                 if let Err(err) = db.insert_workspace_data(self.workspace.clone()) {
                     tracing::error!("{:?}", err);
                 }

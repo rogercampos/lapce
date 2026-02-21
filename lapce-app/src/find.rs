@@ -323,6 +323,9 @@ impl Find {
 
     /// Checks if the start and end of a match is matching whole words.
     fn is_matching_whole_words(text: &Rope, start: usize, end: usize) -> bool {
+        if end == 0 || start >= text.len() {
+            return false;
+        }
         let mut word_end_cursor = WordCursor::new(text, end - 1);
         let mut word_start_cursor = WordCursor::new(text, start + 1);
 
@@ -373,7 +376,7 @@ impl Find {
 
         // expand region to be able to find occurrences around the region's edges
         let expanded_start = max(start, slop) - slop;
-        let expanded_end = min(end + slop, text.len());
+        let expanded_end = min(end.saturating_add(slop), text.len());
         let from = text
             .at_or_prev_codepoint_boundary(expanded_start)
             .unwrap_or(0);
@@ -459,7 +462,7 @@ impl Find {
 
         // expand region to be able to find occurrences around the region's edges
         let expanded_start = max(start, slop) - slop;
-        let expanded_end = min(end + slop, text.len());
+        let expanded_end = min(end.saturating_add(slop), text.len());
         let from = text
             .at_or_prev_codepoint_boundary(expanded_start)
             .unwrap_or(0);
@@ -773,6 +776,44 @@ mod tests {
     fn find_single_char_pattern() {
         let results = search("aaa", "a", CaseMatching::Exact, false, false);
         assert_eq!(results, vec![(0, 1), (1, 2), (2, 3)]);
+    }
+
+    #[test]
+    fn find_whole_words_at_text_boundaries() {
+        // Word at the very start of text
+        let results =
+            search("hello world", "hello", CaseMatching::Exact, true, false);
+        assert_eq!(results, vec![(0, 5)]);
+
+        // Word at the very end of text
+        let results =
+            search("hello world", "world", CaseMatching::Exact, true, false);
+        assert_eq!(results, vec![(6, 11)]);
+    }
+
+    #[test]
+    fn find_whole_words_rejects_partial() {
+        // Should NOT match "hell" inside "hello"
+        let results =
+            search("hello world", "hell", CaseMatching::Exact, true, false);
+        assert!(results.is_empty());
+
+        // Should NOT match "orld" inside "world"
+        let results =
+            search("hello world", "orld", CaseMatching::Exact, true, false);
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn find_whole_words_single_char_text() {
+        let results = search("a", "a", CaseMatching::Exact, true, false);
+        assert_eq!(results, vec![(0, 1)]);
+    }
+
+    #[test]
+    fn find_whole_words_empty_text() {
+        let results = search("", "hello", CaseMatching::Exact, true, false);
+        assert!(results.is_empty());
     }
 
     #[test]

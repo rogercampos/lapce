@@ -47,20 +47,26 @@ impl SvgStore {
         self.svgs.get("lapce_logo").unwrap().clone()
     }
 
-    pub fn get_default_svg(&mut self, name: &str) -> String {
+    pub fn get_default_svg(&mut self, name: &str) -> Option<String> {
         if !self.svgs.contains_key(name) {
             let file = if name == "lapce_logo.svg" {
-                LAPCE_ICONS_DIR.get_file(name).unwrap()
+                LAPCE_ICONS_DIR.get_file(name)
             } else {
                 CODICONS_ICONS_DIR
                     .get_file(name)
                     .or_else(|| FILETYPES_ICONS_DIR.get_file(name))
-                    .unwrap_or_else(|| panic!("Failed to find SVG: {name}"))
             };
-            let content = file.contents_utf8().unwrap();
+            let Some(file) = file else {
+                tracing::warn!("Failed to find embedded SVG: {name}");
+                return None;
+            };
+            let Some(content) = file.contents_utf8() else {
+                tracing::warn!("Embedded SVG is not valid UTF-8: {name}");
+                return None;
+            };
             self.svgs.insert(name.to_string(), content.to_string());
         }
-        self.svgs.get(name).unwrap().clone()
+        self.svgs.get(name).cloned()
     }
 
     pub fn get_svg_on_disk(&mut self, path: &Path) -> Option<String> {

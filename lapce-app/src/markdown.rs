@@ -75,6 +75,11 @@ pub fn parse_markdown(
             Event::End(end_tag) => {
                 if let Some((start_offset, tag)) = tag_stack.pop() {
                     if end_tag != tag.to_end() {
+                        // Mismatched tags are handled gracefully by logging and
+                        // continuing to the next event. The popped tag's styling
+                        // is simply not applied, which is safe -- it just means
+                        // that particular span won't be styled. This avoids
+                        // crashing on malformed markdown from LSP hover responses.
                         tracing::warn!("Mismatched markdown tag");
                         continue;
                     }

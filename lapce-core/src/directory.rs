@@ -27,9 +27,11 @@ impl Directory {
             if let Some(parent) = current_exe.parent() {
                 return ProjectDirs::from_path(parent.join("sourcedelve-data"));
             }
-            unreachable!("Couldn't obtain current process parent path");
+            tracing::error!("Couldn't obtain current process parent path");
+            return None;
         }
-        unreachable!("Couldn't obtain current process path");
+        tracing::error!("Couldn't obtain current process path");
+        None
     }
 
     // Get path of local data directory
@@ -43,6 +45,7 @@ impl Directory {
                 if !dir.exists() {
                     if let Err(err) = std::fs::create_dir_all(dir) {
                         tracing::error!("{:?}", err);
+                        return None;
                     }
                 }
                 Some(dir.to_path_buf())
@@ -59,6 +62,7 @@ impl Directory {
             if !dir.exists() {
                 if let Err(err) = std::fs::create_dir(&dir) {
                     tracing::error!("{:?}", err);
+                    return None;
                 }
             }
             Some(dir)
@@ -74,6 +78,7 @@ impl Directory {
             if !dir.exists() {
                 if let Err(err) = std::fs::create_dir(&dir) {
                     tracing::error!("{:?}", err);
+                    return None;
                 }
             }
             Some(dir)
@@ -91,6 +96,7 @@ impl Directory {
             if !dir.exists() {
                 if let Err(err) = std::fs::create_dir(&dir) {
                     tracing::error!("{:?}", err);
+                    return None;
                 }
             }
             Some(dir)
@@ -106,6 +112,7 @@ impl Directory {
             if !dir.exists() {
                 if let Err(err) = std::fs::create_dir(&dir) {
                     tracing::error!("{:?}", err);
+                    return None;
                 }
             }
             Some(dir)
@@ -122,6 +129,7 @@ impl Directory {
             if !dir.exists() {
                 if let Err(err) = std::fs::create_dir(&dir) {
                     tracing::error!("{:?}", err);
+                    return None;
                 }
             }
             Some(dir)
@@ -138,6 +146,7 @@ impl Directory {
                 if !dir.exists() {
                     if let Err(err) = std::fs::create_dir_all(dir) {
                         tracing::error!("{:?}", err);
+                        return None;
                     }
                 }
                 Some(dir.to_path_buf())
@@ -156,6 +165,7 @@ impl Directory {
             if !dir.exists() {
                 if let Err(err) = std::fs::create_dir(&dir) {
                     tracing::error!("{:?}", err);
+                    return None;
                 }
             }
             Some(dir)
@@ -170,6 +180,7 @@ impl Directory {
             if !dir.exists() {
                 if let Err(err) = std::fs::create_dir(&dir) {
                     tracing::error!("{:?}", err);
+                    return None;
                 }
             }
 
@@ -185,6 +196,7 @@ impl Directory {
             if !dir.exists() {
                 if let Err(err) = std::fs::create_dir(&dir) {
                     tracing::error!("{:?}", err);
+                    return None;
                 }
             }
 
@@ -201,6 +213,7 @@ impl Directory {
             if !dir.exists() {
                 if let Err(err) = std::fs::create_dir(&dir) {
                     tracing::error!("{:?}", err);
+                    return None;
                 }
             }
             Some(dir)

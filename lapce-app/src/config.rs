@@ -364,12 +364,26 @@ impl LapceConfig {
             default_config.map(|c| &c.color.syntax),
         );
 
-        // Heuristic: if the background RGB sum exceeds the foreground's,
-        // the background is bright, i.e. it's a light theme.
+        // Use WCAG relative luminance to determine if the theme is light or dark.
+        // L = 0.2126*R + 0.7152*G + 0.0722*B (after linearizing sRGB).
+        fn srgb_to_linear(c: u8) -> f64 {
+            let c = c as f64 / 255.0;
+            if c <= 0.04045 {
+                c / 12.92
+            } else {
+                ((c + 0.055) / 1.055).powf(2.4)
+            }
+        }
+        fn relative_luminance(r: u8, g: u8, b: u8) -> f64 {
+            0.2126 * srgb_to_linear(r)
+                + 0.7152 * srgb_to_linear(g)
+                + 0.0722 * srgb_to_linear(b)
+        }
         let fg = self.color(LapceColor::EDITOR_FOREGROUND).to_rgba8();
         let bg = self.color(LapceColor::EDITOR_BACKGROUND).to_rgba8();
-        let is_light_theme = bg.r as u32 + bg.g as u32 + bg.b as u32
-            > fg.r as u32 + fg.g as u32 + fg.b as u32;
+        let bg_luminance = relative_luminance(bg.r, bg.g, bg.b);
+        let is_light_theme = bg_luminance > 0.5
+            || bg_luminance > relative_luminance(fg.r, fg.g, fg.b);
         let high_contrast = self.color_theme.high_contrast.unwrap_or(false);
         self.color.color_preference = match (is_light_theme, high_contrast) {
             (true, true) => ThemeColorPreference::HighContrastLight,
@@ -454,10 +468,11 @@ impl LapceConfig {
             self.svg_store.write().get_svg_on_disk(&path)
         });
 
-        svg.unwrap_or_else(|| {
-            let name = DEFAULT_ICON_THEME_ICON_CONFIG.ui.get(icon).unwrap();
+        svg.or_else(|| {
+            let name = DEFAULT_ICON_THEME_ICON_CONFIG.ui.get(icon)?;
             self.svg_store.write().get_default_svg(name)
         })
+        .unwrap_or_default()
     }
 
     /// Resolves file paths to a file-type icon SVG and an optional tint color.
@@ -486,8 +501,14 @@ impl LapceConfig {
                     .map(|s| s.to_string())
             })
         {
-            let svg = self.svg_store.write().get_default_svg(&icon_name);
-            (svg, None)
+            if let Some(svg) = self.svg_store.write().get_default_svg(&icon_name) {
+                return (svg, None);
+            }
+            // Fall through to generic file icon if the SVG could not be loaded
+            (
+                self.ui_svg(LapceIcons::FILE),
+                Some(self.color(LapceColor::LAPCE_ICON_ACTIVE)),
+            )
         } else {
             (
                 self.ui_svg(LapceIcons::FILE),

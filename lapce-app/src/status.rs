@@ -377,6 +377,9 @@ fn background_tasks_indicator(
     });
 
     // Self-scheduling timer loop: each tick schedules the next one.
+    // Lifecycle: the loop self-terminates when has_tasks becomes false, because
+    // the check `has_tasks.get_untracked()` prevents scheduling the next tick.
+    // A new loop is started by the effect above when has_tasks transitions to true.
     create_effect(move |_| {
         pulse_tick.track();
         if has_tasks.get_untracked() {

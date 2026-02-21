@@ -150,6 +150,8 @@ pub fn alert_box(alert_data: AlertBoxData) -> impl View {
             ))
             .style(|s| s.flex_col().items_center().width_pct(100.0))
         })
+        // Stop propagation on the inner content so clicks inside the dialog
+        // don't reach the outer overlay.
         .on_event_stop(EventListener::PointerDown, |_| {})
         .style(move |s| {
             let config = config.get();
@@ -162,6 +164,11 @@ pub fn alert_box(alert_data: AlertBoxData) -> impl View {
                 .background(config.color(LapceColor::PANEL_BACKGROUND))
         })
     })
+    // Unlike exclusive_popup, the alert dialog's outer overlay stops PointerDown
+    // events but does NOT dismiss the dialog. This is intentional: alerts require
+    // the user to explicitly click Cancel or an action button, because they
+    // represent destructive or important operations that should not be accidentally
+    // dismissed by a stray click outside the dialog.
     .on_event_stop(EventListener::PointerDown, move |_| {})
     .style(move |s| {
         s.absolute()

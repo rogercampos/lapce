@@ -195,6 +195,10 @@ impl Metric<LensInfo> for LensMetric {
             let mut line = 0;
             let mut accum = 0;
             for data in l.data.iter() {
+                if data.line_height == 0 {
+                    line += data.len;
+                    continue;
+                }
                 let leaf_height = data.line_height * data.len;
                 let accum_height = accum + leaf_height;
                 if accum_height > in_measured_units {
@@ -412,5 +416,38 @@ mod tests {
         assert_eq!(Some((11, 3)), iter.next());
         assert_eq!(Some((12, 3)), iter.next());
         assert_eq!(None, iter.next());
+    }
+
+    #[test]
+    fn test_lens_zero_line_height() {
+        let mut builder = LensBuilder::new();
+        builder.add_section(5, 0); // 5 lines with height 0
+        builder.add_section(3, 10); // 3 lines with height 10 each = 30 total
+        let lens = builder.build();
+
+        assert_eq!(8, lens.len());
+
+        // Lines 0-4 have height 0, so height_of_line for any of them is 0
+        assert_eq!(0, lens.height_of_line(0));
+        assert_eq!(0, lens.height_of_line(1));
+        assert_eq!(0, lens.height_of_line(4));
+
+        // Line 5 starts at height 0 (after 5 zero-height lines)
+        assert_eq!(0, lens.height_of_line(5));
+        // Line 6 starts at height 10
+        assert_eq!(10, lens.height_of_line(6));
+        // Line 7 starts at height 20
+        assert_eq!(20, lens.height_of_line(7));
+        // Past the end: total height is 30
+        assert_eq!(30, lens.height_of_line(8));
+
+        // line_of_height: height 0 maps to line 0 (or the first zero-height block)
+        assert_eq!(0, lens.line_of_height(0));
+        // height 1 should be in the second section (line 5+)
+        assert_eq!(5, lens.line_of_height(1));
+        assert_eq!(5, lens.line_of_height(9));
+        assert_eq!(6, lens.line_of_height(10));
+        assert_eq!(7, lens.line_of_height(20));
+        assert_eq!(8, lens.line_of_height(30));
     }
 }

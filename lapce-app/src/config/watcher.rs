@@ -34,11 +34,14 @@ impl notify::EventHandler for ConfigWatcher {
                             std::thread::sleep(std::time::Duration::from_millis(
                                 500,
                             ));
+                            // Reset the flag unconditionally before sending, so that
+                            // even if tx.send() fails (receiver dropped), the watcher
+                            // is not permanently disabled.
+                            config_mutex
+                                .store(false, std::sync::atomic::Ordering::Relaxed);
                             if let Err(err) = tx.send(()) {
                                 tracing::error!("{:?}", err);
                             }
-                            config_mutex
-                                .store(false, std::sync::atomic::Ordering::Relaxed);
                         });
                     }
                 }

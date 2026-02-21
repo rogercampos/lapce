@@ -21,24 +21,26 @@ impl<'a> CheckCondition<'a> {
         let and = condition.match_indices("&&").next();
 
         match (or, and) {
-            (None, None) => CheckCondition::Single(condition),
-            (Some((pos, _)), None) => {
-                CheckCondition::Or(&condition[..pos], &condition[pos + 2..])
-            }
-            (None, Some((pos, _))) => {
-                CheckCondition::And(&condition[..pos], &condition[pos + 2..])
-            }
+            (None, None) => CheckCondition::Single(condition.trim()),
+            (Some((pos, _)), None) => CheckCondition::Or(
+                condition[..pos].trim(),
+                condition[pos + 2..].trim(),
+            ),
+            (None, Some((pos, _))) => CheckCondition::And(
+                condition[..pos].trim(),
+                condition[pos + 2..].trim(),
+            ),
             // When both operators appear, split at whichever comes first.
             (Some((or_pos, _)), Some((and_pos, _))) => {
                 if or_pos < and_pos {
                     CheckCondition::Or(
-                        &condition[..or_pos],
-                        &condition[or_pos + 2..],
+                        condition[..or_pos].trim(),
+                        condition[or_pos + 2..].trim(),
                     )
                 } else {
                     CheckCondition::And(
-                        &condition[..and_pos],
-                        &condition[and_pos + 2..],
+                        condition[..and_pos].trim(),
+                        condition[and_pos + 2..].trim(),
                     )
                 }
             }
@@ -124,8 +126,37 @@ mod test {
             CheckCondition::parse_first("foo&&bar||baz")
         );
         assert_eq!(
-            CheckCondition::And("foo ", " bar || baz"),
+            CheckCondition::And("foo", "bar || baz"),
             CheckCondition::parse_first("foo && bar || baz")
+        );
+    }
+
+    #[test]
+    fn test_parse_whitespace_trimming() {
+        // Leading/trailing whitespace on the whole expression
+        assert_eq!(
+            CheckCondition::Single("foo"),
+            CheckCondition::parse_first("  foo  ")
+        );
+        // Whitespace around OR operator
+        assert_eq!(
+            CheckCondition::Or("foo", "bar"),
+            CheckCondition::parse_first("  foo  ||  bar  ")
+        );
+        // Whitespace around AND operator
+        assert_eq!(
+            CheckCondition::And("foo", "bar"),
+            CheckCondition::parse_first("  foo  &&  bar  ")
+        );
+        // Mixed: whitespace with nested operators on the right side
+        assert_eq!(
+            CheckCondition::And("foo", "bar || baz"),
+            CheckCondition::parse_first("  foo  &&  bar || baz  ")
+        );
+        // Tab and mixed whitespace
+        assert_eq!(
+            CheckCondition::Or("foo", "bar"),
+            CheckCondition::parse_first("\tfoo\t||\tbar\t")
         );
     }
 

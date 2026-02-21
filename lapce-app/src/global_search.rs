@@ -364,8 +364,14 @@ impl GlobalSearchData {
                 }
                 // Clear results: either the pattern is empty (nothing to search)
                 // or a new search is starting (results will stream in).
+                // Ordering: check modal_active before clearing panel results.
+                // Since all signals are single-threaded (Floem reactive), there is
+                // no true race condition. However, the conditional must read
+                // modal_active *before* any clearing so that the panel keeps its
+                // committed results while the modal is open.
+                let is_modal = global_search.modal_active.get_untracked();
                 global_search.search_result.update(|r| r.clear());
-                if !global_search.modal_active.get_untracked() {
+                if !is_modal {
                     global_search.panel_search_result.update(|r| r.clear());
                 }
                 if pattern.is_empty() {
@@ -448,6 +454,11 @@ impl GlobalSearchData {
     /// Append a batch of incremental search results (from streaming search).
     /// Each file path in the batch is guaranteed to be new (not already in the results).
     pub fn append_matches(&self, matches: IndexMap<PathBuf, Vec<SearchMatch>>) {
+        // Ordering: read modal_active before updating search_result so the
+        // check is consistent. All signals are single-threaded (Floem reactive),
+        // so there is no multi-thread race, but reading modal_active first ensures
+        // we don't propagate partial updates to the panel while the modal is open.
+        let is_modal = self.modal_active.get_untracked();
         self.search_result.update(|current| {
             for (path, new_matches) in matches {
                 let match_data = SearchMatchData {
@@ -458,7 +469,7 @@ impl GlobalSearchData {
                 current.insert(path, match_data);
             }
         });
-        if !self.modal_active.get_untracked() {
+        if !is_modal {
             let results = self.search_result.get_untracked();
             self.panel_search_result.set(results);
         }
@@ -501,8 +512,11 @@ impl GlobalSearchData {
             Some(_) => return,
             None => 0,
         };
-        self.selected_index.set(Some(next_idx));
-        self.update_selection_from_row(&rows[next_idx]);
+        // Bounds check in case the tree changed between reading selected_index and rows
+        if let Some(row) = rows.get(next_idx) {
+            self.selected_index.set(Some(next_idx));
+            self.update_selection_from_row(row);
+        }
     }
 
     fn previous(&self) {
@@ -517,8 +531,11 @@ impl GlobalSearchData {
             Some(_) => return,
             None => 0,
         };
-        self.selected_index.set(Some(prev_idx));
-        self.update_selection_from_row(&rows[prev_idx]);
+        // Bounds check in case the tree changed between reading selected_index and rows
+        if let Some(row) = rows.get(prev_idx) {
+            self.selected_index.set(Some(prev_idx));
+            self.update_selection_from_row(row);
+        }
     }
 
     fn select(&self) {
@@ -711,7 +728,7 @@ fn build_search_tree(
 ) -> BTreeMap<String, TreeEntry> {
     let mut root: BTreeMap<String, TreeEntry> = BTreeMap::new();
 
-    for (abs_path, match_data) in results.iter() {
+    'outer: for (abs_path, match_data) in results.iter() {
         let rel_path = if let Some(wp) = workspace_path {
             abs_path.strip_prefix(wp).unwrap_or(abs_path)
         } else {
@@ -751,7 +768,14 @@ fn build_search_tree(
             });
             current = match entry {
                 TreeEntry::Folder { children, .. } => children,
-                _ => unreachable!(),
+                _ => {
+                    tracing::warn!(
+                        "Expected folder entry at component '{}' but found a file entry; skipping file '{}'",
+                        component,
+                        abs_path.display()
+                    );
+                    continue 'outer;
+                }
             };
         }
 
