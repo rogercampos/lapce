@@ -178,16 +178,19 @@ impl ProxyHandler for Dispatcher {
                         Vec::new()
                     };
 
-                    // Populate lsp_server from the static config table
+                    // Populate lsp_servers from the static config table
                     // (doesn't need shell env)
                     for project in &mut projects {
-                        project.lsp_server = project
+                        project.lsp_servers = project
                             .languages
                             .first()
-                            .and_then(|lang| {
-                                crate::lsp::manager::lsp_command_for_language(lang)
+                            .map(|lang| {
+                                crate::lsp::manager::lsp_servers_for_language(lang)
+                                    .into_iter()
+                                    .map(|s| s.to_string())
+                                    .collect()
                             })
-                            .map(|s| s.to_string());
+                            .unwrap_or_default();
                     }
 
                     // Send projects to UI. Tool versions and version manager

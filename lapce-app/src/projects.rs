@@ -47,7 +47,7 @@ fn project_card(
         });
 
     let kind_label = project.kind.label().to_string();
-    let lsp_label = project.lsp_server.clone();
+    let lsp_servers = project.lsp_servers.clone();
     let left_pad = 12.0 + (depth as f64 * 24.0);
 
     let mut info_parts: Vec<String> = Vec::new();
@@ -71,9 +71,11 @@ fn project_card(
                     .min_width(0)
             }),
             badge(kind_label, config),
-            {
-                let view = label(move || lsp_label.clone().unwrap_or_default())
-                    .style(move |s| {
+            floem::views::dyn_stack(
+                move || lsp_servers.clone(),
+                |s| s.clone(),
+                move |server_name| {
+                    label(move || server_name.clone()).style(move |s| {
                         let config = config.get();
                         s.padding_horiz(6.0)
                             .padding_vert(1.0)
@@ -87,10 +89,10 @@ fn project_card(
                                     .multiply_alpha(0.08),
                             )
                             .color(config.color(LapceColor::EDITOR_DIM))
-                            .apply_if(project.lsp_server.is_none(), |s| s.hide())
-                    });
-                view
-            },
+                    })
+                },
+            )
+            .style(|s| s.flex_row().gap(4.0)),
         ))
         .style(|s| {
             s.flex_row()

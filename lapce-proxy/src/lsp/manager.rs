@@ -144,6 +144,43 @@ pub const LSP_SERVERS: &[LspServerConfig] = &[
         ),
         semantic_tokens: false,
     },
+    LspServerConfig {
+        display_name: "eslint",
+        command: "vscode-eslint-language-server",
+        args: &["--stdio"],
+        languages: &[
+            "typescript",
+            "typescriptreact",
+            "javascript",
+            "javascriptreact",
+        ],
+        init_options_json: None,
+        auto_install: AutoInstall::Npm {
+            package: "vscode-langservers-extracted",
+        },
+        activation_condition: ActivationCondition::Always,
+        per_project_instance: false,
+        // Settings are flat (not nested under "eslint") because the server
+        // requests workspace/configuration with section="" and reads fields
+        // like `validate`, `experimental`, etc. from the top level.
+        settings_json: Some(
+            r#"{
+                "validate": "on",
+                "run": "onType",
+                "quiet": false,
+                "onIgnoredFiles": "off",
+                "rulesCustomizations": [],
+                "problems": { "shortenToSingleLine": false },
+                "nodePath": "",
+                "experimental": {},
+                "codeAction": {
+                    "disableRuleComment": { "enable": true, "location": "separateLine" },
+                    "showDocumentation": { "enable": true }
+                }
+            }"#,
+        ),
+        semantic_tokens: false,
+    },
 ];
 
 /// Find the LSP server command configured for a given language, if any.
@@ -152,6 +189,15 @@ pub fn lsp_command_for_language(language_id: &str) -> Option<&'static str> {
         .iter()
         .find(|c| c.languages.contains(&language_id))
         .map(|c| c.command)
+}
+
+/// Find all LSP server display names configured for a given language.
+pub fn lsp_servers_for_language(language_id: &str) -> Vec<&'static str> {
+    LSP_SERVERS
+        .iter()
+        .filter(|c| c.languages.contains(&language_id))
+        .map(|c| c.display_name)
+        .collect()
 }
 
 /// Count ts/tsx/js/jsx source files under `dir`, excluding `node_modules`.
@@ -232,6 +278,59 @@ pub fn compute_server_settings(
                     tsserver_map.insert(
                         "maxTsServerMemory".to_string(),
                         Value::Number(memory.into()),
+                    );
+                }
+            }
+        }
+    }
+
+    // For eslint: inject workspaceFolder, workingDirectory, and detect flat config.
+    // These must be at the root level of the settings (not inside the "eslint" key)
+    // because the server reads them from the top-level configuration object.
+    if config.display_name == "eslint" {
+        if let Some(ws) = workspace {
+            if let Value::Object(map) = &mut settings {
+                // workspaceFolder at root level — the server uses this to
+                // determine how far to traverse up the filesystem for config.
+                let uri = lsp_types::Url::from_directory_path(ws)
+                    .map(|u| u.to_string())
+                    .unwrap_or_else(|_| format!("file://{}", ws.display()));
+                let name = ws
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                map.insert(
+                    "workspaceFolder".to_string(),
+                    serde_json::json!({ "uri": uri, "name": name }),
+                );
+
+                // workingDirectory at root level — tells the server how
+                // to resolve the cwd for eslint execution.
+                map.insert(
+                    "workingDirectory".to_string(),
+                    serde_json::json!({ "mode": "auto" }),
+                );
+
+                // Detect flat config (eslint.config.{js,mjs,cjs,ts,mts,cts})
+                let flat_config_names = [
+                    "eslint.config.js",
+                    "eslint.config.mjs",
+                    "eslint.config.cjs",
+                    "eslint.config.ts",
+                    "eslint.config.mts",
+                    "eslint.config.cts",
+                ];
+                let has_flat_config =
+                    flat_config_names.iter().any(|f| ws.join(f).exists());
+                if has_flat_config {
+                    // The server reads settings.experimental.useFlatConfig
+                    map.insert(
+                        "experimental".to_string(),
+                        serde_json::json!({ "useFlatConfig": true }),
+                    );
+                    tracing::info!(
+                        "eslint: detected flat config in {}",
+                        ws.display()
                     );
                 }
             }
@@ -450,11 +549,16 @@ impl LspManager {
                             &project.kind,
                             &env,
                         );
-                    project.lsp_server = project
+                    project.lsp_servers = project
                         .languages
                         .first()
-                        .and_then(|lang| lsp_command_for_language(lang))
-                        .map(|s| s.to_string());
+                        .map(|lang| {
+                            lsp_servers_for_language(lang)
+                                .into_iter()
+                                .map(|s| s.to_string())
+                                .collect()
+                        })
+                        .unwrap_or_default();
                     projects_updated = true;
                 }
             }

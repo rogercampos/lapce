@@ -61,7 +61,7 @@ pub fn detect_projects(workspace: &Path) -> Vec<ProjectInfo> {
                     marker_file: file_name.to_string(),
                     tool_versions: Vec::new(),
                     version_manager: None,
-                    lsp_server: None,
+                    lsp_servers: Vec::new(),
                 });
             }
         }

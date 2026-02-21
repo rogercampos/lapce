@@ -94,8 +94,8 @@ pub struct ProjectInfo {
     pub tool_versions: Vec<(String, String)>,
     /// Detected version manager, if any (e.g. "mise", "rbenv", "asdf").
     pub version_manager: Option<String>,
-    /// LSP server command that would serve this project, if configured.
-    pub lsp_server: Option<String>,
+    /// LSP server commands that would serve this project, if configured.
+    pub lsp_servers: Vec<String>,
 }
 
 /// Detect the active version manager for a specific project kind.

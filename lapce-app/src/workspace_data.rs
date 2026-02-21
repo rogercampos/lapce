@@ -1516,17 +1516,24 @@ impl WorkspaceData {
             }
             CoreNotification::PublishDiagnostics { diagnostics } => {
                 let path = path_from_url(&diagnostics.uri);
-                let diagnostics: im::Vector<Diagnostic> = diagnostics
+
+                // Determine the source from the incoming diagnostics so we
+                // only replace that source's entries, preserving diagnostics
+                // from other LSP servers (e.g. eslint + vtsls).
+                let source = diagnostics
+                    .diagnostics
+                    .iter()
+                    .find_map(|d| d.source.clone());
+
+                let sorted: im::Vector<Diagnostic> = diagnostics
                     .diagnostics
                     .clone()
                     .into_iter()
                     .sorted_by_key(|d| d.range.start)
                     .collect();
 
-                self.main_split
-                    .get_diagnostic_data(&path)
-                    .diagnostics
-                    .set(diagnostics);
+                let diag_data = self.main_split.get_diagnostic_data(&path);
+                diag_data.merge_diagnostics(sorted, source.as_deref());
 
                 // inform the document about the diagnostics
                 if let Some(doc) = self

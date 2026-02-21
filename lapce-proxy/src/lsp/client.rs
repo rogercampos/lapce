@@ -778,6 +778,14 @@ fn handle_server_message(
                         .collect();
                     Ok(Value::Array(results))
                 }
+                // ESLint custom requests: the server requires specific
+                // responses to proceed with linting.
+                "eslint/confirmESLintExecution" => {
+                    // Return 4 = approved. Without this the server never runs.
+                    Ok(Value::Number(4.into()))
+                }
+                "eslint/openDoc" | "eslint/probeFailed" | "eslint/noLibrary"
+                | "eslint/noConfig" => Ok(Value::Object(Default::default())),
                 _ => Err(RpcError::new(format!("request {method} not supported"))),
             };
 

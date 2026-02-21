@@ -86,6 +86,40 @@ pub struct DiagnosticData {
     pub diagnostics_span: RwSignal<Spans<Diagnostic>>,
 }
 
+impl DiagnosticData {
+    /// Merge new diagnostics by source, preserving diagnostics from other
+    /// sources.  When multiple LSP servers serve the same file (e.g. vtsls +
+    /// eslint), each server's diagnostics arrive independently. A naive
+    /// `.set()` would overwrite the other server's diagnostics. Instead, we
+    /// partition by the `source` field.
+    ///
+    /// `server_source` identifies which server is updating: diagnostics from
+    /// that source are replaced, diagnostics from other sources are kept.
+    /// If `server_source` is `None`, all existing diagnostics are replaced
+    /// (fallback for servers that don't set `source`).
+    pub fn merge_diagnostics(
+        &self,
+        new_diagnostics: im::Vector<Diagnostic>,
+        server_source: Option<&str>,
+    ) {
+        self.diagnostics.update(|existing| {
+            let Some(source) = server_source else {
+                *existing = new_diagnostics;
+                return;
+            };
+
+            // Keep diagnostics from other sources
+            existing.retain(|d| d.source.as_deref() != Some(source));
+
+            // Add the new ones
+            existing.extend(new_diagnostics);
+
+            // Re-sort by position
+            existing.sort_by(|a, b| a.range.start.cmp(&b.range.start));
+        });
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct DocHistory {
     pub path: PathBuf,
@@ -987,8 +1021,12 @@ impl Doc {
         let doc = self.clone();
         let send = create_ext_action(
             self.scope,
-            move |diagnostics: im::Vector<Diagnostic>| {
-                doc.diagnostics.diagnostics.set(diagnostics);
+            move |(diagnostics, source): (
+                im::Vector<Diagnostic>,
+                Option<String>,
+            )| {
+                doc.diagnostics
+                    .merge_diagnostics(diagnostics, source.as_deref());
                 doc.init_diagnostics();
             },
         );
@@ -1000,11 +1038,13 @@ impl Doc {
                     diagnostics,
                 }) = result
                 {
+                    // Determine the source from the diagnostics themselves
+                    let source = diagnostics.iter().find_map(|d| d.source.clone());
                     let sorted: im::Vector<Diagnostic> = diagnostics
                         .into_iter()
                         .sorted_by_key(|d| d.range.start)
                         .collect();
-                    send(sorted);
+                    send((sorted, source));
                 }
             });
     }
