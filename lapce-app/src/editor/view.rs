@@ -564,7 +564,6 @@ impl EditorView {
             config.color(LapceColor::EDITOR_STICKY_HEADER_BACKGROUND),
             0.0,
         );
-        self.editor.sticky_header_info.get_untracked();
         // Paint lines
         let mut y_accum = 0.0;
         for (i, line) in sticky_header_info.sticky_lines.iter().copied().enumerate()

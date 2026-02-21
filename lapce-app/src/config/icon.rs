@@ -113,7 +113,7 @@ impl LapceIcons {
     pub const SYMBOL_KIND_METHOD: &'static str = "symbol_kind.method";
     pub const SYMBOL_KIND_NAMESPACE: &'static str = "symbol_kind.namespace";
     pub const SYMBOL_KIND_NUMBER: &'static str = "symbol_kind.number";
-    pub const SYMBOL_KIND_OBJECT: &'static str = "symbol_kind.namespace";
+    pub const SYMBOL_KIND_OBJECT: &'static str = "symbol_kind.object";
     pub const SYMBOL_KIND_OPERATOR: &'static str = "symbol_kind.operator";
     pub const SYMBOL_KIND_PROPERTY: &'static str = "symbol_kind.property";
     pub const SYMBOL_KIND_STRING: &'static str = "symbol_kind.string";

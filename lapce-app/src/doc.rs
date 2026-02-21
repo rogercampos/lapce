@@ -653,7 +653,6 @@ impl Doc {
             self.clear_code_actions();
             self.clear_style_cache();
             self.get_code_lens();
-            self.get_folding_range();
         });
     }
 
@@ -1088,43 +1087,6 @@ impl Doc {
         self.clear_code_actions();
     }
 
-    pub fn get_folding_range(&self) {
-        // let cx = self.scope;
-        // let doc = self.clone();
-        // let rev = self.rev();
-        // if let DocContent::File { path, .. } = doc.content.get_untracked() {
-        //     let send = create_ext_action(cx, {
-        //         move |result| {
-        //             if rev != doc.rev() {
-        //                 return;
-        //             }
-        //             if let Ok(ProxyResponse::LspFoldingRangeResponse {
-        //                 resp, ..
-        //             }) = result
-        //             {
-        //                 let folding = resp
-        //                     .unwrap_or_default()
-        //                     .into_iter()
-        //                     .map(|x| {
-        //                         crate::editor::gutter::FoldingRange::from_lsp(x)
-        //                     })
-        //                     .sorted_by(|x, y| x.start.line.cmp(&y.start.line))
-        //                     .collect();
-        //                 doc.folding_ranges.update(|symbol| {
-        //                     symbol.0 = folding;
-        //                 });
-        //             }
-        //         }
-        //     });
-
-        //     self.common
-        //         .proxy
-        //         .get_lsp_folding_range(path, move |result| {
-        //             send(result);
-        //         });
-        // }
-    }
-
     /// Get the current completion lens text
     pub fn completion_lens(&self) -> Option<String> {
         self.completion_lens.get_untracked()
@@ -1177,8 +1139,9 @@ impl Doc {
                 // text, but the completion will be updated when the completion widget
                 // receives the update event, and it will fix this if needed.
                 // TODO: this could be smarter and use the insert's content
-                self.completion_lens
-                    .set(Some(completion[new_len..].to_string()));
+                if let Some(remaining) = completion.get(new_len..) {
+                    self.completion_lens.set(Some(remaining.to_string()));
+                }
             }
         }
 
@@ -1287,8 +1250,9 @@ impl Doc {
                 // These aren't necessarily the same as the characters literally in the
                 // text, but the completion will be updated when the completion widget
                 // receives the update event, and it will fix this if needed.
-                self.inline_completion
-                    .set(Some(completion[new_len..].to_string()));
+                if let Some(remaining) = completion.get(new_len..) {
+                    self.inline_completion.set(Some(remaining.to_string()));
+                }
             }
         }
 

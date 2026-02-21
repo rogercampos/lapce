@@ -459,8 +459,10 @@ impl FileNodeItem {
         }
     }
 
-    pub fn update_node_count(&mut self, path: &Path) -> Option<()> {
-        let node = self.get_file_node_mut(path)?;
+    pub fn update_node_count(&mut self, path: &Path) {
+        let Some(node) = self.get_file_node_mut(path) else {
+            return;
+        };
         if node.is_dir {
             node.children_open_count = if node.open {
                 node.children
@@ -471,7 +473,6 @@ impl FileNodeItem {
                 0
             };
         }
-        None
     }
 
     pub fn append_view_slice(

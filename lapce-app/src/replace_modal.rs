@@ -319,8 +319,16 @@ impl ReplaceModalData {
         let search_match = m.search_match.clone();
         let target_line = search_match.line; // 1-based
 
-        // Read file from disk
-        let Ok(content) = std::fs::read_to_string(&path) else {
+        // Read from open buffer first, fall back to disk
+        let content = self
+            .main_split
+            .docs
+            .with_untracked(|docs| {
+                docs.get(&path)
+                    .map(|doc| doc.buffer.with_untracked(|b| b.to_string()))
+            })
+            .or_else(|| std::fs::read_to_string(&path).ok());
+        let Some(content) = content else {
             return;
         };
 
@@ -489,36 +497,19 @@ fn find_pattern_on_line(
         let m = re.find(line)?;
         Some((m.start(), m.end()))
     } else {
-        let needle = pattern;
-        let haystack = line;
-
-        let find_pos = match case_matching {
-            CaseMatching::Exact => haystack.find(needle),
-            CaseMatching::CaseInsensitive => {
-                let lower_haystack = haystack.to_lowercase();
-                let lower_needle = needle.to_lowercase();
-                lower_haystack.find(&lower_needle)
-            }
+        let case_flag = match case_matching {
+            CaseMatching::Exact => "",
+            CaseMatching::CaseInsensitive => "(?i)",
         };
-
-        let start = find_pos?;
-        let end = start + needle.len();
-
-        if whole_words {
-            let before_ok = start == 0
-                || !haystack.as_bytes()[start - 1].is_ascii_alphanumeric()
-                    && haystack.as_bytes()[start - 1] != b'_';
-            let after_ok = end >= haystack.len()
-                || !haystack.as_bytes()[end].is_ascii_alphanumeric()
-                    && haystack.as_bytes()[end] != b'_';
-            if before_ok && after_ok {
-                Some((start, end))
-            } else {
-                None
-            }
+        let escaped = regex::escape(pattern);
+        let full_pattern = if whole_words {
+            format!("{case_flag}\\b{escaped}\\b")
         } else {
-            Some((start, end))
-        }
+            format!("{case_flag}{escaped}")
+        };
+        let re = Regex::new(&full_pattern).ok()?;
+        let m = re.find(line)?;
+        Some((m.start(), m.end()))
     }
 }
 

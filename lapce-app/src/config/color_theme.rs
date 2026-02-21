@@ -127,10 +127,6 @@ impl ThemeBaseConfig {
     pub fn get(&self, name: &str) -> Option<&String> {
         self.0.get(name)
     }
-
-    pub fn key_values(&self) -> BTreeMap<String, String> {
-        self.0.clone()
-    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]

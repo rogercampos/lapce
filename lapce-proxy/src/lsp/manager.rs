@@ -356,8 +356,6 @@ pub struct LspManager {
     activated_configs: Vec<(usize, PathBuf)>,
     /// Detected projects
     projects: Vec<ProjectInfo>,
-    /// Tracks open files for lazy activation replay
-    open_files: HashMap<PathBuf, TextDocumentItem>,
     /// Whether to exclude all gems from ruby-lsp indexing
     ruby_lsp_exclude_gems: bool,
     /// Additional glob patterns to exclude from ruby-lsp indexing
@@ -379,7 +377,6 @@ impl LspManager {
             language_project_to_server: HashMap::new(),
             activated_configs: Vec::new(),
             projects,
-            open_files: HashMap::new(),
             ruby_lsp_exclude_gems,
             ruby_lsp_excluded_patterns,
         }
@@ -1046,11 +1043,6 @@ impl LspManager {
     }
 
     pub fn handle_did_open_text_document(&mut self, document: TextDocumentItem) {
-        // Track the open file
-        if let Ok(path) = document.uri.to_file_path() {
-            self.open_files.insert(path, document.clone());
-        }
-
         // Find project root for this file
         let file_path = document.uri.to_file_path().ok();
         let project_root = self.effective_project_root(file_path.as_deref());

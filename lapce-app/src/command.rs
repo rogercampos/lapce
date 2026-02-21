@@ -371,9 +371,6 @@ pub enum InternalCommand {
     OpenFile {
         path: PathBuf,
     },
-    OpenFileInNewTab {
-        path: PathBuf,
-    },
     ReloadFileExplorer,
     /// Test whether a file/directory can be created at that path
     TestPathCreation {

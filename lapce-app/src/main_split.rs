@@ -29,7 +29,6 @@ use tracing::{Level, event};
 
 use crate::{
     alert::AlertButton,
-    code_lens::CodeLensData,
     command::InternalCommand,
     doc::{DiagnosticData, Doc, DocContent},
     editor::{
@@ -412,7 +411,6 @@ pub struct MainSplitData {
     pub locations: RwSignal<im::Vector<EditorLocation>>,
     pub current_location: RwSignal<usize>,
     pub width: RwSignal<f64>,
-    pub code_lens: RwSignal<CodeLensData>,
     pub common: Rc<CommonData>,
 }
 
@@ -474,7 +472,6 @@ impl MainSplitData {
             locations,
             current_location,
             width: cx.create_rw_signal(0.0),
-            code_lens: cx.create_rw_signal(CodeLensData::new()),
             common,
         }
     }
@@ -637,7 +634,6 @@ impl MainSplitData {
                     });
             }
             doc.get_code_lens();
-            doc.get_folding_range();
             (doc, true)
         }
     }
@@ -762,27 +758,11 @@ impl MainSplitData {
             });
             self.active_editor_tab.set(Some(editor_tab_id));
             editor_tab
-        } else if let Some((editor_tab_id, editor_tab)) = editor_tabs.iter().next() {
+        } else {
+            // editor_tabs is non-empty (checked above), so iter().next() always succeeds
+            let (editor_tab_id, editor_tab) = editor_tabs.iter().next().unwrap();
             self.active_editor_tab.set(Some(*editor_tab_id));
             *editor_tab
-        } else {
-            // No editor tabs exist at all — create a fresh one
-            let editor_tab_id = EditorTabId::next();
-            let editor_tab = self.new_editor_tab(editor_tab_id, self.root_split);
-            let root_split = self.splits.with_untracked(|splits| {
-                splits
-                    .get(&self.root_split)
-                    .cloned()
-                    .expect("root split must exist in splits map")
-            });
-            root_split.update(|root_split| {
-                root_split.children = vec![(
-                    root_split.scope.create_rw_signal(1.0),
-                    SplitContent::EditorTab(editor_tab_id),
-                )];
-            });
-            self.active_editor_tab.set(Some(editor_tab_id));
-            editor_tab
         }
     }
 
@@ -1030,11 +1010,7 @@ impl MainSplitData {
         if current_location_value >= locations_value.len() {
             // if we are at the head of the locations, save the current location
             // before jump back
-            if self.save_current_jump_location() {
-                current_location.update(|l| {
-                    *l -= 1;
-                });
-            }
+            self.save_current_jump_location();
         }
 
         current_location.update(|l| {
@@ -1644,12 +1620,12 @@ impl MainSplitData {
                 }
                 TabCloseKind::CloseToRight => {
                     let mut tabs_to_close = Vec::new();
-                    let mut add_to_tabs = false;
+                    let mut found_target = false;
                     for child_tab in &editor_tab.children {
-                        if child_tab.2 != child && add_to_tabs {
+                        if child_tab.2 == child {
+                            found_target = true;
+                        } else if found_target {
                             tabs_to_close.push(child_tab.2.clone());
-                        } else {
-                            add_to_tabs = true;
                         }
                     }
                     tabs_to_close
@@ -1870,8 +1846,8 @@ impl MainSplitData {
         }
     }
 
-    pub fn run_code_lens(&self, command: &str, args: Vec<Value>) {
-        self.code_lens.get_untracked().run(command, args);
+    pub fn run_code_lens(&self, command: &str, _args: Vec<Value>) {
+        tracing::debug!("todo {:}", command);
     }
 
     /// Resolve a code action and apply its held workspace edit

@@ -30,7 +30,6 @@ pub struct IconThemeConfig {
     pub name: String,
     pub use_editor_color: Option<bool>,
     pub ui: IndexMap<String, String>,
-    pub foldername: IndexMap<String, String>,
     pub filename: IndexMap<String, String>,
     pub extension: IndexMap<String, String>,
 }

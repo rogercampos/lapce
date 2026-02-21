@@ -34,12 +34,10 @@ use lsp_types::{
     CancelParams, CompletionResponse, LogMessageParams, ProgressParams,
     PublishDiagnosticsParams, ShowMessageParams, SignatureHelp,
 };
-use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    RequestId, RpcError, RpcMessage, file::PathObject, plugin::PluginId,
-    project::ProjectInfo,
+    RequestId, RpcMessage, file::PathObject, plugin::PluginId, project::ProjectInfo,
 };
 
 /// Internal channel message type for proxy-to-UI communication.
@@ -201,10 +199,7 @@ pub trait CoreHandler {
 pub struct CoreRpcHandler {
     tx: Sender<CoreRpc>,
     rx: Receiver<CoreRpc>,
-    id: Arc<AtomicU64>,
     bg_task_id: Arc<AtomicU64>,
-    #[allow(clippy::type_complexity)]
-    pending: Arc<Mutex<HashMap<u64, Sender<Result<CoreResponse, RpcError>>>>>,
 }
 
 impl CoreRpcHandler {
@@ -213,9 +208,7 @@ impl CoreRpcHandler {
         Self {
             tx,
             rx,
-            id: Arc::new(AtomicU64::new(0)),
             bg_task_id: Arc::new(AtomicU64::new(0)),
-            pending: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -240,32 +233,6 @@ impl CoreRpcHandler {
 
     pub fn rx(&self) -> &Receiver<CoreRpc> {
         &self.rx
-    }
-
-    pub fn handle_response(
-        &self,
-        id: RequestId,
-        response: Result<CoreResponse, RpcError>,
-    ) {
-        let tx = { self.pending.lock().remove(&id) };
-        if let Some(tx) = tx {
-            if let Err(err) = tx.send(response) {
-                tracing::error!("{:?}", err);
-            }
-        }
-    }
-
-    pub fn request(&self, request: CoreRequest) -> Result<CoreResponse, RpcError> {
-        let (tx, rx) = crossbeam_channel::bounded(1);
-        let id = self.id.fetch_add(1, Ordering::Relaxed);
-        {
-            let mut pending = self.pending.lock();
-            pending.insert(id, tx);
-        }
-        if let Err(err) = self.tx.send(CoreRpc::Request(id, request)) {
-            tracing::error!("{:?}", err);
-        }
-        rx.recv().unwrap_or_else(|_| Err(RpcError::new("io error")))
     }
 
     pub fn shutdown(&self) {
@@ -453,7 +420,6 @@ pub enum LogLevel {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ServerStatusParams {
     health: String,
-    quiescent: bool,
     pub message: Option<String>,
 }
 

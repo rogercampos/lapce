@@ -25,8 +25,6 @@ pub enum CodeActionStatus {
 pub struct ScoredCodeActionItem {
     pub item: CodeActionOrCommand,
     pub plugin_id: PluginId,
-    pub score: i64,
-    pub indices: Vec<usize>,
 }
 
 impl ScoredCodeActionItem {
@@ -70,12 +68,9 @@ impl KeyPressFocus for CodeActionData {
         // Only Focus commands are handled; all other command kinds are
         // intentionally ignored since the code action popup is a simple list.
         match &command.kind {
-            CommandKind::Focus(cmd) => {
-                self.run_focus_command(cmd);
-            }
-            _ => {}
+            CommandKind::Focus(cmd) => self.run_focus_command(cmd),
+            _ => CommandExecuted::No,
         }
-        CommandExecuted::Yes
     }
 
     fn receive_char(&self, _c: &str) {}
@@ -175,8 +170,6 @@ impl CodeActionData {
             .map(|code_action| ScoredCodeActionItem {
                 item: code_action,
                 plugin_id,
-                score: 0,
-                indices: Vec::new(),
             })
             .collect();
         self.filtered_items = self.items.clone();

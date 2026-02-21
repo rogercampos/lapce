@@ -706,7 +706,7 @@ impl FileExplorerData {
         } else {
             self.common
                 .internal_command
-                .send(InternalCommand::OpenFileInNewTab {
+                .send(InternalCommand::OpenFile {
                     path: path.to_path_buf(),
                 });
             EventPropagation::Stop

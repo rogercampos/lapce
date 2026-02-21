@@ -1852,7 +1852,13 @@ fn replace_in_file(
     if new_content == content {
         return false;
     }
-    std::fs::write(path, &new_content).is_ok()
+    match std::fs::write(path, &new_content) {
+        Ok(()) => true,
+        Err(err) => {
+            tracing::error!("Failed to write replacement to {:?}: {}", path, err);
+            false
+        }
+    }
 }
 
 /// Background global replace: walks the workspace, replaces all matches in all files,

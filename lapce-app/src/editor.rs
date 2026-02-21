@@ -857,7 +857,9 @@ impl EditorData {
             });
         let index = offset - line_start_offset;
         if let Some(new_index) = match direction {
-            InlineFindDirection::Left => line_content[..index].rfind(c),
+            InlineFindDirection::Left => {
+                line_content.get(..index).and_then(|s| s.rfind(c))
+            }
             InlineFindDirection::Right => {
                 if index + 1 >= line_content.len() {
                     None
@@ -871,7 +873,9 @@ impl EditorData {
                             )
                         })
                         - offset;
-                    line_content[index..].find(c).map(|i| i + index)
+                    line_content
+                        .get(index..)
+                        .and_then(|s| s.find(c).map(|i| i + index))
                 }
             }
         } {
@@ -1450,7 +1454,44 @@ impl EditorData {
                         _ => {}
                     }
                 }
-                CompletionTextEdit::InsertAndReplace(_) => (),
+                CompletionTextEdit::InsertAndReplace(edit) => {
+                    let offset = cursor.offset();
+                    let start_offset = buffer.prev_code_boundary(offset);
+                    let end_offset = buffer.next_code_boundary(offset);
+                    let edit_start = buffer.offset_of_position(&edit.insert.start);
+                    let edit_end = buffer.offset_of_position(&edit.insert.end);
+
+                    let selection = lapce_core::selection::Selection::region(
+                        start_offset.min(edit_start),
+                        end_offset.max(edit_end),
+                    );
+                    match text_format {
+                        lsp_types::InsertTextFormat::PLAIN_TEXT => {
+                            self.do_edit(
+                                &selection,
+                                &[
+                                    &[(
+                                        selection.clone(),
+                                        edit.new_text.as_str(),
+                                    )][..],
+                                    &additional_edit[..],
+                                ]
+                                .concat(),
+                            );
+                            return Ok(());
+                        }
+                        lsp_types::InsertTextFormat::SNIPPET => {
+                            self.completion_apply_snippet(
+                                &edit.new_text,
+                                &selection,
+                                additional_edit,
+                                start_offset,
+                            )?;
+                            return Ok(());
+                        }
+                        _ => {}
+                    }
+                }
             }
         }
 

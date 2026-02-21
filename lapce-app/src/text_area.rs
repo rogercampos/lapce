@@ -25,8 +25,14 @@ pub fn text_area(
     let text_layout = create_rw_signal(TextLayout::new());
     let line_height = 1.2;
 
-    create_effect(move |_| {
+    create_effect(move |last| {
         let config = config.get();
+        let rev = doc.with(|doc| doc.rev());
+        let key = (config.id, rev);
+        if last == Some(key) {
+            return key;
+        }
+
         let font_size = config.ui.font_size();
         let font_family = config.ui.font_family();
         let color = config.color(LapceColor::EDITOR_FOREGROUND);
@@ -41,31 +47,8 @@ pub fn text_area(
         text_layout.update(|text_layout| {
             text_layout.set_text(&text, attrs_list, None);
         });
-    });
 
-    create_effect(move |last_rev| {
-        let rev = doc.with(|doc| doc.rev());
-        if last_rev == Some(rev) {
-            return rev;
-        }
-
-        let config = config.get_untracked();
-        let font_size = config.ui.font_size();
-        let font_family = config.ui.font_family();
-        let color = config.color(LapceColor::EDITOR_FOREGROUND);
-        let attrs = Attrs::new()
-            .color(color)
-            .family(&font_family)
-            .font_size(font_size as f32)
-            .line_height(LineHeightValue::Normal(1.2));
-        let attrs_list = AttrsList::new(attrs);
-        let doc = doc.get();
-        let text = doc.buffer.with(|b| b.to_string());
-        text_layout.update(|text_layout| {
-            text_layout.set_text(&text, attrs_list, None);
-        });
-
-        rev
+        key
     });
 
     create_effect(move |last_width| {

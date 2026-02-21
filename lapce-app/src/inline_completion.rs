@@ -141,6 +141,7 @@ impl InlineCompletionData {
         }
 
         self.items.clear();
+        self.active.set(0);
         self.status = InlineCompletionStatus::Inactive;
     }
 

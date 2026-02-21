@@ -105,7 +105,13 @@ fn download_release(
     let current_version =
         fs::read_to_string(dir.join("version")).unwrap_or_default();
     let release_version = if release.tag_name == "nightly" {
-        format!("nightly-{}", &release.target_commitish[..7])
+        format!(
+            "nightly-{}",
+            release
+                .target_commitish
+                .get(..7)
+                .unwrap_or(&release.target_commitish)
+        )
     } else {
         release.tag_name.clone()
     };

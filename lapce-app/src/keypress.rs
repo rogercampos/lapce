@@ -9,7 +9,7 @@ use std::{path::PathBuf, rc::Rc, str::FromStr, time::SystemTime};
 use anyhow::Result;
 use floem::{
     keyboard::{Key, KeyEvent, KeyEventExtModifierSupplement, Modifiers, NamedKey},
-    pointer::{MouseButton, PointerButton, PointerInputEvent},
+    pointer::PointerInputEvent,
     reactive::{RwSignal, Scope, SignalUpdate, SignalWith},
 };
 use indexmap::IndexMap;
@@ -230,10 +230,10 @@ impl KeyPressData {
         }
     }
 
-    pub fn keypress<'a>(event: impl Into<EventRef<'a>>) -> Option<KeyPress> {
+    pub fn keypress<'a>(event: impl Into<EventRef<'a>>) -> KeyPress {
         let event = event.into();
 
-        let keypress = match event {
+        match event {
             EventRef::Keyboard(ev) => KeyPress {
                 key: KeyInput::Keyboard {
                     logical: ev.key.logical_key.to_owned(),
@@ -248,8 +248,7 @@ impl KeyPressData {
                 key: KeyInput::Pointer(ev.button),
                 mods: ev.modifiers,
             },
-        };
-        Some(keypress)
+        }
     }
 
     pub fn key_down<'a, T: KeyPressFocus + ?Sized>(
@@ -257,21 +256,7 @@ impl KeyPressData {
         event: impl Into<EventRef<'a>>,
         focus: &T,
     ) -> KeyPressHandle {
-        let keypress = match Self::keypress(event) {
-            Some(keypress) => keypress,
-            None => {
-                return KeyPressHandle {
-                    handled: false,
-                    keymatch: KeymapMatch::None,
-                    keypress: KeyPress {
-                        key: KeyInput::Pointer(PointerButton::Mouse(
-                            MouseButton::Primary,
-                        )),
-                        mods: Modifiers::empty(),
-                    },
-                };
-            }
-        };
+        let keypress = Self::keypress(event);
 
         // If more than 1 second has passed since the last keypress, clear the
         // pending chord buffer. This prevents stale partial chords from

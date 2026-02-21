@@ -249,11 +249,11 @@ impl AppData {
                         tracing::error!("{:?}", err);
                     }
                 }
-                let window_data = self
+                if let Some(window_data) = self
                     .windows
                     .try_update(|windows| windows.remove(&window_id))
-                    .unwrap();
-                if let Some(window_data) = window_data {
+                    .flatten()
+                {
                     window_data.scope.dispose();
                 }
                 if let Err(err) = db.save_app(self) {

@@ -1,22 +1,11 @@
-use std::path::PathBuf;
-
 use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum LoadThemeError {
-    #[error("themes folder not found, possibly it could not be created")]
-    ThemesFolderNotFound,
-    #[error("theme file ({theme_name}.toml) was not found in {themes_folder:?}")]
-    FileNotFound {
-        themes_folder: PathBuf,
-        theme_name: String,
-    },
     #[error("recursion limit reached for {variable_name}")]
     RecursionLimitReached { variable_name: String },
     #[error("variable {variable_name} not found")]
     VariableNotFound { variable_name: String },
-    #[error("There was an error reading the theme file")]
-    Read(std::io::Error),
 }
 
 pub struct LapceColor {}

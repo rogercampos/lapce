@@ -271,6 +271,8 @@ impl KeyPressFocus for WorkspaceData {
                             return CommandExecuted::No;
                         }
                     }
+                } else {
+                    return CommandExecuted::No;
                 }
             }
             _ => {
@@ -792,7 +794,14 @@ impl WorkspaceData {
                 }
             }
 
-            ToggleInlayHints => {}
+            ToggleInlayHints => {
+                let current = self.common.config.get_untracked().editor.enable_inlay_hints;
+                LapceConfig::update_file(
+                    "editor",
+                    "enable-inlay-hints",
+                    toml_edit::Value::from(!current),
+                );
+            }
 
             // ==== Window ====
             ReloadWindow => {
@@ -1154,17 +1163,6 @@ impl WorkspaceData {
                 debug!("{level}");
             }
             InternalCommand::OpenFile { path } => {
-                self.main_split.jump_to_location(
-                    EditorLocation {
-                        path,
-                        position: None,
-                        scroll_offset: None,
-                        same_editor_tab: false,
-                    },
-                    None,
-                );
-            }
-            InternalCommand::OpenFileInNewTab { path } => {
                 self.main_split.jump_to_location(
                     EditorLocation {
                         path,
@@ -1551,7 +1549,6 @@ impl WorkspaceData {
                         for doc in x.values() {
                             doc.get_code_lens();
                             doc.get_semantic_styles();
-                            doc.get_folding_range();
                             doc.get_inlay_hints();
                             doc.get_pull_diagnostics();
                         }

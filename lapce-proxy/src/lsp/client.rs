@@ -169,7 +169,7 @@ impl LspClient {
         // Reader thread
         let local_pending = server_pending.clone();
         let core_rpc = lsp_rpc.core_rpc.clone();
-        let local_lsp_rpc = lsp_rpc.clone();
+
         let server_name_closure = server_name.to_string();
         let command_owned = command.to_string();
         let io_tx_for_reader = io_tx.clone();
@@ -183,7 +183,6 @@ impl LspClient {
                         if let Some(resp) = handle_server_message(
                             &local_pending,
                             &core_rpc,
-                            &local_lsp_rpc,
                             &server_name_closure,
                             &settings_for_reader,
                             &message_str,
@@ -281,8 +280,16 @@ impl LspClient {
         };
         match self.server_request_sync(Initialize::METHOD, params) {
             Ok(value) => {
-                let result: InitializeResult =
-                    serde_json::from_value(value).unwrap();
+                let result: InitializeResult = match serde_json::from_value(value) {
+                    Ok(r) => r,
+                    Err(err) => {
+                        tracing::error!(
+                            "Failed to deserialize InitializeResult: {:?}",
+                            err
+                        );
+                        return;
+                    }
+                };
                 self.server_capabilities = result.capabilities;
                 if !semantic_tokens {
                     self.server_capabilities.semantic_tokens_provider = None;
@@ -561,24 +568,29 @@ impl LspClient {
 
     fn check_save_capability(&self, language_id: &str, path: &Path) -> (bool, bool) {
         if self.document_supported(Some(language_id), Some(path)) {
-            let (should_send, include_text) = self
-                .server_capabilities
-                .text_document_sync
-                .as_ref()
-                .and_then(|sync| match sync {
-                    TextDocumentSyncCapability::Kind(_) => None,
-                    TextDocumentSyncCapability::Options(options) => Some(options),
-                })
-                .and_then(|o| o.save.as_ref())
-                .map(|o| match o {
-                    TextDocumentSyncSaveOptions::Supported(is_supported) => {
-                        (*is_supported, true)
+            let (should_send, include_text) =
+                match self.server_capabilities.text_document_sync.as_ref() {
+                    Some(TextDocumentSyncCapability::Kind(kind)) => {
+                        if *kind != TextDocumentSyncKind::NONE {
+                            (true, false)
+                        } else {
+                            (false, false)
+                        }
                     }
-                    TextDocumentSyncSaveOptions::SaveOptions(options) => {
-                        (true, options.include_text.unwrap_or(false))
-                    }
-                })
-                .unwrap_or((false, false));
+                    Some(TextDocumentSyncCapability::Options(options)) => options
+                        .save
+                        .as_ref()
+                        .map(|o| match o {
+                            TextDocumentSyncSaveOptions::Supported(is_supported) => {
+                                (*is_supported, true)
+                            }
+                            TextDocumentSyncSaveOptions::SaveOptions(options) => {
+                                (true, options.include_text.unwrap_or(false))
+                            }
+                        })
+                        .unwrap_or((false, false)),
+                    None => (false, false),
+                };
             return (should_send, include_text);
         }
 
@@ -724,7 +736,6 @@ impl LspClient {
 fn handle_server_message(
     server_pending: &Arc<Mutex<HashMap<Id, ResponseHandler<Value, RpcError>>>>,
     core_rpc: &CoreRpcHandler,
-    _lsp_rpc: &LspRpcHandler,
     server_name: &str,
     server_settings: &Option<Value>,
     message: &str,
@@ -991,9 +1002,13 @@ fn format_semantic_styles(
         let end =
             start + offset_utf16_to_utf8(sub_text, semantic_token.length as usize);
 
-        let kind = semantic_legends.token_types[semantic_token.token_type as usize]
-            .as_str()
-            .to_string();
+        let Some(kind) = semantic_legends
+            .token_types
+            .get(semantic_token.token_type as usize)
+        else {
+            continue;
+        };
+        let kind = kind.as_str().to_string();
         if start < last_start {
             continue;
         }

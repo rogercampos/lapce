@@ -307,19 +307,20 @@ impl EditorConfig {
         // Clamp to a minimum of 0.1 to prevent a zero line_height from producing
         // a zero result in multiplier mode (0.0 * font_size = 0.0).
         let clamped = self.line_height.max(0.1);
+        let font_size = self.font_size();
         let line_height = if clamped < SCALE_OR_SIZE_LIMIT {
-            clamped * self.font_size as f64
+            clamped * font_size as f64
         } else {
             clamped
         };
 
         // Prevent overlapping lines
-        (line_height.round() as usize).max(self.font_size)
+        (line_height.round() as usize).max(font_size)
     }
 
     pub fn inlay_hint_font_size(&self) -> usize {
         if self.inlay_hint_font_size < 5
-            || self.inlay_hint_font_size > self.font_size
+            || self.inlay_hint_font_size > self.font_size()
         {
             self.font_size()
         } else {

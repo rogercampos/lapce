@@ -40,7 +40,10 @@ pub fn get_latest_release() -> Result<ReleaseInfo> {
         "nightly" => format!(
             "{}+Nightly.{}",
             env!("CARGO_PKG_VERSION"),
-            &release.target_commitish[..7]
+            release
+                .target_commitish
+                .get(..7)
+                .unwrap_or(&release.target_commitish)
         ),
         _ => release
             .tag_name

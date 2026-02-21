@@ -21,7 +21,6 @@ use crate::{config::LapceConfig, editor::EditorData, snippet::Snippet};
 pub enum CompletionStatus {
     Inactive,
     Started,
-    Done,
 }
 
 #[derive(Clone, PartialEq)]

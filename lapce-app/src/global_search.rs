@@ -31,15 +31,10 @@ use crate::{
     workspace_data::CommonData,
 };
 
-/// Per-file group of search matches. The `expanded` signal controls whether
-/// individual matches are visible under the file header in the hierarchical
-/// results view. `line_height` is shared from CommonData so that height
-/// calculations stay in sync with the UI.
+/// Per-file group of search matches.
 #[derive(Clone)]
 pub struct SearchMatchData {
-    pub expanded: RwSignal<bool>,
     pub matches: RwSignal<im::Vector<SearchMatch>>,
-    pub line_height: Memo<f64>,
 }
 
 /// A single row in the flattened search tree for the virtual stack.
@@ -462,9 +457,7 @@ impl GlobalSearchData {
         self.search_result.update(|current| {
             for (path, new_matches) in matches {
                 let match_data = SearchMatchData {
-                    expanded: self.common.scope.create_rw_signal(true),
                     matches: self.common.scope.create_rw_signal(new_matches.into()),
-                    line_height: self.common.ui_line_height,
                 };
                 current.insert(path, match_data);
             }
@@ -590,7 +583,7 @@ impl GlobalSearchData {
             }
             SearchTreeRow::File { full_path, .. } => {
                 // Preview the first match in this file
-                self.search_result.with_untracked(|results| {
+                self.panel_search_result.with_untracked(|results| {
                     if let Some(data) = results.get(full_path) {
                         if let Some(first) =
                             data.matches.get_untracked().iter().next().cloned()

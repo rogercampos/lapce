@@ -1096,7 +1096,6 @@ pub(crate) fn client_capabilities() -> ClientCapabilities {
         .to_vec();
 
     let mut commands = Map::new();
-    experimental.insert("serverStatusNotification".into(), true.into());
     commands.insert("commands".into(), command_vec.into());
     experimental.insert("commands".into(), commands.into());
     ClientCapabilities {
