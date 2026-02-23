@@ -989,7 +989,11 @@ pub fn launch() {
     }
 
     let (reload_handle, _guard) = logging::logging();
-    trace!(TraceLevel::INFO, "Starting up Lapce..");
+    trace!(
+        TraceLevel::INFO,
+        "========== Session started (version {}) ==========",
+        lapce_core::meta::VERSION
+    );
 
     #[cfg(feature = "vendored-fonts")]
     {

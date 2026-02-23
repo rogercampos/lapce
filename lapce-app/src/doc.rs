@@ -789,8 +789,22 @@ impl Doc {
         });
         let mut syntax = self.syntax.get_untracked();
         rayon::spawn(move || {
-            syntax.parse(rev, text, edits.as_deref());
-            send(syntax);
+            let result =
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    syntax.parse(rev, text, edits.as_deref());
+                    syntax
+                }));
+            match result {
+                Ok(syntax) => send(syntax),
+                Err(e) => {
+                    let msg = e
+                        .downcast_ref::<String>()
+                        .map(|s| s.as_str())
+                        .or_else(|| e.downcast_ref::<&str>().copied())
+                        .unwrap_or("unknown");
+                    tracing::error!("Syntax parsing panicked: {msg}");
+                }
+            }
         });
     }
 

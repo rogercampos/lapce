@@ -75,6 +75,11 @@ pub(super) fn logging() -> (Handle<Targets>, Option<WorkerGuard>) {
 /// Install a custom panic hook that logs panics with full backtraces via tracing,
 /// ensuring they appear in the log files. On Windows, also shows a native error dialog
 /// since there may be no console to display the panic.
+///
+/// Because the tracing file logger uses a non-blocking (buffered) writer, panics
+/// followed by an immediate `abort()` (e.g. rayon's `AbortIfPanic` guard) can lose
+/// the buffered message. To guard against this, the hook also writes synchronously
+/// to a dedicated `crash.log` file in the logs directory.
 pub(super) fn panic_hook() {
     std::panic::set_hook(Box::new(move |info| {
         let thread = std::thread::current();
@@ -83,29 +88,43 @@ pub(super) fn panic_hook() {
 
         let payload = if let Some(s) = info.payload().downcast_ref::<&str>() {
             s
+        } else if let Some(s) = info.payload().downcast_ref::<String>() {
+            s.as_str()
         } else {
             "<unknown>"
         };
 
-        match info.location() {
+        let message = match info.location() {
             Some(loc) => {
-                trace!(
-                    target: "lapce_app::panic_hook",
-                    TraceLevel::ERROR,
-                    "thread {thread} panicked at {} | file://./{}:{}:{}\n{:?}",
-                    payload,
-                    loc.file(), loc.line(), loc.column(),
-                    backtrace,
-                );
+                format!(
+                    "thread {thread} panicked at {payload} | file://./{}:{}:{}\n{backtrace:?}",
+                    loc.file(),
+                    loc.line(),
+                    loc.column(),
+                )
             }
             None => {
-                trace!(
-                    target: "lapce_app::panic_hook",
-                    TraceLevel::ERROR,
-                    "thread {thread} panicked at {}\n{:?}",
-                    payload,
-                    backtrace,
-                );
+                format!("thread {thread} panicked at {payload}\n{backtrace:?}")
+            }
+        };
+
+        trace!(
+            target: "lapce_app::panic_hook",
+            TraceLevel::ERROR,
+            "{message}",
+        );
+
+        // Write synchronously to crash.log so the message survives even if the
+        // process is aborted before the non-blocking tracing writer flushes.
+        if let Some(dir) = Directory::logs_directory() {
+            use std::io::Write;
+            let timestamp = chrono::Local::now().format("%Y-%m-%dT%H:%M:%S%.3f%z");
+            if let Ok(mut file) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(dir.join("crash.log"))
+            {
+                let _ = writeln!(file, "[{timestamp}] PANIC: {message}");
             }
         }
 

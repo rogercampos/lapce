@@ -2281,18 +2281,32 @@ impl EditorData {
         let case_matching = self.find.case_matching.get_untracked();
         let whole_words = self.find.whole_words.get_untracked();
         rayon::spawn(move || {
-            let mut occurrences = Selection::new();
-            Find::find(
-                &text,
-                &search,
-                0,
-                text.len(),
-                case_matching,
-                whole_words,
-                false,
-                &mut occurrences,
-            );
-            send(occurrences);
+            let result =
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    let mut occurrences = Selection::new();
+                    Find::find(
+                        &text,
+                        &search,
+                        0,
+                        text.len(),
+                        case_matching,
+                        whole_words,
+                        false,
+                        &mut occurrences,
+                    );
+                    occurrences
+                }));
+            match result {
+                Ok(occurrences) => send(occurrences),
+                Err(e) => {
+                    let msg = e
+                        .downcast_ref::<String>()
+                        .map(|s| s.as_str())
+                        .or_else(|| e.downcast_ref::<&str>().copied())
+                        .unwrap_or("unknown");
+                    tracing::error!("Find panicked: {msg}");
+                }
+            }
         });
     }
 
