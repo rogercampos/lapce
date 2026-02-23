@@ -792,18 +792,15 @@ impl Doc {
             let result =
                 std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     syntax.parse(rev, text, edits.as_deref());
-                    syntax
+                    send(syntax);
                 }));
-            match result {
-                Ok(syntax) => send(syntax),
-                Err(e) => {
-                    let msg = e
-                        .downcast_ref::<String>()
-                        .map(|s| s.as_str())
-                        .or_else(|| e.downcast_ref::<&str>().copied())
-                        .unwrap_or("unknown");
-                    tracing::error!("Syntax parsing panicked: {msg}");
-                }
+            if let Err(e) = result {
+                let msg = e
+                    .downcast_ref::<String>()
+                    .map(|s| s.as_str())
+                    .or_else(|| e.downcast_ref::<&str>().copied())
+                    .unwrap_or("unknown");
+                tracing::error!("Syntax parsing panicked: {msg}");
             }
         });
     }

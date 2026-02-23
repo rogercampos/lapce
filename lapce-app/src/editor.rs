@@ -2294,18 +2294,15 @@ impl EditorData {
                         false,
                         &mut occurrences,
                     );
-                    occurrences
+                    send(occurrences);
                 }));
-            match result {
-                Ok(occurrences) => send(occurrences),
-                Err(e) => {
-                    let msg = e
-                        .downcast_ref::<String>()
-                        .map(|s| s.as_str())
-                        .or_else(|| e.downcast_ref::<&str>().copied())
-                        .unwrap_or("unknown");
-                    tracing::error!("Find panicked: {msg}");
-                }
+            if let Err(e) = result {
+                let msg = e
+                    .downcast_ref::<String>()
+                    .map(|s| s.as_str())
+                    .or_else(|| e.downcast_ref::<&str>().copied())
+                    .unwrap_or("unknown");
+                tracing::error!("Find panicked: {msg}");
             }
         });
     }

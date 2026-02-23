@@ -984,9 +984,7 @@ fn window(window_data: WindowData) -> impl View {
 pub fn launch() {
     let cli = Cli::parse();
 
-    if !cli.wait {
-        logging::panic_hook();
-    }
+    logging::panic_hook();
 
     let (reload_handle, _guard) = logging::logging();
     trace!(
