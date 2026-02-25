@@ -147,9 +147,15 @@ pub fn file_explorer_panel(
                     if let Some(editor_data) =
                         wtd.main_split.active_editor.get_untracked()
                     {
-                        if let DocContent::File { path, .. } =
-                            editor_data.doc().content.get_untracked()
-                        {
+                        if let Some(path) = editor_data.try_doc().and_then(|doc| {
+                            if let DocContent::File { path, .. } =
+                                doc.content.get_untracked()
+                            {
+                                Some(path)
+                            } else {
+                                None
+                            }
+                        }) {
                             wtd.file_explorer.reveal_in_file_tree(path);
                         }
                     }

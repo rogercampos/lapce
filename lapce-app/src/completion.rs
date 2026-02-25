@@ -308,7 +308,9 @@ impl CompletionData {
         editor_data: &EditorData,
         cursor_offset: usize,
     ) {
-        let doc = editor_data.doc();
+        let Some(doc) = editor_data.try_doc() else {
+            return;
+        };
 
         if !doc.content.with_untracked(|content| content.is_file()) {
             return;

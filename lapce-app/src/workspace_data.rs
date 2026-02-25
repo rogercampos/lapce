@@ -716,7 +716,9 @@ impl WorkspaceData {
             }
             RevealActiveFileInFileExplorer => {
                 if let Some(editor_data) = self.main_split.active_editor.get() {
-                    let doc = editor_data.doc();
+                    let Some(doc) = editor_data.try_doc() else {
+                        return;
+                    };
                     let path = if let DocContent::File { path, .. } =
                         doc.content.get_untracked()
                     {
@@ -733,9 +735,11 @@ impl WorkspaceData {
 
             CopyFilePath => {
                 if let Some(editor_data) = self.main_split.active_editor.get_untracked() {
-                    if let DocContent::File { path, .. } = editor_data.doc().content.get_untracked() {
-                        let mut clipboard = SystemClipboard::new();
-                        clipboard.put_string(path.to_string_lossy());
+                    if let Some(doc) = editor_data.try_doc() {
+                        if let DocContent::File { path, .. } = doc.content.get_untracked() {
+                            let mut clipboard = SystemClipboard::new();
+                            clipboard.put_string(path.to_string_lossy());
+                        }
                     }
                 }
             }
@@ -1144,8 +1148,10 @@ impl WorkspaceData {
                         .section_open(PanelSection::FileExplorer).update(|x| {
                         *x = true;
                     });
-                    if let DocContent::File {path, ..} = editor_data.doc().content.get_untracked() {
-                        self.file_explorer.reveal_in_file_tree(path);
+                    if let Some(doc) = editor_data.try_doc() {
+                        if let DocContent::File {path, ..} = doc.content.get_untracked() {
+                            self.file_explorer.reveal_in_file_tree(path);
+                        }
                     }
                 }
             }
@@ -1153,16 +1159,18 @@ impl WorkspaceData {
                 if let Some(editor_data) =
                     self.main_split.active_editor.get_untracked()
                 {
-                    if let DocContent::File {path, ..} = editor_data.doc().content.get_untracked() {
-                        let path = path.parent().unwrap_or(&path);
-                        if !path.exists() {
-                            return;
-                        }
-                        if let Err(err) = open::that(path) {
-                            error!(
-                            "Failed to reveal file in system file explorer: {}",
-                            err
-                        );
+                    if let Some(doc) = editor_data.try_doc() {
+                        if let DocContent::File {path, ..} = doc.content.get_untracked() {
+                            let path = path.parent().unwrap_or(&path);
+                            if !path.exists() {
+                                return;
+                            }
+                            if let Err(err) = open::that(path) {
+                                error!(
+                                    "Failed to reveal file in system file explorer: {}",
+                                    err
+                                );
+                            }
                         }
                     }
                 }
@@ -1171,7 +1179,9 @@ impl WorkspaceData {
                 if let Some(editor_data) =
                     self.main_split.active_editor.get_untracked()
                 {
-                    let doc = editor_data.doc();
+                    let Some(doc) = editor_data.try_doc() else {
+                        return;
+                    };
                     let path = match doc.loaded_file_path() {
                         Some(path) => path,
                         None => return,
@@ -1262,7 +1272,9 @@ impl WorkspaceData {
                                 .with_editors_untracked(|editors| {
                                     editors
                                         .values()
-                                        .map(|editor| editor.doc().content)
+                                        .filter_map(|editor| {
+                                            Some(editor.try_doc()?.content)
+                                        })
                                         .filter(|content| {
                                             content.with_untracked(|content| {
                                                 match content {

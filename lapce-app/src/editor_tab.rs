@@ -306,12 +306,14 @@ impl EditorTabData {
         for (i, child) in self.children.iter().enumerate() {
             if let (_, _, EditorTabChild::Editor(editor_id)) = child {
                 if let Some(editor) = editors.editor_untracked(*editor_id) {
-                    let is_path = editor.doc().content.with_untracked(|content| {
-                        if let DocContent::File { path: p, .. } = content {
-                            p == path
-                        } else {
-                            false
-                        }
+                    let is_path = editor.try_doc().is_some_and(|doc| {
+                        doc.content.with_untracked(|content| {
+                            if let DocContent::File { path: p, .. } = content {
+                                p == path
+                            } else {
+                                false
+                            }
+                        })
                     });
                     if is_path {
                         return Some((i, editor));
@@ -364,19 +366,26 @@ impl EditorTabData {
             let can_be_selected = match child {
                 EditorTabChild::Editor(editor_id) => {
                     if let Some(editor) = editors.editor_untracked(*editor_id) {
-                        let doc = editor.doc();
-                        let same_path = if let EditorTabChildSource::Editor {
-                            path,
-                            ..
-                        } = source
-                        {
-                            doc.content.with_untracked(|content| {
-                                content.path().map(|p| p == path).unwrap_or(false)
-                            })
+                        if let Some(doc) = editor.try_doc() {
+                            let same_path = if let EditorTabChildSource::Editor {
+                                path,
+                                ..
+                            } = source
+                            {
+                                doc.content.with_untracked(|content| {
+                                    content
+                                        .path()
+                                        .map(|p| p == path)
+                                        .unwrap_or(false)
+                                })
+                            } else {
+                                false
+                            };
+                            same_path
+                                || doc.buffer.with_untracked(|b| b.is_pristine())
                         } else {
                             false
-                        };
-                        same_path || doc.buffer.with_untracked(|b| b.is_pristine())
+                        }
                     } else {
                         false
                     }
@@ -394,7 +403,7 @@ impl EditorTabData {
         let (_, _, child) = self.children.get(self.active)?;
         if let EditorTabChild::Editor(editor_id) = child {
             editors.editor_untracked(*editor_id).and_then(|editor| {
-                editor.doc().content.with_untracked(|content| {
+                editor.try_doc()?.content.with_untracked(|content| {
                     if let DocContent::File { path, .. } = content {
                         Some(path.clone())
                     } else {

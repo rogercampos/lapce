@@ -384,10 +384,15 @@ impl EditorData {
     }
 
     pub fn doc(&self) -> Rc<Doc> {
-        let doc = self.editor.doc();
-        (doc as Rc<dyn ::std::any::Any>)
-            .downcast::<Doc>()
+        self.try_doc()
             .expect("EditorData doc must always be Rc<Doc>")
+    }
+
+    /// Try to get the document, returning `None` if the editor's doc signal
+    /// has been disposed (e.g. a preview editor whose scope was cleaned up).
+    pub fn try_doc(&self) -> Option<Rc<Doc>> {
+        let doc = self.editor.doc_signal().try_get_untracked()?;
+        (doc as Rc<dyn ::std::any::Any>).downcast::<Doc>().ok()
     }
 
     /// The signal for the editor's document.  
