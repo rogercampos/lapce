@@ -18,12 +18,10 @@ use grep_searcher::{SearcherBuilder, sinks::UTF8};
 use indexmap::IndexMap;
 use lapce_rpc::{
     RequestId, RpcError,
-    buffer::BufferId,
     core::{
         CoreNotification, CoreRpcHandler, FileChanged, GitFileStatus, GitRepoState,
     },
     file::FileNodeItem,
-    file_line::FileLine,
     proxy::{
         ProxyHandler, ProxyNotification, ProxyRequest, ProxyResponse,
         ProxyRpcHandler, SearchMatch,
@@ -1162,34 +1160,6 @@ impl ProxyHandler for Dispatcher {
                         proxy_rpc.handle_response(id, result);
                     });
             }
-            ReferencesResolve { items } => {
-                // Cap at 100 to avoid loading hundreds of files for
-                // widely-used symbols. The UI shows a scrollable list
-                // so the user can re-run with narrower scope if needed.
-                let items: Vec<FileLine> = items
-                    .into_iter()
-                    .take(100)
-                    .filter_map(|location| {
-                        let Ok(path) = location.uri.to_file_path() else {
-                            tracing::error!(
-                                "get file path fail: {:?}",
-                                location.uri
-                            );
-                            return None;
-                        };
-                        let buffer = self.get_buffer_or_insert(path.clone());
-                        let line_num = location.range.start.line as usize;
-                        let content = buffer.line_to_cow(line_num).to_string();
-                        Some(FileLine {
-                            path,
-                            position: location.range.start,
-                            content,
-                        })
-                    })
-                    .collect();
-                let resp = ProxyResponse::ReferencesResolveResponse { items };
-                self.proxy_rpc.handle_response(id, Ok(resp));
-            }
             ListAllFolders {} => {
                 let workspace = self.workspace.clone();
                 let proxy_rpc = self.proxy_rpc.clone();
@@ -1284,12 +1254,6 @@ impl Dispatcher {
         if let Some(ref semgrep) = self.semgrep {
             semgrep.scan_file(path.to_path_buf());
         }
-    }
-
-    fn get_buffer_or_insert(&mut self, path: PathBuf) -> &mut Buffer {
-        self.buffers
-            .entry(path.clone())
-            .or_insert(Buffer::new(BufferId::next(), path))
     }
 }
 

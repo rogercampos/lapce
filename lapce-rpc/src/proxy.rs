@@ -25,7 +25,6 @@ use crate::{
     RequestId, RpcError, RpcMessage,
     buffer::BufferId,
     file::{FileNodeItem, PathObject},
-    file_line::FileLine,
     plugin::PluginId,
     style::SemanticStyles,
 };
@@ -220,9 +219,6 @@ pub enum ProxyRequest {
     TestCreateAtPath {
         path: PathBuf,
     },
-    ReferencesResolve {
-        items: Vec<Location>,
-    },
     GetWorkspaceSymbols {
         path: PathBuf,
         query: String,
@@ -383,9 +379,6 @@ pub enum ProxyResponse {
     },
     Success {},
     SaveResponse {},
-    ReferencesResolveResponse {
-        items: Vec<FileLine>,
-    },
     GetWorkspaceSymbolsResponse {
         symbols: Vec<SymbolInformationEntry>,
     },
@@ -847,14 +840,6 @@ impl ProxyRpcHandler {
         f: impl ProxyCallback + 'static,
     ) {
         self.request_async(ProxyRequest::GetReferences { path, position }, f);
-    }
-
-    pub fn references_resolve(
-        &self,
-        items: Vec<Location>,
-        f: impl ProxyCallback + 'static,
-    ) {
-        self.request_async(ProxyRequest::ReferencesResolve { items }, f);
     }
 
     pub fn go_to_implementation(

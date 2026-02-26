@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use lapce_rpc::project::{ProjectInfo, ProjectKind};
 
