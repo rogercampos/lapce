@@ -58,6 +58,9 @@ pub struct Dispatcher {
     excluded_directories: Vec<String>,
     semgrep_initialized: bool,
     semgrep: Option<SemgrepRunner>,
+    /// Shared cache of git file statuses.  Populated lazily: first by
+    /// on-demand ReadDir piggyback, then by file-watcher incremental updates.
+    git_status_cache: Arc<Mutex<Option<HashMap<PathBuf, GitFileStatus>>>>,
 }
 
 impl ProxyHandler for Dispatcher {
@@ -82,13 +85,12 @@ impl ProxyHandler for Dispatcher {
                 );
                 self.workspace = workspace;
                 self.excluded_directories = excluded_directories;
-                let git_status_cache =
-                    Arc::new(Mutex::new(None::<HashMap<PathBuf, GitFileStatus>>));
+                self.git_status_cache = Arc::new(Mutex::new(None));
                 self.file_watcher.notify(FileWatchNotifier::new(
                     self.core_rpc.clone(),
                     self.proxy_rpc.clone(),
                     self.workspace.clone(),
-                    git_status_cache.clone(),
+                    self.git_status_cache.clone(),
                 ));
                 if let Some(workspace) = self.workspace.as_ref() {
                     self.file_watcher
@@ -117,21 +119,6 @@ impl ProxyHandler for Dispatcher {
 
                 // Pre-announce startup tasks as queued so the UI can show them
                 // before work begins.
-                let task_id_git = if workspace.is_some() {
-                    let id = core_rpc.next_background_task_id();
-                    core_rpc
-                        .background_task_queued(id, "Scanning git status".into());
-                    Some(id)
-                } else {
-                    None
-                };
-                let task_id_projects = if workspace.is_some() {
-                    let id = core_rpc.next_background_task_id();
-                    core_rpc.background_task_queued(id, "Detecting projects".into());
-                    Some(id)
-                } else {
-                    None
-                };
                 let task_id_shell = {
                     let id = core_rpc.next_background_task_id();
                     core_rpc.background_task_queued(
@@ -144,61 +131,11 @@ impl ProxyHandler for Dispatcher {
                 thread::spawn(move || {
                     tracing::info!("[bg-thread] Background thread started");
 
-                    // Git file statuses can be very slow on large repos
-                    // (scans all files including node_modules, etc.)
-                    if let Some(ws) = workspace.as_ref() {
-                        let task_id = task_id_git.unwrap();
-                        core_rpc.background_task_started(
-                            task_id,
-                            "Scanning git status".into(),
-                        );
-                        tracing::info!("[bg-thread] Reading git file statuses...");
-                        let statuses = read_git_file_statuses(ws);
-                        tracing::info!(
-                            "[bg-thread] Git file statuses done ({} entries)",
-                            statuses.len()
-                        );
-                        core_rpc.git_file_status_changed(statuses.clone());
-                        *git_status_cache.lock() = Some(statuses);
-                        core_rpc.background_task_finished(task_id);
-                    }
-                    // Detect sub-projects
-                    let mut projects = if let Some(ws) = workspace.as_ref() {
-                        let task_id = task_id_projects.unwrap();
-                        core_rpc.background_task_started(
-                            task_id,
-                            "Detecting projects".into(),
-                        );
-                        tracing::info!(
-                            "[bg-thread] Detecting projects in {:?}...",
-                            ws
-                        );
-                        let p = crate::project::detect_projects(ws);
-                        tracing::info!("[bg-thread] Detected {} projects", p.len());
-                        core_rpc.background_task_finished(task_id);
-                        p
-                    } else {
-                        Vec::new()
-                    };
+                    // Git status is now fetched lazily: per-directory on ReadDir
+                    // and incrementally by the file watcher.  No upfront full scan.
 
-                    // Populate lsp_servers from the static config table
-                    // (doesn't need shell env)
-                    for project in &mut projects {
-                        project.lsp_servers = project
-                            .languages
-                            .first()
-                            .map(|lang| {
-                                crate::lsp::manager::lsp_servers_for_language(lang)
-                                    .into_iter()
-                                    .map(|s| s.to_string())
-                                    .collect()
-                            })
-                            .unwrap_or_default();
-                    }
-
-                    // Send projects to UI. Tool versions and version manager
-                    // will be enriched lazily when LSP servers activate.
-                    core_rpc.projects_detected(projects.clone());
+                    // Projects are now discovered lazily when files are opened
+                    // (walk-up from file to find marker files). No upfront scan.
 
                     // Resolve default shell env (slow: spawns login shell)
                     core_rpc.background_task_started(
@@ -219,7 +156,7 @@ impl ProxyHandler for Dispatcher {
                     let mut manager = LspManager::new(
                         workspace,
                         lsp_rpc.clone(),
-                        projects,
+                        Vec::new(),
                         ruby_lsp_exclude_gems,
                         ruby_lsp_excluded_patterns,
                     );
@@ -791,6 +728,9 @@ impl ProxyHandler for Dispatcher {
             ReadDir { path } => {
                 tracing::info!("[dispatch] ReadDir request for {:?}", path);
                 let proxy_rpc = self.proxy_rpc.clone();
+                let core_rpc = self.core_rpc.clone();
+                let workspace = self.workspace.clone();
+                let git_cache = self.git_status_cache.clone();
                 thread::spawn(move || {
                     let result = fs::read_dir(&path)
                         .map(|entries| {
@@ -800,7 +740,10 @@ impl ProxyHandler for Dispatcher {
                                     entry
                                         .map(|e| FileNodeItem {
                                             path: e.path(),
-                                            is_dir: e.path().is_dir(),
+                                            is_dir: e
+                                                .file_type()
+                                                .map(|ft| ft.is_dir())
+                                                .unwrap_or(false),
                                             open: false,
                                             read: false,
                                             children: HashMap::new(),
@@ -822,6 +765,49 @@ impl ProxyHandler for Dispatcher {
                             );
                             RpcError::new(e.to_string())
                         });
+
+                    // Piggyback git status: fetch status for files in this
+                    // directory and send incremental updates to the UI.
+                    if let (Ok(ProxyResponse::ReadDirResponse { items }), Some(ws)) =
+                        (&result, workspace.as_ref())
+                    {
+                        let file_paths: Vec<PathBuf> =
+                            items.iter().map(|item| item.path.clone()).collect();
+                        if !file_paths.is_empty() {
+                            let statuses =
+                                read_git_file_statuses_for_paths(ws, &file_paths);
+                            // Merge into cache and send diff
+                            let mut cache = git_cache.lock();
+                            let cache_map = cache.get_or_insert_with(HashMap::new);
+                            let mut diff = HashMap::new();
+                            // For each file in the directory, determine its status
+                            for file_path in &file_paths {
+                                match statuses.get(file_path) {
+                                    Some(status) => {
+                                        if cache_map.get(file_path) != Some(status) {
+                                            cache_map.insert(
+                                                file_path.clone(),
+                                                status.clone(),
+                                            );
+                                            diff.insert(
+                                                file_path.clone(),
+                                                Some(status.clone()),
+                                            );
+                                        }
+                                    }
+                                    None => {
+                                        if cache_map.remove(file_path).is_some() {
+                                            diff.insert(file_path.clone(), None);
+                                        }
+                                    }
+                                }
+                            }
+                            if !diff.is_empty() {
+                                core_rpc.git_file_status_diff(diff);
+                            }
+                        }
+                    }
+
                     match &result {
                         Ok(ProxyResponse::ReadDirResponse { items }) => {
                             tracing::info!(
@@ -1177,8 +1163,12 @@ impl ProxyHandler for Dispatcher {
                     });
             }
             ReferencesResolve { items } => {
+                // Cap at 100 to avoid loading hundreds of files for
+                // widely-used symbols. The UI shows a scrollable list
+                // so the user can re-run with narrower scope if needed.
                 let items: Vec<FileLine> = items
                     .into_iter()
+                    .take(100)
                     .filter_map(|location| {
                         let Ok(path) = location.uri.to_file_path() else {
                             tracing::error!(
@@ -1258,6 +1248,7 @@ impl Dispatcher {
             excluded_directories: Vec::new(),
             semgrep_initialized: false,
             semgrep: None,
+            git_status_cache: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -1467,16 +1458,26 @@ impl FileWatchNotifier {
                     );
                     let incremental =
                         read_git_file_statuses_for_paths(workspace, &changed_paths);
+                    // Build a diff of only the changes to send to the app.
+                    let mut diff = HashMap::new();
                     // Remove old entries for changed paths — if a file was
                     // reverted to clean, the incremental check won't return
                     // it, so we must clear the stale entry.
                     for path in &changed_paths {
-                        cache_map.remove(path);
+                        if cache_map.remove(path).is_some()
+                            && !incremental.contains_key(path)
+                        {
+                            // Was dirty, now clean — send removal
+                            diff.insert(path.clone(), None);
+                        }
                     }
                     for (path, status) in incremental {
-                        cache_map.insert(path, status);
+                        cache_map.insert(path.clone(), status.clone());
+                        diff.insert(path, Some(status));
                     }
-                    core_rpc.git_file_status_changed(cache_map.clone());
+                    if !diff.is_empty() {
+                        core_rpc.git_file_status_diff(diff);
+                    }
                 }
                 core_rpc.background_task_finished(task_id);
             }

@@ -360,6 +360,8 @@ pub struct LspManager {
     language_project_to_server: HashMap<(String, PathBuf), Vec<PluginId>>,
     /// Tracks which (config_index, project_root) pairs have been activated
     activated_configs: HashSet<(usize, PathBuf)>,
+    /// Tracks (config_index, project_root) pairs that have a background install in progress
+    pending_installs: HashSet<(usize, PathBuf)>,
     /// Detected projects
     projects: Vec<ProjectInfo>,
     /// Whether to exclude all gems from ruby-lsp indexing
@@ -382,24 +384,60 @@ impl LspManager {
             servers: HashMap::new(),
             language_project_to_server: HashMap::new(),
             activated_configs: HashSet::new(),
+            pending_installs: HashSet::new(),
             projects,
             ruby_lsp_exclude_gems,
             ruby_lsp_excluded_patterns,
         }
     }
 
-    /// Find the longest matching project root that is a prefix of `path`.
-    fn find_project_root_for_path(&self, path: &std::path::Path) -> Option<PathBuf> {
-        self.projects
+    /// Find the project root for a file, discovering it lazily if not yet known.
+    ///
+    /// First checks cached projects, then walks up from the file looking for
+    /// marker files. Newly discovered projects are cached and sent to the UI.
+    fn find_or_discover_project_root(
+        &mut self,
+        path: &std::path::Path,
+    ) -> Option<PathBuf> {
+        // Check already-known projects first (O(n) but n is small)
+        if let Some(root) = self
+            .projects
             .iter()
             .filter(|p| path.starts_with(&p.root))
             .max_by_key(|p| p.root.components().count())
             .map(|p| p.root.clone())
+        {
+            return Some(root);
+        }
+
+        // Walk up from the file to discover a new project
+        let mut project =
+            crate::project::find_project_for_file(path, self.workspace.as_deref())?;
+
+        // Populate lsp_servers from static config
+        project.lsp_servers = project
+            .languages
+            .first()
+            .map(|lang| {
+                lsp_servers_for_language(lang)
+                    .into_iter()
+                    .map(|s| s.to_string())
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        let root = project.root.clone();
+        self.projects.push(project);
+        // Sort by depth (shallowest first) for consistent ordering
+        self.projects.sort_by_key(|p| p.root.components().count());
+        self.lsp_rpc.projects_detected(self.projects.clone());
+
+        Some(root)
     }
 
     /// Get the effective project root for a file path, falling back to workspace.
-    fn effective_project_root(&self, path: Option<&std::path::Path>) -> PathBuf {
-        path.and_then(|p| self.find_project_root_for_path(p))
+    fn effective_project_root(&mut self, path: Option<&std::path::Path>) -> PathBuf {
+        path.and_then(|p| self.find_or_discover_project_root(p))
             .or_else(|| self.workspace.clone())
             .unwrap_or_default()
     }
@@ -474,7 +512,7 @@ impl LspManager {
 
     /// Try to activate all matching servers for the given language and project
     /// root. Multiple configs can match (e.g. ruby-lsp + sorbet for Ruby).
-    fn ensure_server_for_language(
+    pub fn ensure_server_for_language(
         &mut self,
         language_id: &str,
         project_root: &PathBuf,
@@ -485,6 +523,8 @@ impl LspManager {
             if self.activated_configs.contains(&activation_key) {
                 continue;
             }
+            // Clear pending install flag on retry so the server can activate
+            self.pending_installs.remove(&activation_key);
             if !config.languages.contains(&language_id) {
                 continue;
             }
@@ -587,21 +627,17 @@ impl LspManager {
             // command as-is.
             let resolved_command = match &config.auto_install {
                 AutoInstall::Npm { package } => {
-                    match self.resolve_npm_server(config, package) {
+                    match self.resolve_npm_server_or_install_async(
+                        config,
+                        package,
+                        language_id,
+                        project_root,
+                        &activation_key,
+                    ) {
                         Ok(path) => path,
-                        Err(err) => {
-                            tracing::error!(
-                                "Failed to set up npm LSP server {}: {:?}",
-                                config.display_name,
-                                err,
-                            );
-                            self.lsp_rpc.show_message(
-                                format!("LSP: {}", config.display_name),
-                                ShowMessageParams {
-                                    typ: MessageType::WARNING,
-                                    message: format!("{err}"),
-                                },
-                            );
+                        Err(_) => {
+                            // Install is running in background, or failed.
+                            // Will retry via RetryServerActivation when done.
                             self.lsp_rpc.background_task_finished(task_id);
                             continue;
                         }
@@ -636,35 +672,76 @@ impl LspManager {
                     );
                 }
                 Err(first_err) => {
-                    // For gem-based servers, try auto-installing then retry.
-                    let mut installed = false;
+                    // For gem-based servers, spawn a background install thread
+                    // so we don't block the LSP manager from processing other messages.
                     if let AutoInstall::Gem { gem } = &config.auto_install {
-                        if self.try_gem_install(config, gem, &env).is_ok() {
-                            // Retry after install
-                            if let Ok(client) = LspClient::start(
-                                self.lsp_rpc.clone(),
-                                server_workspace,
-                                config.display_name,
-                                &resolved_command,
-                                config.args,
-                                config.languages,
-                                init_options,
-                                env,
-                                config.semantic_tokens,
-                                settings,
-                            ) {
-                                self.register_server(
-                                    client,
-                                    activation_key,
-                                    config,
-                                    project_root,
+                        if !self.pending_installs.contains(&activation_key) {
+                            self.pending_installs.insert(activation_key.clone());
+                            let lsp_rpc = self.lsp_rpc.clone();
+                            let gem = gem.to_string();
+                            let display_name = config.display_name.to_string();
+                            let env = env.clone();
+                            let language_id = language_id.to_string();
+                            let project_root = project_root.clone();
+                            std::thread::spawn(move || {
+                                let gem_cmd = match find_command_in_env("gem", &env)
+                                {
+                                    Some(cmd) => cmd,
+                                    None => return,
+                                };
+                                let task_id = lsp_rpc.next_background_task_id();
+                                lsp_rpc.background_task_started(
+                                    task_id,
+                                    format!("Installing gem: {gem}"),
                                 );
-                                installed = true;
-                            }
+                                tracing::info!("Background installing gem {}", gem);
+                                match Command::new(&gem_cmd)
+                                    .args(["install", &gem])
+                                    .envs(env.as_ref())
+                                    .output()
+                                {
+                                    Ok(output) if output.status.success() => {
+                                        tracing::info!(
+                                            "Successfully installed gem {}",
+                                            gem
+                                        );
+                                        lsp_rpc.background_task_finished(task_id);
+                                        // Notify LSP manager to retry
+                                        lsp_rpc.retry_server_activation(
+                                            language_id,
+                                            project_root,
+                                        );
+                                    }
+                                    Ok(output) => {
+                                        let stderr =
+                                            String::from_utf8_lossy(&output.stderr);
+                                        tracing::error!(
+                                            "gem install {} failed: {}",
+                                            gem,
+                                            stderr.trim()
+                                        );
+                                        lsp_rpc.show_message(
+                                            format!("LSP: {display_name}"),
+                                            ShowMessageParams {
+                                                typ: MessageType::WARNING,
+                                                message: format!(
+                                                    "gem install {gem} failed: {}",
+                                                    stderr.trim()
+                                                ),
+                                            },
+                                        );
+                                        lsp_rpc.background_task_finished(task_id);
+                                    }
+                                    Err(e) => {
+                                        tracing::error!(
+                                            "Failed to run gem install: {e}"
+                                        );
+                                        lsp_rpc.background_task_finished(task_id);
+                                    }
+                                }
+                            });
                         }
-                    }
-
-                    if !installed {
+                    } else {
                         tracing::error!(
                             "Failed to start LSP server {} for project {:?}: {:?}",
                             config.display_name,
@@ -838,11 +915,134 @@ impl LspManager {
         }
     }
 
+    /// Check if the npm server binary exists. If not, spawn a background
+    /// install thread and return Err. The thread will send RetryServerActivation
+    /// when done.
+    fn resolve_npm_server_or_install_async(
+        &mut self,
+        config: &LspServerConfig,
+        package: &str,
+        language_id: &str,
+        project_root: &PathBuf,
+        activation_key: &(usize, PathBuf),
+    ) -> Result<String, String> {
+        let servers_dir = Directory::lsp_servers_directory()
+            .ok_or("Could not determine Lapce data directory")?;
+        let prefix_dir = servers_dir.join(package);
+        let bin_path = prefix_dir
+            .join("node_modules")
+            .join(".bin")
+            .join(config.command);
+
+        if bin_path.exists() {
+            return Ok(bin_path.to_string_lossy().into_owned());
+        }
+
+        // Already installing — don't spawn another thread
+        if self.pending_installs.contains(activation_key) {
+            return Err("install in progress".to_string());
+        }
+
+        self.pending_installs.insert(activation_key.clone());
+        let lsp_rpc = self.lsp_rpc.clone();
+        let package = package.to_string();
+        let display_name = config.display_name.to_string();
+        let command = config.command.to_string();
+        let language_id = language_id.to_string();
+        let project_root = project_root.clone();
+
+        std::thread::spawn(move || {
+            let env = lsp_rpc.shell_env_for_project(None);
+            let npm_cmd = match find_command_in_env("npm", &env) {
+                Some(cmd) => cmd,
+                None => {
+                    lsp_rpc.show_message(
+                        format!("LSP: {display_name}"),
+                        ShowMessageParams {
+                            typ: MessageType::WARNING,
+                            message: format!(
+                                "Could not start {display_name}: 'npm' was not found on your PATH."
+                            ),
+                        },
+                    );
+                    return;
+                }
+            };
+
+            let task_id = lsp_rpc.next_background_task_id();
+            lsp_rpc
+                .background_task_started(task_id, format!("Installing {package}"));
+            lsp_rpc.show_message(
+                format!("LSP: {display_name}"),
+                ShowMessageParams {
+                    typ: MessageType::INFO,
+                    message: format!(
+                        "Installing {display_name}... This is a one-time setup."
+                    ),
+                },
+            );
+
+            tracing::info!(
+                "Background installing {} via npm into {:?}",
+                package,
+                prefix_dir
+            );
+            match Command::new(&npm_cmd)
+                .args(["install", "--prefix"])
+                .arg(&prefix_dir)
+                .arg(&package)
+                .envs(env.as_ref())
+                .output()
+            {
+                Ok(output) if output.status.success() => {
+                    let expected_bin =
+                        prefix_dir.join("node_modules").join(".bin").join(&command);
+                    if expected_bin.exists() {
+                        tracing::info!("Successfully installed {}", package);
+                        lsp_rpc.background_task_finished(task_id);
+                        lsp_rpc.retry_server_activation(language_id, project_root);
+                    } else {
+                        tracing::error!(
+                            "npm install succeeded but binary not found: {:?}",
+                            expected_bin
+                        );
+                        lsp_rpc.background_task_finished(task_id);
+                    }
+                }
+                Ok(output) => {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    tracing::error!(
+                        "npm install {} failed: {}",
+                        package,
+                        stderr.trim()
+                    );
+                    lsp_rpc.show_message(
+                        format!("LSP: {display_name}"),
+                        ShowMessageParams {
+                            typ: MessageType::WARNING,
+                            message: format!(
+                                "npm install {package} failed: {}",
+                                stderr.trim()
+                            ),
+                        },
+                    );
+                    lsp_rpc.background_task_finished(task_id);
+                }
+                Err(e) => {
+                    tracing::error!("Failed to run npm install: {e}");
+                    lsp_rpc.background_task_finished(task_id);
+                }
+            }
+        });
+
+        Err("install started in background".to_string())
+    }
+
     /// Look up all servers for a given language and file path.
     /// Falls back to a parent project root's server when the deepest match
     /// was skipped (covered by parent).
     fn find_servers_for_path(
-        &self,
+        &mut self,
         language_id: &str,
         path: Option<&std::path::Path>,
     ) -> Vec<PluginId> {
@@ -884,7 +1084,10 @@ impl LspManager {
                     let belongs = path.as_ref().is_some_and(|p| {
                         if project_root.as_os_str().is_empty() {
                             // Fallback root: only replay files not in any project
-                            self.find_project_root_for_path(p).is_none()
+                            !self
+                                .projects
+                                .iter()
+                                .any(|proj| p.starts_with(&proj.root))
                         } else {
                             p.starts_with(project_root)
                         }

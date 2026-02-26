@@ -91,10 +91,10 @@ impl WindowData {
         window_scale: RwSignal<f64>,
         latest_release: ReadSignal<Arc<Option<ReleaseInfo>>>,
         app_command: Listener<AppCommand>,
+        app_config: ReadSignal<Arc<LapceConfig>>,
     ) -> Self {
         let cx = Scope::new();
-        let config = LapceConfig::load(&LapceWorkspace::default());
-        let config = cx.create_rw_signal(Arc::new(config));
+        let config = cx.create_rw_signal(app_config.get_untracked());
         let root_view_id = cx.create_rw_signal(ViewId::new());
 
         let window_command = Listener::new_empty(cx);
@@ -147,9 +147,8 @@ impl WindowData {
         window_data
     }
 
-    pub fn reload_config(&self) {
-        let config = LapceConfig::load(&LapceWorkspace::default());
-        self.config.set(Arc::new(config));
+    pub fn reload_config(&self, app_config: Arc<LapceConfig>) {
+        self.config.set(app_config);
         self.workspace.reload_config();
     }
 

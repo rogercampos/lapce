@@ -247,6 +247,9 @@ pub struct Doc {
     /// A cache for the sticky headers which maps a line to the lines it should show in the header.
     pub sticky_headers: Rc<RefCell<HashMap<usize, Option<Vec<usize>>>>>,
 
+    /// Per-line phantom text cache.  Cleared by `clear_text_cache()`.
+    phantom_text_cache: Rc<RefCell<HashMap<usize, PhantomTextLine>>>,
+
     pub preedit: PreeditData,
 
     /// The diagnostics for the document
@@ -290,6 +293,7 @@ impl Doc {
             content: cx.create_rw_signal(content),
             loaded: cx.create_rw_signal(loaded),
             sticky_headers: Rc::new(RefCell::new(HashMap::new())),
+            phantom_text_cache: Rc::new(RefCell::new(HashMap::new())),
             code_actions: cx.create_rw_signal(im::HashMap::new()),
             preedit: PreeditData::new(cx),
             editors,
@@ -818,6 +822,7 @@ impl Doc {
 
     /// Inform any dependents on this document that they should clear any cached text.
     pub fn clear_text_cache(&self) {
+        self.phantom_text_cache.borrow_mut().clear();
         self.cache_rev.try_update(|cache_rev| {
             *cache_rev += 1;
 
@@ -1439,6 +1444,10 @@ impl DocumentPhantom for Doc {
         _: &EditorStyle,
         line: usize,
     ) -> PhantomTextLine {
+        if let Some(cached) = self.phantom_text_cache.borrow().get(&line) {
+            return cached.clone();
+        }
+
         let config = &self.common.config.get_untracked();
 
         let (start_offset, end_offset) = self.buffer.with_untracked(|buffer| {
@@ -1670,7 +1679,11 @@ impl DocumentPhantom for Doc {
             }
         });
 
-        PhantomTextLine { text }
+        let result = PhantomTextLine { text };
+        self.phantom_text_cache
+            .borrow_mut()
+            .insert(line, result.clone());
+        result
     }
 
     fn has_multiline_phantom(&self, _: EditorId, _: &EditorStyle) -> bool {

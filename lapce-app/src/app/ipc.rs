@@ -105,7 +105,7 @@ pub fn try_open_in_existing_process(
         tx.send(received)
     });
 
-    let received = rx.recv_timeout(std::time::Duration::from_millis(500))?;
+    let received = rx.recv_timeout(std::time::Duration::from_millis(100))?;
     if !received {
         return Err(anyhow!("didn't receive response"));
     }

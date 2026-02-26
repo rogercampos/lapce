@@ -1,6 +1,5 @@
 use std::{
     borrow::Cow,
-    ffi::OsString,
     fs,
     fs::File,
     io::{Read, Write},
@@ -69,10 +68,15 @@ impl Buffer {
         }
     }
 
-    /// Saves the buffer to disk using a backup-and-replace strategy:
-    /// 1. Copy original to .bak (crash safety -- if write fails, .bak survives)
-    /// 2. Truncate and write the new content
-    /// 3. Remove .bak on success
+    /// Saves the buffer to disk using an atomic write-to-temp-then-rename
+    /// strategy:
+    /// 1. Write new content to a temporary file in the same directory
+    /// 2. Sync to disk
+    /// 3. Atomically rename over the original
+    ///
+    /// On crash, either the old file or the new file exists — never a
+    /// corrupted mix. For symlinks, we write through to the real path so the
+    /// link is preserved.
     ///
     /// The `rev` check ensures we don't save stale content if the buffer was
     /// modified between the save request being sent and arriving here.
@@ -84,27 +88,14 @@ impl Buffer {
         if self.rev != rev {
             return Err(anyhow!("not the right rev"));
         }
-        let bak_extension = self.path.extension().map_or_else(
-            || OsString::from("bak"),
-            |ext| {
-                let mut ext = ext.to_os_string();
-                ext.push(".bak");
-                ext
-            },
-        );
-        // Resolve symlinks so we write to the actual file, not replace the symlink
-        // with a regular file (which would break the link).
+
+        // Resolve symlinks so we write to the actual file, not replace the
+        // symlink with a regular file (which would break the link).
         let path = if self.path.is_symlink() {
             self.path.canonicalize()?
         } else {
             self.path.clone()
         };
-        let new_file = !path.exists();
-
-        let bak_file_path = &path.with_extension(bak_extension);
-        if !new_file {
-            fs::copy(&path, bak_file_path)?;
-        }
 
         if create_parents {
             if let Some(parent) = path.parent() {
@@ -112,19 +103,21 @@ impl Buffer {
             }
         }
 
+        // Write to a temp file in the same directory (ensures same filesystem
+        // for atomic rename).
+        let tmp_path = path.with_extension("lapce-tmp");
         let mut f = fs::OpenOptions::new()
             .create(true)
             .write(true)
             .truncate(true)
-            .open(&path)?;
+            .open(&tmp_path)?;
         for chunk in self.rope.iter_chunks(..self.rope.len()) {
             f.write_all(chunk.as_bytes())?;
         }
+        f.sync_all()?;
 
+        fs::rename(&tmp_path, &path)?;
         self.mod_time = get_mod_time(&path);
-        if !new_file {
-            fs::remove_file(bak_file_path)?;
-        }
 
         Ok(())
     }

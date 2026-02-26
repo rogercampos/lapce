@@ -104,6 +104,7 @@ impl VirtualVector<SearchTreeRow> for SearchTreeVirtualList {
 }
 
 /// Internal tree node used during tree construction.
+#[derive(PartialEq)]
 enum TreeEntry {
     Folder {
         name: String,
@@ -296,23 +297,29 @@ impl GlobalSearchData {
         let lazy = cx.create_rw_signal(false);
         let search_path: RwSignal<Option<PathBuf>> = cx.create_rw_signal(None);
 
-        // Build the search_tree_rows Memo from panel_search_result (not
-        // search_result) so the bottom panel only updates when explicitly
-        // committed, not during live modal typing.
-        let search_tree_rows = {
+        // Two-stage Memo: first builds the tree (only when results change),
+        // then flattens it (when tree or collapsed state changes).  This way
+        // toggling a folder/file only re-flattens, skipping the tree build.
+        let search_tree = {
             let workspace = workspace.clone();
             cx.create_memo(move |_| {
                 let results = panel_search_result.get();
                 if results.is_empty() {
+                    return Rc::new(BTreeMap::new());
+                }
+                let workspace_path = workspace.path.as_deref();
+                Rc::new(build_search_tree(&results, workspace_path))
+            })
+        };
+
+        let search_tree_rows = {
+            cx.create_memo(move |_| {
+                let tree = search_tree.get();
+                if tree.is_empty() {
                     return Vec::new();
                 }
-
                 let collapsed_f = collapsed_folders.get();
                 let collapsed_fi = collapsed_files.get();
-
-                let workspace_path = workspace.path.as_deref();
-                let tree = build_search_tree(&results, workspace_path);
-
                 let mut rows = Vec::new();
                 flatten_tree_entries(
                     &tree,
@@ -460,12 +467,12 @@ impl GlobalSearchData {
 
     /// Append a batch of incremental search results (from streaming search).
     /// Each file path in the batch is guaranteed to be new (not already in the results).
+    ///
+    /// While streaming is in progress (`searching` is true), only the live
+    /// `search_result` is updated (consumed by the modal's flat list). The
+    /// panel's tree view (`panel_search_result`) is synced once at the end
+    /// via `mark_search_done()` to avoid rebuilding the tree on every batch.
     pub fn append_matches(&self, matches: IndexMap<PathBuf, Vec<SearchMatch>>) {
-        // Ordering: read modal_active before updating search_result so the
-        // check is consistent. All signals are single-threaded (Floem reactive),
-        // so there is no multi-thread race, but reading modal_active first ensures
-        // we don't propagate partial updates to the panel while the modal is open.
-        let is_modal = self.modal_active.get_untracked();
         self.search_result.update(|current| {
             for (path, new_matches) in matches {
                 let match_data = SearchMatchData {
@@ -474,7 +481,13 @@ impl GlobalSearchData {
                 current.insert(path, match_data);
             }
         });
-        if !is_modal {
+    }
+
+    /// Called when the proxy signals GlobalSearchDone. Syncs the accumulated
+    /// results to the panel tree and clears the searching flag.
+    pub fn mark_search_done(&self) {
+        self.searching.set(false);
+        if !self.modal_active.get_untracked() {
             let results = self.search_result.get_untracked();
             self.panel_search_result.set(results);
         }

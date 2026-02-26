@@ -138,6 +138,12 @@ pub enum LspRpc {
         text: Rope,
     },
     Shutdown,
+    /// Sent by background install threads (gem/npm) to retry server activation
+    /// after a successful install.
+    RetryServerActivation {
+        language_id: String,
+        project_root: PathBuf,
+    },
 }
 
 #[derive(Clone)]
@@ -325,6 +331,12 @@ impl LspRpcHandler {
                         new_text,
                     );
                 }
+                LspRpc::RetryServerActivation {
+                    language_id,
+                    project_root,
+                } => {
+                    manager.ensure_server_for_language(&language_id, &project_root);
+                }
                 LspRpc::Shutdown => {
                     manager.shutdown();
                     return;
@@ -337,6 +349,17 @@ impl LspRpcHandler {
         if let Err(err) = self.lsp_tx.send(LspRpc::Shutdown) {
             tracing::error!("{:?}", err);
         }
+    }
+
+    pub fn retry_server_activation(
+        &self,
+        language_id: String,
+        project_root: PathBuf,
+    ) {
+        let _ = self.lsp_tx.send(LspRpc::RetryServerActivation {
+            language_id,
+            project_root,
+        });
     }
 
     pub(crate) fn send_request<P: Serialize>(

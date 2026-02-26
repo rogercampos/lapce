@@ -1676,6 +1676,20 @@ impl WorkspaceData {
             CoreNotification::GitFileStatusChanged { statuses } => {
                 self.git_file_statuses.set(statuses.clone());
             }
+            CoreNotification::GitFileStatusDiff { changes } => {
+                self.git_file_statuses.update(|statuses| {
+                    for (path, status) in changes {
+                        match status {
+                            Some(s) => {
+                                statuses.insert(path.clone(), s.clone());
+                            }
+                            None => {
+                                statuses.remove(path);
+                            }
+                        }
+                    }
+                });
+            }
             CoreNotification::WorkspaceFileChange => {
                 self.file_explorer.reload();
             }
@@ -1704,15 +1718,16 @@ impl WorkspaceData {
                 }
             }
             CoreNotification::GlobalSearchDone { search_id } => {
-                // Mark the matching GlobalSearchData as no longer searching.
+                // Mark the matching GlobalSearchData as no longer searching
+                // and sync results to the panel tree.
                 if self.global_search.current_search_id.get_untracked() == *search_id
                 {
-                    self.global_search.searching.set(false);
+                    self.global_search.mark_search_done();
                 } else {
                     self.search_tabs.tabs.with_untracked(|tabs| {
                         for gs in tabs.iter() {
                             if gs.current_search_id.get_untracked() == *search_id {
-                                gs.searching.set(false);
+                                gs.mark_search_done();
                                 break;
                             }
                         }

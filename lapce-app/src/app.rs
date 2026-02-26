@@ -138,14 +138,14 @@ pub struct AppData {
 
 impl AppData {
     pub fn reload_config(&self) {
-        let config = LapceConfig::load(&LapceWorkspace::default());
+        let config = Arc::new(LapceConfig::load(&LapceWorkspace::default()));
 
-        self.config.set(Arc::new(config));
-        self.window_scale.set(self.config.get().ui.scale());
+        self.config.set(config.clone());
+        self.window_scale.set(config.ui.scale());
 
         let windows = self.windows.get_untracked();
         for (_, window) in windows {
-            window.reload_config();
+            window.reload_config(config.clone());
         }
     }
 
@@ -424,6 +424,7 @@ impl AppData {
             self.window_scale,
             self.latest_release.read_only(),
             self.app_command,
+            self.config.read_only(),
         );
 
         {
@@ -1070,8 +1071,11 @@ pub fn launch() {
 
     let stdin = std::io::stdin();
     if !stdin.is_terminal() {
-        trace!(TraceLevel::INFO, "Loading custom environment from shell");
-        ipc::load_shell_env();
+        trace!(
+            TraceLevel::INFO,
+            "Loading custom environment from shell (background)"
+        );
+        std::thread::spawn(|| ipc::load_shell_env());
     }
 
     // When launched from a terminal without --wait, re-spawn ourselves as a detached child

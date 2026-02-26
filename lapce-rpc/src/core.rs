@@ -123,6 +123,11 @@ pub enum CoreNotification {
     GitFileStatusChanged {
         statuses: HashMap<PathBuf, GitFileStatus>,
     },
+    /// Incremental git status update: carries only the changed entries.
+    /// `None` values mean the file reverted to clean (remove from map).
+    GitFileStatusDiff {
+        changes: HashMap<PathBuf, Option<GitFileStatus>>,
+    },
     PublishDiagnostics {
         diagnostics: PublishDiagnosticsParams,
     },
@@ -261,6 +266,13 @@ impl CoreRpcHandler {
         statuses: HashMap<PathBuf, GitFileStatus>,
     ) {
         self.notification(CoreNotification::GitFileStatusChanged { statuses });
+    }
+
+    pub fn git_file_status_diff(
+        &self,
+        changes: HashMap<PathBuf, Option<GitFileStatus>>,
+    ) {
+        self.notification(CoreNotification::GitFileStatusDiff { changes });
     }
 
     pub fn open_file_changed(&self, path: PathBuf, content: FileChanged) {

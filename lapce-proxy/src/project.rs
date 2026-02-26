@@ -1,74 +1,68 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use lapce_rpc::project::{ProjectInfo, ProjectKind};
 
-/// Detect sub-projects within a workspace by walking the directory tree
-/// and looking for well-known marker files (Cargo.toml, Gemfile, etc.).
+/// Find the project root for a given file by walking UP the directory tree.
 ///
-/// Uses `ignore::WalkBuilder` to respect `.gitignore` rules.
-/// Max depth of 5 levels as a safety net against deeply nested repos.
-pub fn detect_projects(workspace: &Path) -> Vec<ProjectInfo> {
-    let mut projects = Vec::new();
+/// For each ancestor directory (starting from the file's parent), checks for
+/// well-known marker files. Returns the deepest match (closest ancestor with
+/// a marker), which handles nested projects correctly (e.g., a Rust workspace
+/// containing a sub-crate).
+///
+/// This is O(depth × marker_count) — typically ~7 directories × ~12 markers
+/// = ~84 stat calls, completing in <1ms.
+pub fn find_project_for_file(
+    file_path: &Path,
+    workspace: Option<&Path>,
+) -> Option<ProjectInfo> {
+    let start = if file_path.is_file() {
+        file_path.parent()?
+    } else {
+        file_path
+    };
 
-    let walker = ignore::WalkBuilder::new(workspace)
-        .max_depth(Some(5))
-        .hidden(false)
-        .parents(false)
-        .require_git(false)
-        .build();
-
-    for entry in walker.flatten() {
-        if !entry.file_type().is_some_and(|ft| ft.is_file()) {
-            continue;
-        }
-
-        let file_name = match entry.file_name().to_str() {
-            Some(name) => name,
-            None => continue,
-        };
-
-        // Log marker file candidates for debugging
-        if ProjectKind::all()
-            .iter()
-            .any(|k| k.marker_files().contains(&file_name))
-        {
-            tracing::info!(
-                "[detect] Walker found marker candidate: {:?}",
-                entry.path()
-            );
-        }
-
+    // Walk up from the file's directory to the workspace root (or filesystem root).
+    let mut current = start;
+    loop {
         for kind in ProjectKind::all() {
-            if kind.marker_files().contains(&file_name) {
-                let root = match entry.path().parent() {
-                    Some(parent) => parent.to_path_buf(),
-                    None => continue,
-                };
+            for marker in kind.marker_files() {
+                if current.join(marker).exists() {
+                    let languages: Vec<String> =
+                        kind.lsp_languages().iter().map(|s| s.to_string()).collect();
 
-                let languages: Vec<String> =
-                    kind.lsp_languages().iter().map(|s| s.to_string()).collect();
+                    tracing::info!(
+                        "[project] Found {:?} project at {:?} (marker: {}, from file: {:?})",
+                        kind,
+                        current,
+                        marker,
+                        file_path,
+                    );
 
-                tracing::info!(
-                    "[detect] Found {:?} project at {:?} (marker: {})",
-                    kind,
-                    root,
-                    file_name
-                );
-                projects.push(ProjectInfo {
-                    root,
-                    kind: kind.clone(),
-                    languages,
-                    marker_file: file_name.to_string(),
-                    tool_versions: Vec::new(),
-                    version_manager: None,
-                    lsp_servers: Vec::new(),
-                });
+                    return Some(ProjectInfo {
+                        root: current.to_path_buf(),
+                        kind: kind.clone(),
+                        languages,
+                        marker_file: marker.to_string(),
+                        tool_versions: Vec::new(),
+                        version_manager: None,
+                        lsp_servers: Vec::new(),
+                    });
+                }
             }
+        }
+
+        // Stop at workspace root — don't walk above it.
+        if let Some(ws) = workspace {
+            if current == ws {
+                break;
+            }
+        }
+
+        match current.parent() {
+            Some(parent) if parent != current => current = parent,
+            _ => break,
         }
     }
 
-    // Sort by path depth (shallowest first)
-    projects.sort_by_key(|p| p.root.components().count());
-
-    projects
+    None
 }
