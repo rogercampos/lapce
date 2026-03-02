@@ -1620,29 +1620,6 @@ impl MainSplitData {
                         }
                     })
                     .collect(),
-                TabCloseKind::CloseToLeft => {
-                    let mut tabs_to_close = Vec::new();
-                    for child_tab in &editor_tab.children {
-                        if child_tab.2 != child {
-                            tabs_to_close.push(child_tab.2.clone());
-                        } else {
-                            break;
-                        }
-                    }
-                    tabs_to_close
-                }
-                TabCloseKind::CloseToRight => {
-                    let mut tabs_to_close = Vec::new();
-                    let mut found_target = false;
-                    for child_tab in &editor_tab.children {
-                        if child_tab.2 == child {
-                            found_target = true;
-                        } else if found_target {
-                            tabs_to_close.push(child_tab.2.clone());
-                        }
-                    }
-                    tabs_to_close
-                }
             }
         };
         for child_tab in tabs_to_close {
@@ -2511,6 +2488,4 @@ fn workspace_edits(edit: &WorkspaceEdit) -> Option<HashMap<Url, Vec<TextEdit>>> 
 #[derive(Clone, Copy, Debug)]
 pub enum TabCloseKind {
     CloseOther,
-    CloseToLeft,
-    CloseToRight,
 }

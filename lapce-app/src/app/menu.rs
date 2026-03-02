@@ -233,8 +233,6 @@ pub(crate) fn tab_secondary_click(
 ) {
     let mut menu = Menu::new("");
     let child_other = child.clone();
-    let child_right = child.clone();
-    let child_left = child.clone();
     menu = menu
         .entry(MenuItem::new("Close").action(move || {
             internal_command.send(InternalCommand::EditorTabChildClose {
@@ -251,20 +249,6 @@ pub(crate) fn tab_secondary_click(
         }))
         .entry(MenuItem::new("Close All Tabs").action(move || {
             internal_command.send(InternalCommand::EditorTabClose { editor_tab_id });
-        }))
-        .entry(MenuItem::new("Close Tabs to the Right").action(move || {
-            internal_command.send(InternalCommand::EditorTabCloseByKind {
-                editor_tab_id,
-                child: child_right.clone(),
-                kind: TabCloseKind::CloseToRight,
-            });
-        }))
-        .entry(MenuItem::new("Close Tabs to the Left").action(move || {
-            internal_command.send(InternalCommand::EditorTabCloseByKind {
-                editor_tab_id,
-                child: child_left.clone(),
-                kind: TabCloseKind::CloseToLeft,
-            });
         }));
     show_context_menu(menu, None);
 }
