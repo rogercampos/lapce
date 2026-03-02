@@ -519,8 +519,8 @@ fn go_to_file_content(workspace_data: Rc<WorkspaceData>) -> impl View {
     let filter_text = data.filter_text.read_only();
     let item_height = 25.0;
     let palette_width =
-        (config.get_untracked().ui.palette_width() as f64 * 1.3).round();
-    let initial_height = (layout_rect.get_untracked().height() * 0.55).round();
+        (config.get_untracked().ui.palette_width() as f64 * 1.6).round();
+    let initial_height = (layout_rect.get_untracked().height() * 0.75).round();
 
     let content = stack((
         go_to_file_input(data.clone(), config, focus),
