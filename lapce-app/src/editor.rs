@@ -2483,9 +2483,8 @@ impl EditorData {
         if self.active().get_untracked()
             && self.cursor().with_untracked(|c| c.offset()) != offset
         {
-            self.cursor().update(|cursor| {
-                cursor.set_offset(offset, true, pointer_event.modifiers.alt())
-            });
+            self.editor
+                .extend_drag_selection(offset, pointer_event.modifiers.alt());
         }
         self.update_diagnostic_hover(offset);
 

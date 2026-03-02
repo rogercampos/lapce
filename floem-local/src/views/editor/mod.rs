@@ -143,9 +143,25 @@ impl EditorStyle {
 
 pub(crate) const CHAR_WIDTH: f64 = 7.5;
 
-/// The main structure for the editor view itself.  
+/// Tracks the selection granularity during mouse drag operations.
+/// Set on double/triple click, cleared on single click and pointer up.
+#[derive(Clone, Copy)]
+pub enum DragMode {
+    /// Word-wise selection. Stores the original double-clicked word boundaries.
+    Word {
+        anchor_start: usize,
+        anchor_end: usize,
+    },
+    /// Line-wise selection. Stores the original triple-clicked line boundaries.
+    Line {
+        anchor_start: usize,
+        anchor_end: usize,
+    },
+}
+
+/// The main structure for the editor view itself.
 /// This can be considered to be the data part of the `View`.
-/// It holds an `Rc<dyn Document>` within as the document it is a view into.  
+/// It holds an `Rc<dyn Document>` within as the document it is a view into.
 #[derive(Clone)]
 pub struct Editor {
     pub cx: Cell<Scope>,
@@ -154,6 +170,9 @@ pub struct Editor {
     id: EditorId,
 
     pub active: RwSignal<bool>,
+
+    /// Tracks word/line selection granularity during drag after double/triple click.
+    pub drag_mode: Cell<Option<DragMode>>,
 
     /// Whether you can edit within this editor.
     pub read_only: RwSignal<bool>,
@@ -279,6 +298,7 @@ impl Editor {
             effects_cx: Cell::new(cx.create_child()),
             id,
             active: cx.create_rw_signal(false),
+            drag_mode: Cell::new(None),
             read_only: cx.create_rw_signal(false),
             doc,
             style,
@@ -525,6 +545,7 @@ impl Editor {
     }
 
     pub fn single_click(&self, pointer_event: &PointerInputEvent) {
+        self.drag_mode.set(None);
         let mode = self.cursor.with_untracked(|c| c.get_mode());
         let (new_offset, _) = self.offset_of_point(mode, pointer_event.pos);
         self.cursor.update(|cursor| {
@@ -540,6 +561,11 @@ impl Editor {
         let mode = self.cursor.with_untracked(|c| c.get_mode());
         let (mouse_offset, _) = self.offset_of_point(mode, pointer_event.pos);
         let (start, end) = self.select_word(mouse_offset);
+
+        self.drag_mode.set(Some(DragMode::Word {
+            anchor_start: start,
+            anchor_end: end,
+        }));
 
         self.cursor.update(|cursor| {
             cursor.add_region(
@@ -558,6 +584,11 @@ impl Editor {
         let start = self.offset_of_line(line);
         let end = self.offset_of_line(line + 1);
 
+        self.drag_mode.set(Some(DragMode::Line {
+            anchor_start: start,
+            anchor_end: end,
+        }));
+
         self.cursor.update(|cursor| {
             cursor.add_region(
                 start,
@@ -574,14 +605,77 @@ impl Editor {
         if self.active.get_untracked()
             && self.cursor.with_untracked(|c| c.offset()) != offset
         {
-            self.cursor.update(|cursor| {
-                cursor.set_offset(offset, true, pointer_event.modifiers.alt())
-            });
+            self.extend_drag_selection(offset, pointer_event.modifiers.alt());
         }
+    }
+
+    /// Extends the selection during a mouse drag operation.
+    /// Respects word/line drag modes set by double/triple click.
+    pub fn extend_drag_selection(&self, offset: usize, alt: bool) {
+        match self.drag_mode.get() {
+            Some(DragMode::Word {
+                anchor_start,
+                anchor_end,
+            }) => {
+                let (sel_anchor, sel_active) = if offset >= anchor_end {
+                    let (_, word_end) = self.select_word(offset);
+                    (anchor_start, word_end)
+                } else if offset < anchor_start {
+                    let (word_start, _) = self.select_word(offset);
+                    (anchor_end, word_start)
+                } else {
+                    (anchor_start, anchor_end)
+                };
+                self.set_drag_region(sel_anchor, sel_active);
+            }
+            Some(DragMode::Line {
+                anchor_start,
+                anchor_end,
+            }) => {
+                let (sel_anchor, sel_active) = if offset >= anchor_end {
+                    let line = self.line_of_offset(offset);
+                    (anchor_start, self.offset_of_line(line + 1))
+                } else if offset < anchor_start {
+                    let line = self.line_of_offset(offset);
+                    (anchor_end, self.offset_of_line(line))
+                } else {
+                    (anchor_start, anchor_end)
+                };
+                self.set_drag_region(sel_anchor, sel_active);
+            }
+            None => {
+                self.cursor.update(|cursor| {
+                    cursor.set_offset(offset, true, alt);
+                });
+            }
+        }
+    }
+
+    /// Sets the cursor selection for a drag operation, handling both Insert and
+    /// Visual cursor modes correctly.
+    fn set_drag_region(&self, anchor: usize, active: usize) {
+        self.cursor.update(|cursor| match &cursor.mode {
+            CursorMode::Visual { mode, .. } => {
+                let (start, end) = if active > anchor {
+                    (anchor, active.saturating_sub(1))
+                } else {
+                    (anchor.saturating_sub(1), active)
+                };
+                cursor.mode = CursorMode::Visual {
+                    start,
+                    end,
+                    mode: *mode,
+                };
+            }
+            _ => {
+                cursor.set_insert(Selection::region(anchor, active));
+            }
+        });
     }
 
     pub fn pointer_up(&self, _pointer_event: &PointerInputEvent) {
         self.active.set(false);
+        self.drag_mode.set(None);
     }
 
     fn right_click(&self, pointer_event: &PointerInputEvent) {
