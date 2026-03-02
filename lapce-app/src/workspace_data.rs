@@ -1010,22 +1010,30 @@ impl WorkspaceData {
                 self.toggle_container_visual(&PanelContainerPosition::Bottom);
             }
             ToggleSearchFocus => {
-                // If a folder is selected in the file explorer, pre-fill
-                // the search path filter with it.
-                let selected_folder = self
-                    .file_explorer
-                    .select
-                    .get_untracked()
-                    .and_then(|kind| kind.path().map(|p| p.to_path_buf()))
-                    .filter(|p| p.is_dir())
-                    .and_then(|p| {
-                        self.common
-                            .workspace
-                            .path
-                            .as_ref()
-                            .and_then(|ws| p.strip_prefix(ws).ok())
-                            .map(|rel| rel.to_path_buf())
-                    });
+                // Only pre-fill the search path filter from the file
+                // explorer when the explorer panel is focused. Otherwise
+                // clear it so that searching from an editor always
+                // searches the entire workspace.
+                let selected_folder = if matches!(
+                    self.common.focus.get_untracked(),
+                    Focus::Panel(PanelKind::FileExplorer)
+                ) {
+                    self.file_explorer
+                        .select
+                        .get_untracked()
+                        .and_then(|kind| kind.path().map(|p| p.to_path_buf()))
+                        .filter(|p| p.is_dir())
+                        .and_then(|p| {
+                            self.common
+                                .workspace
+                                .path
+                                .as_ref()
+                                .and_then(|ws| p.strip_prefix(ws).ok())
+                                .map(|rel| rel.to_path_buf())
+                        })
+                } else {
+                    None
+                };
                 self.search_modal_data
                     .global_search
                     .search_path
