@@ -1,6 +1,6 @@
 use std::{
     ops::Range,
-    path::PathBuf,
+    path::{Path, PathBuf},
     rc::Rc,
     sync::{
         Arc,
@@ -22,7 +22,8 @@ use floem::{
     },
 };
 use lapce_core::{
-    command::FocusCommand, mode::Mode, movement::Movement, selection::Selection,
+    command::FocusCommand, directory::Directory, mode::Mode, movement::Movement,
+    selection::Selection,
 };
 use lapce_xi_rope::Rope;
 use nucleo::Utf32Str;
@@ -133,10 +134,18 @@ impl GoToFileData {
         let (resp_tx, resp_rx) = channel();
         {
             let run_id = run_id_counter.clone();
+            let workspace_path = workspace.path.clone();
+            let home_dir = Directory::home_dir();
             std::thread::Builder::new()
                 .name("GoToFileFilterThread".to_owned())
                 .spawn(move || {
-                    Self::update_process(run_id, run_rx, resp_tx);
+                    Self::update_process(
+                        run_id,
+                        workspace_path,
+                        home_dir,
+                        run_rx,
+                        resp_tx,
+                    );
                 })
                 .unwrap();
         }
@@ -319,8 +328,45 @@ impl GoToFileData {
         Some(filtered_items)
     }
 
+    /// If the user input looks like an absolute path (or `~/...`) that falls
+    /// within the workspace root, strip the workspace prefix so it becomes a
+    /// relative path matching the `filter_text` stored in each `GoToFileItem`.
+    fn normalize_filter_input(
+        input: &str,
+        workspace_path: Option<&Path>,
+        home_dir: Option<&Path>,
+    ) -> String {
+        let workspace_path = match workspace_path {
+            Some(p) => p,
+            None => return input.to_string(),
+        };
+
+        let expanded;
+        let check_path = if input == "~" || input.starts_with("~/") {
+            if let Some(home) = home_dir {
+                expanded = format!("{}{}", home.display(), &input[1..]);
+                expanded.as_str()
+            } else {
+                return input.to_string();
+            }
+        } else if input.starts_with('/') {
+            input
+        } else {
+            return input.to_string();
+        };
+
+        let expanded_path = Path::new(check_path);
+        if let Ok(relative) = expanded_path.strip_prefix(workspace_path) {
+            relative.to_string_lossy().into_owned()
+        } else {
+            input.to_string()
+        }
+    }
+
     fn update_process(
         run_id: Arc<AtomicU64>,
+        workspace_path: Option<PathBuf>,
+        home_dir: Option<PathBuf>,
         receiver: Receiver<(u64, String, im::Vector<GoToFileItem>)>,
         resp_tx: Sender<(u64, String, im::Vector<GoToFileItem>)>,
     ) {
@@ -352,6 +398,12 @@ impl GoToFileData {
 
         loop {
             if let Ok((current_run_id, input, items)) = receive_batch(&receiver) {
+                let normalized_input = Self::normalize_filter_input(
+                    &input,
+                    workspace_path.as_deref(),
+                    home_dir.as_deref(),
+                );
+
                 // Check if we can use incremental filtering.
                 let source_items: &[GoToFileItem] = if let Some((
                     cached_run_id,
@@ -362,8 +414,8 @@ impl GoToFileData {
                 {
                     if current_run_id == cached_run_id
                         && items.len() == cached_len
-                        && !input.is_empty()
-                        && input.starts_with(cached_input.as_str())
+                        && !normalized_input.is_empty()
+                        && normalized_input.starts_with(cached_input.as_str())
                     {
                         cached_filtered.as_slice()
                     } else {
@@ -379,7 +431,7 @@ impl GoToFileData {
                     GoToFileData::filter_items(
                         &run_id,
                         current_run_id,
-                        &input,
+                        &normalized_input,
                         source_items,
                         &mut matcher,
                     )
@@ -389,7 +441,7 @@ impl GoToFileData {
                     GoToFileData::filter_items(
                         &run_id,
                         current_run_id,
-                        &input,
+                        &normalized_input,
                         &all_items,
                         &mut matcher,
                     )
@@ -399,7 +451,7 @@ impl GoToFileData {
                     // Cache the full (untruncated) result for future incremental use.
                     cache = Some((
                         current_run_id,
-                        input.clone(),
+                        normalized_input,
                         items.len(),
                         filtered_items.clone(),
                     ));
@@ -728,4 +780,98 @@ fn go_to_file_item_view(
                 )
             })
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalize_absolute_path_within_workspace() {
+        let ws = Some(Path::new("/home/user/project"));
+        let home = Some(Path::new("/home/user"));
+        assert_eq!(
+            GoToFileData::normalize_filter_input(
+                "/home/user/project/src/main.rs",
+                ws,
+                home
+            ),
+            "src/main.rs"
+        );
+    }
+
+    #[test]
+    fn normalize_tilde_path_within_workspace() {
+        let ws = Some(Path::new("/home/user/project"));
+        let home = Some(Path::new("/home/user"));
+        assert_eq!(
+            GoToFileData::normalize_filter_input("~/project/src/main.rs", ws, home),
+            "src/main.rs"
+        );
+    }
+
+    #[test]
+    fn normalize_tilde_alone() {
+        let ws = Some(Path::new("/home/user"));
+        let home = Some(Path::new("/home/user"));
+        assert_eq!(GoToFileData::normalize_filter_input("~", ws, home), "");
+    }
+
+    #[test]
+    fn normalize_workspace_root_exact() {
+        let ws = Some(Path::new("/home/user/project"));
+        let home = Some(Path::new("/home/user"));
+        assert_eq!(
+            GoToFileData::normalize_filter_input("/home/user/project", ws, home),
+            ""
+        );
+    }
+
+    #[test]
+    fn normalize_absolute_path_outside_workspace() {
+        let ws = Some(Path::new("/home/user/project"));
+        let home = Some(Path::new("/home/user"));
+        assert_eq!(
+            GoToFileData::normalize_filter_input("/other/path/file.rs", ws, home),
+            "/other/path/file.rs"
+        );
+    }
+
+    #[test]
+    fn normalize_relative_path_unchanged() {
+        let ws = Some(Path::new("/home/user/project"));
+        let home = Some(Path::new("/home/user"));
+        assert_eq!(
+            GoToFileData::normalize_filter_input("src/main.rs", ws, home),
+            "src/main.rs"
+        );
+    }
+
+    #[test]
+    fn normalize_no_workspace() {
+        let home = Some(Path::new("/home/user"));
+        assert_eq!(
+            GoToFileData::normalize_filter_input("/some/path", None, home),
+            "/some/path"
+        );
+    }
+
+    #[test]
+    fn normalize_no_home_dir_with_tilde() {
+        let ws = Some(Path::new("/home/user/project"));
+        assert_eq!(
+            GoToFileData::normalize_filter_input("~/project/src/main.rs", ws, None),
+            "~/project/src/main.rs"
+        );
+    }
+
+    #[test]
+    fn normalize_trailing_slash() {
+        let ws = Some(Path::new("/home/user/project"));
+        let home = Some(Path::new("/home/user"));
+        assert_eq!(
+            GoToFileData::normalize_filter_input("/home/user/project/", ws, home),
+            ""
+        );
+    }
 }
