@@ -219,6 +219,7 @@ pub enum LapceLanguage {
     Clojure,
     #[strum(message = "CMake")]
     Cmake,
+    Comment,
     #[strum(message = "C++")]
     Cpp,
     #[strum(message = "C#")]
@@ -401,6 +402,14 @@ const LANGUAGES: &[SyntaxProperties] = &[
             code_glance: (DEFAULT_CODE_GLANCE_LIST, DEFAULT_CODE_GLANCE_IGNORE_LIST),
             sticky_headers: &["function_definition"],
         },
+    },
+    SyntaxProperties {
+        id: LapceLanguage::Comment,
+        indent: Indent::space(2),
+        files: &[],
+        extensions: &[],
+        comment: comment_properties!(),
+        tree_sitter: TreeSitterProperties::DEFAULT,
     },
     SyntaxProperties {
         id: LapceLanguage::Cpp,

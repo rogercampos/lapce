@@ -153,7 +153,10 @@ impl LspClient {
                     break;
                 }
                 if let Ok(msg) = serde_json::to_string(&msg) {
-                    tracing::debug!("write to lsp: {}", msg);
+                    if tracing::enabled!(tracing::Level::DEBUG) {
+                        let log_msg = redact_lsp_message_for_logging(&msg);
+                        tracing::debug!("write to lsp: {}", log_msg);
+                    }
                     let msg =
                         format!("Content-Length: {}\r\n\r\n{}", msg.len(), msg);
                     if let Err(err) = writer.write(msg.as_bytes()) {
@@ -872,6 +875,23 @@ fn handle_server_message(
                         core_rpc.cancel(params);
                     }
                 }
+                lsp_types::notification::LogTrace::METHOD => {
+                    if let Ok(params) =
+                        serde_json::from_value::<lsp_types::LogTraceParams>(
+                            serde_json::to_value(params).unwrap_or_default(),
+                        )
+                    {
+                        tracing::debug!(
+                            "[{server_name}] $/logTrace: {}{}",
+                            params.message,
+                            params
+                                .verbose
+                                .as_deref()
+                                .map(|v| format!("\n{v}"))
+                                .unwrap_or_default(),
+                        );
+                    }
+                }
                 "experimental/serverStatus" => {
                     if let Ok(param) = serde_json::from_value::<ServerStatusParams>(
                         serde_json::to_value(params).unwrap_or_default(),
@@ -926,6 +946,44 @@ fn handle_server_message(
             None
         }
     }
+}
+
+/// Redacts large fields from LSP JSON messages before logging.
+/// Specifically, replaces `params.textDocument.text` with `"<redacted>"` in
+/// `textDocument/didOpen` and `textDocument/didChange` notifications so that
+/// full file contents don't flood the log files.
+fn redact_lsp_message_for_logging(msg: &str) -> String {
+    let Ok(mut value) = serde_json::from_str::<serde_json::Value>(msg) else {
+        return msg.to_string();
+    };
+
+    let should_redact = value
+        .get("method")
+        .and_then(|m| m.as_str())
+        .map(|m| {
+            m == lsp_types::notification::DidOpenTextDocument::METHOD
+                || m == lsp_types::notification::DidChangeTextDocument::METHOD
+        })
+        .unwrap_or(false);
+
+    if should_redact {
+        if let Some(text) = value.pointer_mut("/params/textDocument/text") {
+            *text = serde_json::Value::String("<redacted>".into());
+        }
+        // didChange uses contentChanges[].text
+        if let Some(changes) = value
+            .pointer_mut("/params/contentChanges")
+            .and_then(|v| v.as_array_mut())
+        {
+            for change in changes {
+                if let Some(text) = change.get_mut("text") {
+                    *text = serde_json::Value::String("<redacted>".into());
+                }
+            }
+        }
+    }
+
+    serde_json::to_string(&value).unwrap_or_else(|_| msg.to_string())
 }
 
 pub enum LspHeader {
