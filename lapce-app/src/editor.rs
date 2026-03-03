@@ -2220,14 +2220,16 @@ impl EditorData {
             Some(pattern)
         };
 
-        if let Some(ref p) = pattern {
-            if let Some(find_ed) = self.find_editor_signal.get_untracked() {
+        if let Some(find_ed) = self.find_editor_signal.get_untracked() {
+            if let Some(ref p) = pattern {
                 find_ed.doc().reload(Rope::from(p.as_str()), true);
-                let len = find_ed.doc().buffer.with_untracked(|b| b.len());
-                find_ed
-                    .cursor()
-                    .update(|c| c.set_insert(Selection::region(0, len)));
             }
+            // Always select all text in the find editor so the user can
+            // immediately type to replace the previous search term.
+            let len = find_ed.doc().buffer.with_untracked(|b| b.len());
+            find_ed
+                .cursor()
+                .update(|c| c.set_insert(Selection::region(0, len)));
         }
         self.find.visual.set(true);
         self.find_focus.set(true);
@@ -2245,14 +2247,14 @@ impl EditorData {
             Some(pattern)
         };
 
-        if let Some(ref p) = pattern {
-            if let Some(find_ed) = self.find_editor_signal.get_untracked() {
+        if let Some(find_ed) = self.find_editor_signal.get_untracked() {
+            if let Some(ref p) = pattern {
                 find_ed.doc().reload(Rope::from(p.as_str()), true);
-                let len = find_ed.doc().buffer.with_untracked(|b| b.len());
-                find_ed
-                    .cursor()
-                    .update(|c| c.set_insert(Selection::region(0, len)));
             }
+            let len = find_ed.doc().buffer.with_untracked(|b| b.len());
+            find_ed
+                .cursor()
+                .update(|c| c.set_insert(Selection::region(0, len)));
         }
         self.find.visual.set(true);
         self.find_focus.set(true);
