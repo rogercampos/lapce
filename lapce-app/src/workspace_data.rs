@@ -636,11 +636,35 @@ impl WorkspaceData {
         // Defer split tree restoration to after the first frame. A thread immediately
         // sends the SplitInfo through the ext_event channel, which Floem delivers on
         // the next UI event loop iteration — by then the window is already visible.
+        //
+        // We must update the EXISTING root split signal in-place (not replace it in
+        // the splits map) because the view layer captures the root signal once at
+        // construction. Replacing the map entry would leave the view watching a
+        // stale signal with empty children.
         if let Some(split_info) = deferred_split {
             let main_split = workspace_data.main_split.clone();
-            let root_split = main_split.root_split;
+            let root_split_id = main_split.root_split;
             let send = create_ext_action(cx, move |split_info: SplitInfo| {
-                split_info.to_data(main_split, None, root_split);
+                let existing_signal = main_split
+                    .splits
+                    .with_untracked(|s| s.get(&root_split_id).cloned());
+                if let Some(existing_signal) = existing_signal {
+                    let children: Vec<_> = split_info
+                        .children
+                        .iter()
+                        .map(|child| {
+                            let scope = existing_signal.with_untracked(|s| s.scope);
+                            (
+                                scope.create_rw_signal(1.0),
+                                child.to_data(main_split.clone(), root_split_id),
+                            )
+                        })
+                        .collect();
+                    existing_signal.update(|s| {
+                        s.direction = split_info.direction;
+                        s.children = children;
+                    });
+                }
             });
             std::thread::spawn(move || {
                 send(split_info);
