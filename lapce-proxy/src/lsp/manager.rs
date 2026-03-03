@@ -4,6 +4,7 @@ use std::{
     path::{Path, PathBuf},
     process::Command,
     sync::{Arc, Mutex},
+    time::{Duration, SystemTime},
 };
 
 use lapce_core::directory::Directory;
@@ -669,6 +670,7 @@ impl LspManager {
                         activation_key,
                         config,
                         project_root,
+                        env.clone(),
                     );
                 }
                 Err(first_err) => {
@@ -772,6 +774,7 @@ impl LspManager {
         activation_key: (usize, PathBuf),
         config: &LspServerConfig,
         project_root: &PathBuf,
+        env: Arc<HashMap<String, String>>,
     ) {
         let plugin_id = client.plugin_id;
         self.activated_configs.insert(activation_key);
@@ -785,6 +788,115 @@ impl LspManager {
 
         self.servers.insert(plugin_id, client);
         self.replay_open_files(plugin_id, project_root);
+
+        // Spawn a background update if enough time has passed since the last one.
+        self.maybe_spawn_background_update(config, env);
+    }
+
+    /// If the server has an auto-install type and we haven't updated recently,
+    /// spawn a background thread to update the package to the latest version.
+    fn maybe_spawn_background_update(
+        &self,
+        config: &LspServerConfig,
+        env: Arc<HashMap<String, String>>,
+    ) {
+        match &config.auto_install {
+            AutoInstall::Gem { gem } => {
+                if should_check_update(gem) {
+                    // Touch immediately so concurrent activations (e.g.
+                    // per_project_instance servers) don't spawn duplicates.
+                    touch_update_marker(gem);
+                    self.spawn_background_update_gem(gem, env);
+                }
+            }
+            AutoInstall::Npm { package } => {
+                if should_check_update(package) {
+                    touch_update_marker(package);
+                    self.spawn_background_update_npm(package);
+                }
+            }
+            AutoInstall::None => {}
+        }
+    }
+
+    /// Spawn a background thread to update a gem-based LSP server.
+    fn spawn_background_update_gem(
+        &self,
+        gem: &str,
+        env: Arc<HashMap<String, String>>,
+    ) {
+        let lsp_rpc = self.lsp_rpc.clone();
+        let gem = gem.to_string();
+        std::thread::spawn(move || {
+            let gem_cmd = match find_command_in_env("gem", &env) {
+                Some(cmd) => cmd,
+                None => return,
+            };
+            let task_id = lsp_rpc.next_background_task_id();
+            lsp_rpc.background_task_started(task_id, format!("Updating {gem}"));
+            tracing::info!("Background updating gem {}", gem);
+            match Command::new(&gem_cmd)
+                .args(["install", &gem])
+                .envs(env.as_ref())
+                .output()
+            {
+                Ok(output) if output.status.success() => {
+                    tracing::info!("Successfully updated gem {}", gem);
+                }
+                Ok(output) => {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    tracing::error!("gem update {} failed: {}", gem, stderr.trim());
+                }
+                Err(e) => {
+                    tracing::error!("Failed to run gem update: {e}");
+                }
+            }
+            lsp_rpc.background_task_finished(task_id);
+        });
+    }
+
+    /// Spawn a background thread to update an npm-based LSP server.
+    fn spawn_background_update_npm(&self, package: &str) {
+        let lsp_rpc = self.lsp_rpc.clone();
+        let package = package.to_string();
+        std::thread::spawn(move || {
+            let env = lsp_rpc.shell_env_for_project(None);
+            let npm_cmd = match find_command_in_env("npm", &env) {
+                Some(cmd) => cmd,
+                None => return,
+            };
+            let servers_dir = match Directory::lsp_servers_directory() {
+                Some(dir) => dir,
+                None => return,
+            };
+            let prefix_dir = servers_dir.join(&package);
+            let task_id = lsp_rpc.next_background_task_id();
+            lsp_rpc.background_task_started(task_id, format!("Updating {package}"));
+            tracing::info!("Background updating npm package {}", package);
+            match Command::new(&npm_cmd)
+                .args(["install", "--prefix"])
+                .arg(&prefix_dir)
+                .arg(format!("{}@latest", package))
+                .envs(env.as_ref())
+                .output()
+            {
+                Ok(output) if output.status.success() => {
+                    tracing::info!("Successfully updated npm package {}", package);
+                }
+                Ok(output) => {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    tracing::error!(
+                        "npm update {} failed: {}",
+                        package,
+                        stderr.trim()
+                    );
+                }
+                Err(e) => {
+                    tracing::error!("Failed to run npm update: {e}");
+                }
+            }
+            lsp_rpc.background_task_finished(task_id);
+        });
     }
 
     /// Check if the npm server binary exists. If not, spawn a background
@@ -1335,6 +1447,40 @@ fn merge_server_results(
 
     // All nulls
     (first_pid, Ok(Value::Null))
+}
+
+/// How often to check for LSP server updates (24 hours).
+const UPDATE_CHECK_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
+
+/// Check whether we should run an update for the named server by inspecting
+/// the mtime of its marker file. Returns true if the marker doesn't exist or
+/// is older than `UPDATE_CHECK_INTERVAL`.
+fn should_check_update(name: &str) -> bool {
+    let markers_dir = match Directory::lsp_update_markers_directory() {
+        Some(dir) => dir,
+        None => return false,
+    };
+    let marker = markers_dir.join(name);
+    match marker.metadata().and_then(|m| m.modified()) {
+        Ok(mtime) => {
+            SystemTime::now()
+                .duration_since(mtime)
+                .unwrap_or(Duration::ZERO)
+                > UPDATE_CHECK_INTERVAL
+        }
+        Err(_) => true, // marker doesn't exist
+    }
+}
+
+/// Create or touch the update marker file for the named server.
+fn touch_update_marker(name: &str) {
+    let Some(markers_dir) = Directory::lsp_update_markers_directory() else {
+        return;
+    };
+    let marker = markers_dir.join(name);
+    if let Err(e) = std::fs::File::create(&marker) {
+        tracing::error!("Failed to touch update marker {:?}: {e}", marker);
+    }
 }
 
 #[cfg(test)]

@@ -221,4 +221,21 @@ impl Directory {
             None
         }
     }
+
+    /// Directory for LSP server update marker files. The mtime of each
+    /// marker tracks when we last ran an update for that server.
+    pub fn lsp_update_markers_directory() -> Option<PathBuf> {
+        if let Some(dir) = Self::lsp_servers_directory() {
+            let dir = dir.join(".update-markers");
+            if !dir.exists() {
+                if let Err(err) = std::fs::create_dir(&dir) {
+                    tracing::error!("{:?}", err);
+                    return None;
+                }
+            }
+            Some(dir)
+        } else {
+            None
+        }
+    }
 }
