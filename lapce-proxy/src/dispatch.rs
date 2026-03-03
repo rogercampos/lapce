@@ -764,47 +764,21 @@ impl ProxyHandler for Dispatcher {
                             RpcError::new(e.to_string())
                         });
 
-                    // Piggyback git status: fetch status for files in this
-                    // directory and send incremental updates to the UI.
-                    if let (Ok(ProxyResponse::ReadDirResponse { items }), Some(ws)) =
+                    // Collect file paths before sending the response, so we
+                    // can fetch git status afterwards without holding onto
+                    // the result.
+                    let file_paths: Option<Vec<PathBuf>> = if let (
+                        Ok(ProxyResponse::ReadDirResponse { items }),
+                        Some(_),
+                    ) =
                         (&result, workspace.as_ref())
                     {
-                        let file_paths: Vec<PathBuf> =
+                        let paths: Vec<PathBuf> =
                             items.iter().map(|item| item.path.clone()).collect();
-                        if !file_paths.is_empty() {
-                            let statuses =
-                                read_git_file_statuses_for_paths(ws, &file_paths);
-                            // Merge into cache and send diff
-                            let mut cache = git_cache.lock();
-                            let cache_map = cache.get_or_insert_with(HashMap::new);
-                            let mut diff = HashMap::new();
-                            // For each file in the directory, determine its status
-                            for file_path in &file_paths {
-                                match statuses.get(file_path) {
-                                    Some(status) => {
-                                        if cache_map.get(file_path) != Some(status) {
-                                            cache_map.insert(
-                                                file_path.clone(),
-                                                status.clone(),
-                                            );
-                                            diff.insert(
-                                                file_path.clone(),
-                                                Some(status.clone()),
-                                            );
-                                        }
-                                    }
-                                    None => {
-                                        if cache_map.remove(file_path).is_some() {
-                                            diff.insert(file_path.clone(), None);
-                                        }
-                                    }
-                                }
-                            }
-                            if !diff.is_empty() {
-                                core_rpc.git_file_status_diff(diff);
-                            }
-                        }
-                    }
+                        if paths.is_empty() { None } else { Some(paths) }
+                    } else {
+                        None
+                    };
 
                     match &result {
                         Ok(ProxyResponse::ReadDirResponse { items }) => {
@@ -823,7 +797,45 @@ impl ProxyHandler for Dispatcher {
                         }
                         _ => {}
                     }
+
+                    // Send the directory listing immediately so the UI can
+                    // render folder contents without waiting for git status.
                     proxy_rpc.handle_response(id, result);
+
+                    // Fetch git status asynchronously after the response.
+                    if let (Some(file_paths), Some(ws)) =
+                        (file_paths, workspace.as_ref())
+                    {
+                        let statuses =
+                            read_git_file_statuses_for_paths(ws, &file_paths);
+                        let mut cache = git_cache.lock();
+                        let cache_map = cache.get_or_insert_with(HashMap::new);
+                        let mut diff = HashMap::new();
+                        for file_path in &file_paths {
+                            match statuses.get(file_path) {
+                                Some(status) => {
+                                    if cache_map.get(file_path) != Some(status) {
+                                        cache_map.insert(
+                                            file_path.clone(),
+                                            status.clone(),
+                                        );
+                                        diff.insert(
+                                            file_path.clone(),
+                                            Some(status.clone()),
+                                        );
+                                    }
+                                }
+                                None => {
+                                    if cache_map.remove(file_path).is_some() {
+                                        diff.insert(file_path.clone(), None);
+                                    }
+                                }
+                            }
+                        }
+                        if !diff.is_empty() {
+                            core_rpc.git_file_status_diff(diff);
+                        }
+                    }
                 });
             }
             Save {
