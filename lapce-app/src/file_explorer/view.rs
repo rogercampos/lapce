@@ -639,7 +639,9 @@ fn file_explorer_view(
                     let aux_click_path = path.clone();
                     view.on_click_stop({
                         let kind = kind.clone();
+                        let focus = click_data.common.focus;
                         move |_| {
+                            focus.set(Focus::Panel(PanelKind::FileExplorer));
                             click_data.click(&click_path, config);
                             select.update(|x| *x = Some(kind.clone()));
                         }
