@@ -72,7 +72,9 @@ use crate::{
     keypress::{EventRef, KeyPressData, KeyPressFocus, condition::Condition},
     listener::Listener,
     lsp::path_from_url,
-    main_split::{MainSplitData, SplitData, SplitDirection, SplitMoveDirection},
+    main_split::{
+        MainSplitData, SplitData, SplitDirection, SplitInfo, SplitMoveDirection,
+    },
     panel::{
         data::{PanelData, PanelSection, default_panel_order},
         kind::PanelKind,
@@ -328,6 +330,9 @@ impl WorkspaceData {
             info
         };
 
+        // Extract split info for deferred restoration after first frame
+        let deferred_split = workspace_info.as_ref().map(|info| info.split.clone());
+
         let config = LapceConfig::load(&workspace);
         let lapce_command = Listener::new_empty(cx);
         let workbench_command = Listener::new_empty(cx);
@@ -415,13 +420,10 @@ impl WorkspaceData {
                 .unwrap_or_default(),
         );
 
-        // Restore the split tree from persisted workspace info, or create an empty root.
-        // `to_data()` recursively reconstructs the entire split tree, editor tabs,
-        // and editors from the serialized SplitInfo/EditorTabInfo/EditorInfo hierarchy.
-        if let Some(info) = workspace_info.as_ref() {
-            let root_split = main_split.root_split;
-            info.split.to_data(main_split.clone(), None, root_split);
-        } else {
+        // Always create an empty root split first. If we have persisted split info,
+        // it will be restored on the next event loop iteration (deferred below) so
+        // the window appears immediately with an empty editor area.
+        {
             let root_split = main_split.root_split;
             let root_split_data = {
                 let cx = cx.create_child();
@@ -628,6 +630,20 @@ impl WorkspaceData {
                         workspace_data.handle_core_notification(rpc);
                     }
                 });
+            });
+        }
+
+        // Defer split tree restoration to after the first frame. A thread immediately
+        // sends the SplitInfo through the ext_event channel, which Floem delivers on
+        // the next UI event loop iteration — by then the window is already visible.
+        if let Some(split_info) = deferred_split {
+            let main_split = workspace_data.main_split.clone();
+            let root_split = main_split.root_split;
+            let send = create_ext_action(cx, move |split_info: SplitInfo| {
+                split_info.to_data(main_split, None, root_split);
+            });
+            std::thread::spawn(move || {
+                send(split_info);
             });
         }
 
