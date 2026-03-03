@@ -941,8 +941,8 @@ const LANGUAGES: &[SyntaxProperties] = &[
     SyntaxProperties {
         id: LapceLanguage::Ruby,
         indent: Indent::space(2),
-        files: &[],
-        extensions: &["rb"],
+        files: &["Rakefile", "Gemfile"],
+        extensions: &["rb", "rake"],
         comment: comment_properties!("#"),
         tree_sitter: TreeSitterProperties {
             grammar: None,
