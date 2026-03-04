@@ -47,6 +47,11 @@ fn project_card(
         });
 
     let kind_label = project.kind.label().to_string();
+    let technology_labels: Vec<String> = project
+        .technologies
+        .iter()
+        .map(|t| t.label().to_string())
+        .collect();
     let lsp_servers = project.lsp_servers.clone();
     let left_pad = 12.0 + (depth as f64 * 24.0);
 
@@ -71,6 +76,12 @@ fn project_card(
                     .min_width(0)
             }),
             badge(kind_label, config),
+            floem::views::dyn_stack(
+                move || technology_labels.clone(),
+                |s| s.clone(),
+                move |tech_label| badge(tech_label, config),
+            )
+            .style(|s| s.flex_row().gap(4.0)),
             floem::views::dyn_stack(
                 move || lsp_servers.clone(),
                 |s| s.clone(),

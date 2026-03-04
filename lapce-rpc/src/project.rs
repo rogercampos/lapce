@@ -2,6 +2,21 @@ use std::{collections::HashMap, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+/// A specific technology/framework detected within a project.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ProjectTechnology {
+    Rails,
+}
+
+impl ProjectTechnology {
+    /// Display name for this technology.
+    pub fn label(&self) -> &'static str {
+        match self {
+            ProjectTechnology::Rails => "Rails",
+        }
+    }
+}
+
 /// The kind of project detected by marker file presence.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ProjectKind {
@@ -94,6 +109,8 @@ pub struct ProjectInfo {
     pub tool_versions: Vec<(String, String)>,
     /// Detected version manager, if any (e.g. "mise", "rbenv", "asdf").
     pub version_manager: Option<String>,
+    /// Detected technologies/frameworks within this project.
+    pub technologies: Vec<ProjectTechnology>,
     /// LSP server commands that would serve this project, if configured.
     pub lsp_servers: Vec<String>,
 }

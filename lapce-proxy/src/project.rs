@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use lapce_rpc::project::{ProjectInfo, ProjectKind};
+use lapce_rpc::project::{ProjectInfo, ProjectKind, ProjectTechnology};
 
 /// Find the project root for a given file by walking UP the directory tree.
 ///
@@ -38,6 +38,8 @@ pub fn find_project_for_file(
                         file_path,
                     );
 
+                    let technologies = detect_technologies(current, kind);
+
                     return Some(ProjectInfo {
                         root: current.to_path_buf(),
                         kind: kind.clone(),
@@ -45,6 +47,7 @@ pub fn find_project_for_file(
                         marker_file: marker.to_string(),
                         tool_versions: Vec::new(),
                         version_manager: None,
+                        technologies,
                         lsp_servers: Vec::new(),
                     });
                 }
@@ -65,4 +68,21 @@ pub fn find_project_for_file(
     }
 
     None
+}
+
+/// Detect technologies/frameworks within a project based on its kind and
+/// the presence of framework-specific files.
+fn detect_technologies(root: &Path, kind: &ProjectKind) -> Vec<ProjectTechnology> {
+    let mut technologies = Vec::new();
+
+    match kind {
+        ProjectKind::Ruby => {
+            if root.join("config/environment.rb").exists() {
+                technologies.push(ProjectTechnology::Rails);
+            }
+        }
+        _ => {}
+    }
+
+    technologies
 }
