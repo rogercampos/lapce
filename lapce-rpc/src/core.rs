@@ -433,6 +433,10 @@ pub enum LogLevel {
 pub struct ServerStatusParams {
     health: String,
     pub message: Option<String>,
+    /// The LSP language IDs this server handles (e.g. ["ruby", "javascript"]).
+    /// Used to filter which documents need refreshing when the server status changes.
+    #[serde(default)]
+    pub languages: Vec<String>,
 }
 
 impl ServerStatusParams {

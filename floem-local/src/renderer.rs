@@ -163,6 +163,16 @@ impl Renderer {
         }
     }
 
+    /// Reconfigure the GPU surface without resizing. Call after the window
+    /// regains focus to prevent `get_current_texture()` from blocking.
+    pub fn reconfigure_surface(&mut self) {
+        match self {
+            #[cfg(feature = "vello")]
+            Renderer::Vello(r) => r.reconfigure_surface(),
+            _ => {}
+        }
+    }
+
     pub fn set_scale(&mut self, scale: f64) {
         match self {
             #[cfg(feature = "vello")]

@@ -171,10 +171,26 @@ impl ApplicationHandler for Application {
 
     fn proxy_wake_up(&mut self, event_loop: &dyn ActiveEventLoop) {
         self.handle.handle_timer(event_loop);
+
+        // Batch all pending events: process Idle triggers without running
+        // style/layout after each one, then do a single update pass at the end.
+        let mut had_idle = false;
         for event in self.receiver.try_iter() {
-            self.handle.handle_user_event(event_loop, event);
+            match event {
+                UserEvent::Idle => {
+                    self.handle.idle_notify_only();
+                    had_idle = true;
+                }
+                other => {
+                    self.handle.handle_user_event(event_loop, other);
+                }
+            }
         }
-        self.handle.handle_updates_for_all_windows();
+
+        // Single batched style/layout pass for all accumulated trigger effects
+        if had_idle {
+            self.handle.handle_updates_for_all_windows();
+        }
     }
 
     fn exiting(&mut self, _event_loop: &dyn ActiveEventLoop) {

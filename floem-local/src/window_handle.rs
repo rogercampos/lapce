@@ -83,6 +83,7 @@ pub(crate) struct WindowHandle {
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
     pub(crate) context_menu: RwSignal<Option<(Menu, Point, bool)>>,
     dropper_file: Option<PathBuf>,
+    pub(crate) is_focused: bool,
     #[cfg(target_os = "macos")]
     current_window_menu: Option<muda::Menu>,
 }
@@ -200,6 +201,7 @@ impl WindowHandle {
             context_menu,
             last_pointer_down: None,
             dropper_file: None,
+            is_focused: true,
             #[cfg(target_os = "macos")]
             current_window_menu: None,
         };
@@ -627,8 +629,17 @@ impl WindowHandle {
     }
 
     pub(crate) fn focused(&mut self, focused: bool) {
+        self.is_focused = focused;
         if focused {
+            // Reconfigure the GPU surface before the next paint. On macOS, the
+            // Metal drawable layer is discarded while the window is backgrounded,
+            // causing `get_current_texture()` to block for ~1s on the first frame.
+            // Reconfiguring proactively forces the surface back into a ready state.
+            self.paint_state.renderer_mut().reconfigure_surface();
             self.event(Event::WindowGotFocus);
+            // Schedule a repaint now that we're focused again — painting was
+            // skipped while the window was in the background.
+            self.schedule_repaint();
         } else {
             self.event(Event::WindowLostFocus);
         }
@@ -668,6 +679,14 @@ impl WindowHandle {
     }
 
     pub(crate) fn render_frame(&mut self, gpu_resources: Option<GpuResources>) {
+        // Skip rendering when unfocused — on macOS the Metal drawable layer is
+        // discarded while backgrounded, causing get_current_texture() to block
+        // for ~1s. Cursor blink timers and other redraws keep firing, so we
+        // must avoid calling paint() until the window regains focus.
+        if !self.is_focused {
+            return;
+        }
+
         // Processes updates scheduled on this frame.
         for update in mem::take(&mut self.app_state.scheduled_updates) {
             match update {
@@ -712,7 +731,6 @@ impl WindowHandle {
                 .as_ref()
                 .map(|theme| theme.background)
                 .unwrap_or(palette::css::WHITE);
-            // fill window with default white background if it's not transparent
             cx.fill(
                 &self
                     .size
@@ -730,6 +748,7 @@ impl WindowHandle {
                 window.pre_present_notify();
             }
         }
+
         cx.paint_state.renderer_mut().finish()
     }
 

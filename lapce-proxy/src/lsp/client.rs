@@ -177,6 +177,8 @@ impl LspClient {
         let command_owned = command.to_string();
         let io_tx_for_reader = io_tx.clone();
         let settings_for_reader = settings.clone();
+        let languages_for_reader: Vec<String> =
+            languages.iter().map(|s| (*s).to_string()).collect();
         thread::spawn(move || {
             let mut reader = Box::new(BufReader::new(stdout));
             loop {
@@ -188,6 +190,7 @@ impl LspClient {
                             &core_rpc,
                             &server_name_closure,
                             &settings_for_reader,
+                            &languages_for_reader,
                             &message_str,
                         ) {
                             if let Err(err) = io_tx_for_reader.send(resp) {
@@ -741,6 +744,7 @@ fn handle_server_message(
     core_rpc: &CoreRpcHandler,
     server_name: &str,
     server_settings: &Option<Value>,
+    server_languages: &[String],
     message: &str,
 ) -> Option<JsonRpc> {
     match JsonRpc::parse(message) {
@@ -893,7 +897,7 @@ fn handle_server_message(
                     }
                 }
                 "experimental/serverStatus" => {
-                    if let Ok(param) = serde_json::from_value::<ServerStatusParams>(
+                    if let Ok(mut param) = serde_json::from_value::<ServerStatusParams>(
                         serde_json::to_value(params).unwrap_or_default(),
                     ) {
                         if !param.is_ok() {
@@ -907,6 +911,7 @@ fn handle_server_message(
                                 );
                             }
                         }
+                        param.languages = server_languages.to_vec();
                         core_rpc.server_status(param);
                     }
                 }

@@ -140,8 +140,21 @@ pub fn update_signal_from_channel<T: Send + 'static>(
         let data = data.clone();
         cx.create_effect(move |_| {
             trigger.track();
-            while let Some(value) = data.lock().pop_front() {
-                writer.set(value);
+
+            let mut processed = 0;
+            while processed < CHANNEL_FRAME_BUDGET {
+                let value = data.lock().pop_front();
+                match value {
+                    Some(v) => {
+                        writer.set(v);
+                        processed += 1;
+                    }
+                    None => break,
+                }
+            }
+
+            if !data.lock().is_empty() {
+                EXT_EVENT_HANDLER.add_trigger(trigger);
             }
 
             if channel_closed.get() {
@@ -163,6 +176,11 @@ pub fn update_signal_from_channel<T: Send + 'static>(
     });
 }
 
+/// Maximum number of channel messages to process per frame to avoid blocking
+/// the UI thread when a burst of messages accumulates (e.g. after the app
+/// regains focus and LSP servers have been sending notifications).
+const CHANNEL_FRAME_BUDGET: usize = 64;
+
 pub fn create_signal_from_channel<T: Send + 'static>(
     rx: Receiver<T>,
 ) -> ReadSignal<Option<T>> {
@@ -177,8 +195,25 @@ pub fn create_signal_from_channel<T: Send + 'static>(
         let data = data.clone();
         cx.create_effect(move |_| {
             trigger.track();
-            while let Some(value) = data.lock().pop_front() {
-                write.set(value);
+
+            // Process up to CHANNEL_FRAME_BUDGET messages per frame to keep
+            // the UI responsive when many messages have accumulated.
+            let mut processed = 0;
+            while processed < CHANNEL_FRAME_BUDGET {
+                let value = data.lock().pop_front();
+                match value {
+                    Some(v) => {
+                        write.set(v);
+                        processed += 1;
+                    }
+                    None => break,
+                }
+            }
+
+            // If there are more messages, schedule another trigger so we
+            // process them on the next frame instead of blocking this one.
+            if !data.lock().is_empty() {
+                EXT_EVENT_HANDLER.add_trigger(trigger);
             }
 
             if channel_closed.get() {

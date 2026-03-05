@@ -95,6 +95,13 @@ impl VelloRenderer {
 
         surface.configure(&device, &config);
 
+        // Prime the Metal drawable pool by acquiring and immediately presenting
+        // a texture. Without this, the first real get_current_texture() can block
+        // for ~1 second on macOS while Metal allocates the drawable.
+        if let Ok(tex) = surface.get_current_texture() {
+            tex.present();
+        }
+
         let target_texture = device.create_texture(&wgpu::TextureDescriptor {
             label: None,
             size: wgpu::Extent3d {
@@ -181,6 +188,16 @@ impl VelloRenderer {
                 .configure(&self.device, &self.surface.config);
         }
         self.window_scale = scale;
+    }
+
+    /// Reconfigure the wgpu surface without resizing. Needed after the window
+    /// regains focus from being backgrounded — macOS discards the Metal drawable
+    /// layer, so `get_current_texture()` blocks for ~1s on the first frame.
+    /// Calling `configure()` up-front forces the surface back into a ready state.
+    pub fn reconfigure_surface(&mut self) {
+        self.surface
+            .surface
+            .configure(&self.device, &self.surface.config);
     }
 
     pub const fn set_scale(&mut self, scale: f64) {

@@ -1,14 +1,16 @@
 use std::{
-    collections::HashMap,
+    cell::Cell,
+    collections::{HashMap, HashSet},
     env,
     path::{Path, PathBuf},
     rc::Rc,
     sync::Arc,
+    time::Duration,
 };
 
 use floem::{
     ViewId,
-    action::{open_file, remove_overlay},
+    action::{TimerToken, exec_after, open_file, remove_overlay},
     ext_event::create_ext_action,
     file::FileDialogOptions,
     keyboard::Modifiers,
@@ -58,7 +60,7 @@ use crate::{
     config::{LapceConfig, layout::LapceLayout},
     db::LapceDb,
     definition_picker::{DefinitionPickerData, DefinitionPickerStatus},
-    doc::DocContent,
+    doc::{Doc, DocContent},
     editor::location::{EditorLocation, EditorPosition},
     file_explorer::data::FileExplorerData,
     folder_picker::FolderPickerData,
@@ -222,6 +224,11 @@ pub struct WorkspaceData {
     local_task_id: Arc<std::sync::atomic::AtomicU64>,
     pub messages: RwSignal<Vec<(String, ShowMessageParams)>>,
     pub common: Rc<CommonData>,
+    /// Languages that have had a ServerStatus OK and are pending a debounced
+    /// refresh of LSP data (semantic tokens, inlay hints, etc.).
+    pending_server_status_languages: Rc<Cell<HashSet<String>>>,
+    /// Timer token for the debounced server status refresh.
+    pending_server_status_timer: Rc<Cell<TimerToken>>,
 }
 
 impl std::fmt::Debug for WorkspaceData {
@@ -574,6 +581,8 @@ impl WorkspaceData {
             )),
             messages: cx.create_rw_signal(Vec::new()),
             common,
+            pending_server_status_languages: Rc::new(Cell::new(HashSet::new())),
+            pending_server_status_timer: Rc::new(Cell::new(TimerToken::INVALID)),
         };
 
         // Reset the cursor blink timer whenever focus or active editor changes,
@@ -1582,6 +1591,38 @@ impl WorkspaceData {
         }
     }
 
+    /// Refresh LSP data (code lens, semantic styles, inlay hints, diagnostics)
+    /// only for documents whose language matches the given set.
+    fn refresh_docs_for_languages(
+        docs: RwSignal<im::HashMap<PathBuf, Rc<Doc>>>,
+        languages: &HashSet<String>,
+    ) {
+        use lapce_proxy::buffer::language_id_from_path;
+
+        docs.with_untracked(|x| {
+            for doc in x.values() {
+                let path = match doc.content.get_untracked() {
+                    DocContent::File { path, .. } => path,
+                    _ => continue,
+                };
+
+                // If no languages specified (legacy/unknown server), refresh all.
+                // Otherwise only refresh docs matching the server's languages.
+                if !languages.is_empty() {
+                    let lang_id = language_id_from_path(&path).unwrap_or("");
+                    if !languages.contains(lang_id) {
+                        continue;
+                    }
+                }
+
+                doc.get_code_lens();
+                doc.get_semantic_styles();
+                doc.get_inlay_hints();
+                doc.get_pull_diagnostics();
+            }
+        });
+    }
+
     fn handle_core_notification(&self, rpc: &CoreNotification) {
         tracing::info!(
             "[workspace] handle_core_notification: {:?}",
@@ -1641,15 +1682,28 @@ impl WorkspaceData {
             }
             CoreNotification::ServerStatus { params } => {
                 if params.is_ok() {
-                    // todo filter by language
-                    self.main_split.docs.with_untracked(|x| {
-                        for doc in x.values() {
-                            doc.get_code_lens();
-                            doc.get_semantic_styles();
-                            doc.get_inlay_hints();
-                            doc.get_pull_diagnostics();
-                        }
-                    });
+                    // Accumulate languages and debounce: multiple LSP servers may
+                    // report OK status in quick succession (especially on app
+                    // focus regain). We collect all languages and flush once after
+                    // a short delay to avoid redundant work.
+                    let mut langs = self.pending_server_status_languages.take();
+                    langs.extend(params.languages.iter().cloned());
+                    self.pending_server_status_languages.set(langs);
+
+                    // Cancel any existing debounce timer
+                    let old_token = self
+                        .pending_server_status_timer
+                        .replace(TimerToken::INVALID);
+                    old_token.cancel();
+
+                    let pending_langs = self.pending_server_status_languages.clone();
+                    let docs = self.main_split.docs;
+                    let token =
+                        exec_after(Duration::from_millis(100), move |_token| {
+                            let langs = pending_langs.take();
+                            Self::refresh_docs_for_languages(docs, &langs);
+                        });
+                    self.pending_server_status_timer.set(token);
                 }
             }
             CoreNotification::OpenPaths { paths } => {

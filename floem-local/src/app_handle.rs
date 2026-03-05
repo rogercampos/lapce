@@ -516,13 +516,18 @@ impl ApplicationHandle {
             .map(|handle| handle.capture(self.gpu_resources.clone()))
     }
 
-    pub(crate) fn idle(&mut self) {
+    /// Notify all pending ext event triggers WITHOUT running window updates.
+    /// Call `handle_updates_for_all_windows()` once afterwards to batch the
+    /// style/layout passes for all accumulated trigger effects.
+    pub(crate) fn idle_notify_only(&mut self) {
         let ext_events = { std::mem::take(&mut *EXT_EVENT_HANDLER.queue.lock()) };
-
         for trigger in ext_events {
             trigger.notify();
         }
+    }
 
+    pub(crate) fn idle(&mut self) {
+        self.idle_notify_only();
         self.handle_updates_for_all_windows();
     }
 
