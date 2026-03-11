@@ -428,6 +428,30 @@ impl LspManager {
             .unwrap_or_default();
 
         let root = project.root.clone();
+
+        // If this is a Rails project, parse db/schema.rb and send schema info
+        if project
+            .technologies
+            .contains(&lapce_rpc::project::ProjectTechnology::Rails)
+        {
+            let schema_path = root.join("db/schema.rb");
+            if let Some(tables) = crate::schema::parse_schema_rb(&schema_path) {
+                if !tables.is_empty() {
+                    tracing::info!(
+                        "[schema] Parsed {} tables from {:?}",
+                        tables.len(),
+                        schema_path
+                    );
+                    self.lsp_rpc.schema_info_updated(
+                        lapce_rpc::schema::SchemaInfo {
+                            project_root: root.clone(),
+                            tables,
+                        },
+                    );
+                }
+            }
+        }
+
         self.projects.push(project);
         // Sort by depth (shallowest first) for consistent ordering
         self.projects.sort_by_key(|p| p.root.components().count());

@@ -5,6 +5,7 @@ pub mod cli;
 pub mod dispatch;
 pub mod lsp;
 pub mod project;
+pub mod schema;
 pub mod semgrep;
 pub mod shell_env;
 pub mod watcher;

@@ -20,6 +20,7 @@ use super::{
     global_search_view::global_search_panel,
     kind::PanelKind,
     position::{PanelContainerPosition, PanelPosition},
+    schema_view::schema_panel,
 };
 use crate::{
     app::{clickable_icon, clickable_icon_base},
@@ -445,6 +446,9 @@ fn panel_view(
                 PanelKind::Search => {
                     global_search_panel(workspace_data.clone(), position).into_any()
                 }
+                PanelKind::Schema => {
+                    schema_panel(workspace_data.clone(), position).into_any()
+                }
             };
             view.style(|s| s.size_pct(100.0, 100.0))
         },
@@ -483,6 +487,7 @@ fn panel_picker(
             let tooltip = match p {
                 PanelKind::FileExplorer => "File Explorer",
                 PanelKind::Search => "Search",
+                PanelKind::Schema => "Schema",
             };
             let icon = p.svg_name();
             let is_active = {

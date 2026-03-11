@@ -1755,26 +1755,51 @@ impl EditorData {
         if let Some(scroll_offset) = scroll_offset {
             self.editor.scroll_to.set(Some(scroll_offset));
         } else {
-            // Center the viewport on the target position
-            let line = self
-                .doc()
-                .buffer
-                .with_untracked(|buffer| buffer.line_of_offset(offset));
-            let line = self.visual_line(line);
-            let config = self.common.config.get_untracked();
-            let line_height = config.editor.line_height();
-            let viewport = self.editor.viewport.get_untracked();
-            if viewport.height() > 0.0 {
-                let target_y = (line * line_height) as f64;
-                let center_y =
-                    target_y - viewport.height() / 2.0 + line_height as f64 / 2.0;
-                self.editor
-                    .scroll_to
-                    .set(Some(Vec2::new(viewport.x0, center_y.max(0.0))));
-            }
+            self.center_on_offset(offset);
         }
         if let Some(edits) = edits.as_ref() {
             self.do_text_edit(edits);
+        }
+    }
+
+    /// Center the viewport on the given buffer offset. If the viewport hasn't
+    /// been laid out yet (height == 0), defers the scroll via a reactive effect
+    /// that fires once the viewport becomes valid.
+    fn center_on_offset(&self, offset: usize) {
+        let line = self
+            .doc()
+            .buffer
+            .with_untracked(|buffer| buffer.line_of_offset(offset));
+        let line = self.visual_line(line);
+        let config = self.common.config.get_untracked();
+        let line_height = config.editor.line_height();
+        let viewport = self.editor.viewport.get_untracked();
+        if viewport.height() > 0.0 {
+            let target_y = (line * line_height) as f64;
+            let center_y =
+                target_y - viewport.height() / 2.0 + line_height as f64 / 2.0;
+            self.editor
+                .scroll_to
+                .set(Some(Vec2::new(viewport.x0, center_y.max(0.0))));
+        } else {
+            // Viewport not laid out yet (e.g. tab just switched). Defer scroll
+            // until the viewport becomes valid.
+            let scroll_to = self.editor.scroll_to;
+            let viewport_signal = self.editor.viewport;
+            self.scope.create_effect(move |done| {
+                if done == Some(true) {
+                    return true;
+                }
+                let vp = viewport_signal.get();
+                if vp.height() > 0.0 {
+                    let target_y = (line * line_height) as f64;
+                    let center_y =
+                        target_y - vp.height() / 2.0 + line_height as f64 / 2.0;
+                    scroll_to.set(Some(Vec2::new(vp.x0, center_y.max(0.0))));
+                    return true;
+                }
+                false
+            });
         }
     }
 

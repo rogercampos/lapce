@@ -8,6 +8,7 @@ mod parse;
 pub mod plugin;
 pub mod project;
 pub mod proxy;
+pub mod schema;
 pub mod stdio;
 pub mod style;
 

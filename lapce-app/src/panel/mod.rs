@@ -7,5 +7,6 @@ pub mod data;
 pub mod global_search_view;
 pub mod kind;
 pub mod position;
+pub mod schema_view;
 pub mod style;
 pub mod view;

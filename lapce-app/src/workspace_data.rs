@@ -40,6 +40,7 @@ use lapce_rpc::{
     plugin::PluginId,
     project::ProjectInfo,
     proxy::{ProxyNotification, ProxyResponse, ProxyRpcHandler},
+    schema::SchemaInfo,
 };
 use lsp_types::{
     CodeActionOrCommand, CodeLens, Diagnostic, ProgressParams, ProgressToken,
@@ -199,6 +200,8 @@ pub struct WorkspaceData {
     pub replace_modal_data: ReplaceModalData,
     pub about_data: AboutData,
     pub projects: RwSignal<Vec<ProjectInfo>>,
+    /// Schema info for Rails projects, keyed by project root path.
+    pub schema_infos: RwSignal<HashMap<PathBuf, SchemaInfo>>,
     pub go_to_file_data: GoToFileData,
     pub go_to_line_data: GoToLineData,
     pub go_to_symbol_data: GoToSymbolData,
@@ -506,6 +509,8 @@ impl WorkspaceData {
 
         let about_data = AboutData::new(cx, common.focus);
         let projects = cx.create_rw_signal(Vec::<ProjectInfo>::new());
+        let schema_infos =
+            cx.create_rw_signal(HashMap::<PathBuf, SchemaInfo>::new());
         let go_to_file_data = GoToFileData::new(
             cx,
             workspace.clone(),
@@ -557,6 +562,7 @@ impl WorkspaceData {
             replace_modal_data,
             about_data,
             projects,
+            schema_infos,
             go_to_file_data,
             go_to_line_data,
             go_to_symbol_data,
@@ -1797,6 +1803,16 @@ impl WorkspaceData {
                 );
                 self.projects.set(projects.clone());
             }
+            CoreNotification::SchemaInfoUpdated { schema } => {
+                tracing::info!(
+                    "[workspace] SchemaInfoUpdated: {} tables for {:?}",
+                    schema.tables.len(),
+                    schema.project_root
+                );
+                self.schema_infos.update(|infos| {
+                    infos.insert(schema.project_root.clone(), schema.clone());
+                });
+            }
             CoreNotification::GlobalSearchDiffMatches { search_id, matches } => {
                 // Route to the GlobalSearchData instance with matching search_id.
                 if self.global_search.current_search_id.get_untracked() == *search_id
@@ -2262,7 +2278,7 @@ impl WorkspaceData {
     /// Toggle a specific kind of panel.
     fn toggle_panel_focus(&self, kind: PanelKind) {
         let should_hide = match kind {
-            PanelKind::FileExplorer => {
+            PanelKind::FileExplorer | PanelKind::Schema => {
                 // Some panels don't accept focus (yet). Fall back to visibility check
                 // in those cases.
                 self.panel.is_panel_visible(&kind)

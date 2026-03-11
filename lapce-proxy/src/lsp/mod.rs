@@ -230,6 +230,11 @@ impl LspRpcHandler {
         self.core_rpc.projects_detected(projects);
     }
 
+    /// Forward schema info to the UI.
+    pub fn schema_info_updated(&self, schema: lapce_rpc::schema::SchemaInfo) {
+        self.core_rpc.schema_info_updated(schema);
+    }
+
     pub fn next_background_task_id(&self) -> BackgroundTaskId {
         self.core_rpc.next_background_task_id()
     }

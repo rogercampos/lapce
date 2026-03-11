@@ -12,6 +12,7 @@ use crate::config::icon::LapceIcons;
 pub enum PanelKind {
     FileExplorer,
     Search,
+    Schema,
 }
 
 impl PanelKind {
@@ -19,6 +20,7 @@ impl PanelKind {
         match &self {
             PanelKind::FileExplorer => LapceIcons::FILE_EXPLORER,
             PanelKind::Search => LapceIcons::SEARCH,
+            PanelKind::Schema => LapceIcons::SYMBOL_KIND_FIELD,
         }
     }
 
@@ -28,6 +30,7 @@ impl PanelKind {
         match self {
             PanelKind::FileExplorer => PanelPosition::LeftTop,
             PanelKind::Search => PanelPosition::BottomLeft,
+            PanelKind::Schema => PanelPosition::RightTop,
         }
     }
 }
@@ -62,6 +65,19 @@ mod tests {
         assert_eq!(
             PanelKind::Search.default_position(),
             PanelPosition::BottomLeft
+        );
+    }
+
+    #[test]
+    fn svg_name_schema() {
+        assert_eq!(PanelKind::Schema.svg_name(), LapceIcons::SYMBOL_KIND_FIELD);
+    }
+
+    #[test]
+    fn default_position_schema() {
+        assert_eq!(
+            PanelKind::Schema.default_position(),
+            PanelPosition::RightTop
         );
     }
 }

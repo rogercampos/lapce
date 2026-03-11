@@ -38,6 +38,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     RequestId, RpcMessage, file::PathObject, plugin::PluginId, project::ProjectInfo,
+    schema::SchemaInfo,
 };
 
 /// Internal channel message type for proxy-to-UI communication.
@@ -156,6 +157,9 @@ pub enum CoreNotification {
     },
     ProjectsDetected {
         projects: Vec<ProjectInfo>,
+    },
+    SchemaInfoUpdated {
+        schema: SchemaInfo,
     },
     BackgroundTaskUpdate {
         task_id: BackgroundTaskId,
@@ -344,6 +348,10 @@ impl CoreRpcHandler {
 
     pub fn projects_detected(&self, projects: Vec<ProjectInfo>) {
         self.notification(CoreNotification::ProjectsDetected { projects });
+    }
+
+    pub fn schema_info_updated(&self, schema: SchemaInfo) {
+        self.notification(CoreNotification::SchemaInfoUpdated { schema });
     }
 
     pub fn next_background_task_id(&self) -> BackgroundTaskId {
