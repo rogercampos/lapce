@@ -650,9 +650,6 @@ impl MainSplitData {
             self.common.focus.set(Focus::Workbench);
         }
         let path = location.path.clone();
-        self.common
-            .internal_command
-            .send(InternalCommand::TrackRecentFile { path: path.clone() });
         let (doc, new_doc) = self.get_doc(path.clone(), None);
 
         let child = self.get_editor_tab_child(

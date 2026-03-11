@@ -234,13 +234,6 @@ pub(super) fn editor_tab_header(
                         } else {
                             editor_tab.update(|editor_tab| {
                                 editor_tab.active = i.get_untracked();
-                                if let Some(path) =
-                                    editor_tab.active_file_path(editors)
-                                {
-                                    internal_command.send(
-                                        InternalCommand::TrackRecentFile { path },
-                                    );
-                                }
                             });
                             EventPropagation::Continue
                         }

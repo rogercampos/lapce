@@ -891,8 +891,6 @@ impl WorkspaceData {
                 if let Some(editor_tab_id) =
                     self.main_split.active_editor_tab.get_untracked()
                 {
-                    let editors = self.main_split.editors;
-                    let internal_command = self.common.internal_command;
                     self.main_split.editor_tabs.with_untracked(|editor_tabs| {
                         let Some(editor_tab) = editor_tabs.get(&editor_tab_id)
                         else {
@@ -914,13 +912,6 @@ impl WorkspaceData {
                         if let Some(new_index) = new_index {
                             editor_tab.update(|editor_tab| {
                                 editor_tab.active = new_index;
-                                if let Some(path) =
-                                    editor_tab.active_file_path(editors)
-                                {
-                                    internal_command.send(
-                                        InternalCommand::TrackRecentFile { path },
-                                    );
-                                }
                             });
                         }
                     });
@@ -930,8 +921,6 @@ impl WorkspaceData {
                 if let Some(editor_tab_id) =
                     self.main_split.active_editor_tab.get_untracked()
                 {
-                    let editors = self.main_split.editors;
-                    let internal_command = self.common.internal_command;
                     self.main_split.editor_tabs.with_untracked(|editor_tabs| {
                         let Some(editor_tab) = editor_tabs.get(&editor_tab_id)
                         else {
@@ -951,13 +940,6 @@ impl WorkspaceData {
                         if let Some(new_index) = new_index {
                             editor_tab.update(|editor_tab| {
                                 editor_tab.active = new_index;
-                                if let Some(path) =
-                                    editor_tab.active_file_path(editors)
-                                {
-                                    internal_command.send(
-                                        InternalCommand::TrackRecentFile { path },
-                                    );
-                                }
                             });
                         }
                     });
@@ -1267,6 +1249,9 @@ impl WorkspaceData {
                 debug!("{level}");
             }
             InternalCommand::OpenFile { path } => {
+                self.common
+                    .internal_command
+                    .send(InternalCommand::TrackRecentFile { path: path.clone() });
                 self.main_split.jump_to_location(
                     EditorLocation {
                         path,
@@ -1436,9 +1421,19 @@ impl WorkspaceData {
                 self.common.proxy.duplicate_path(source, path, send);
             }
             InternalCommand::GoToLocation { location } => {
+                self.common.internal_command.send(
+                    InternalCommand::TrackRecentFile {
+                        path: location.path.clone(),
+                    },
+                );
                 self.main_split.go_to_location(location, None);
             }
             InternalCommand::JumpToLocation { location } => {
+                self.common.internal_command.send(
+                    InternalCommand::TrackRecentFile {
+                        path: location.path.clone(),
+                    },
+                );
                 self.main_split.jump_to_location(location, None);
             }
             InternalCommand::OpenSearchPanel => {
