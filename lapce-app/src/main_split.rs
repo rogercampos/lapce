@@ -867,10 +867,24 @@ impl MainSplitData {
             _ => false,
         };
         if is_same {
-            let (_, _, child) = editor_tab
-                .with_untracked(|editor_tab| editor_tab.children[selected].clone());
             editor_tab.update(|editor_tab| {
-                editor_tab.active = selected;
+                let active = editor_tab.active;
+                if selected != active {
+                    // Move the found tab to be right after the currently active tab
+                    let child = editor_tab.children.remove(selected);
+                    let insert_at = if selected < active {
+                        // Removal shifted active down by 1; insert at that position
+                        active
+                    } else {
+                        active + 1
+                    };
+                    editor_tab.children.insert(insert_at, child);
+                    editor_tab.active = insert_at;
+                }
+                // If selected == active, it's already in the right place
+            });
+            let (_, _, child) = editor_tab.with_untracked(|editor_tab| {
+                editor_tab.children[editor_tab.active].clone()
             });
             return child;
         }
