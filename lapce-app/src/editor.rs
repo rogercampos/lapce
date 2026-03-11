@@ -2169,6 +2169,43 @@ impl EditorData {
             });
     }
 
+    /// Returns the currently selected text, or an empty string if nothing is
+    /// selected. Unlike `word_at_cursor()`, this does NOT expand to the word
+    /// under the cursor when there is no selection.
+    #[instrument]
+    pub fn selected_text(&self) -> String {
+        let doc = self.doc();
+        let region = self.cursor().with_untracked(|c| match &c.mode {
+            lapce_core::cursor::CursorMode::Normal(_) => None,
+            lapce_core::cursor::CursorMode::Visual {
+                start,
+                end,
+                mode: _,
+            } => Some(lapce_core::selection::SelRegion::new(
+                *start.min(end),
+                doc.buffer.with_untracked(|buffer| {
+                    buffer.next_grapheme_offset(*start.max(end), 1, buffer.len())
+                }),
+                None,
+            )),
+            lapce_core::cursor::CursorMode::Insert(selection) => {
+                let region = *selection.last_inserted().unwrap();
+                if region.is_caret() {
+                    None
+                } else {
+                    Some(region)
+                }
+            }
+        });
+
+        match region {
+            Some(region) => doc.buffer.with_untracked(|buffer| {
+                buffer.slice_to_cow(region.min()..region.max()).to_string()
+            }),
+            None => String::new(),
+        }
+    }
+
     #[instrument]
     pub fn word_at_cursor(&self) -> String {
         let doc = self.doc();

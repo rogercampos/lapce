@@ -76,6 +76,9 @@ pub struct SearchModalData {
     pub common: Rc<CommonData>,
     /// Controls whether keyboard input goes to the preview editor or the input/list.
     pub preview_focused: RwSignal<bool>,
+    /// Remembers the last search pattern so it can be restored when re-opening
+    /// the modal without a text selection.
+    pub last_pattern: RwSignal<String>,
 }
 
 impl std::fmt::Debug for SearchModalData {
@@ -98,6 +101,7 @@ impl SearchModalData {
         let preview_editor = main_split.editors.make_local(cx, common.clone());
         preview_editor.kind.set(EditorViewKind::Preview);
         let has_preview = cx.create_rw_signal(false);
+        let last_pattern = cx.create_rw_signal(String::new());
 
         // Sync the modal's input editor text to the global search pattern.
         // This is what connects the modal to the shared search backend:
@@ -165,12 +169,17 @@ impl SearchModalData {
         {
             let focus = common.focus;
             let modal_active = global_search.modal_active;
+            let input_buffer = input_editor.doc().buffer;
             cx.create_effect(move |_| {
                 let f = focus.get();
                 if f != Focus::SearchModal
                     && f != Focus::FolderPicker
                     && visible.get_untracked()
                 {
+                    // Save the current pattern before closing
+                    let pattern = input_buffer.with_untracked(|b| b.to_string());
+                    last_pattern.set(pattern);
+
                     modal_active.set(false);
                     visible.set(false);
                 }
@@ -191,12 +200,14 @@ impl SearchModalData {
             main_split,
             common,
             preview_focused,
+            last_pattern,
         }
     }
 
-    /// Opens the search modal, pre-populating the input with the word under the
-    /// cursor if the user was focused on a workbench editor. This mimics the common
-    /// IDE pattern of "search for the word I'm looking at".
+    /// Opens the search modal, pre-populating the input with:
+    /// 1. The selected text in the active editor (if any text is selected)
+    /// 2. Otherwise, the last search pattern used
+    /// 3. Empty string on first use
     pub fn open(&self) {
         self.input_editor.doc().reload(Rope::from(""), true);
         self.input_editor
@@ -206,18 +217,30 @@ impl SearchModalData {
         self.has_preview.set(false);
         self.preview_focused.set(false);
 
-        // Grab word at cursor from active editor
-        if self.common.focus.get_untracked() == Focus::Workbench {
-            let active_editor = self.main_split.active_editor.get_untracked();
-            if let Some(word) = active_editor.map(|editor| editor.word_at_cursor()) {
-                if !word.is_empty() {
-                    let word_len = word.len();
-                    self.input_editor.doc().reload(Rope::from(&word), true);
-                    self.input_editor.cursor().update(|cursor| {
-                        cursor.set_insert(Selection::region(0, word_len))
-                    });
-                }
-            }
+        // Check if there's selected text in the active editor
+        let selected_text = if self.common.focus.get_untracked() == Focus::Workbench
+        {
+            self.main_split
+                .active_editor
+                .get_untracked()
+                .and_then(|editor| {
+                    let text = editor.selected_text();
+                    if text.is_empty() { None } else { Some(text) }
+                })
+        } else {
+            None
+        };
+
+        // Use selected text if available, otherwise fall back to last pattern
+        let prefill =
+            selected_text.unwrap_or_else(|| self.last_pattern.get_untracked());
+
+        if !prefill.is_empty() {
+            let len = prefill.len();
+            self.input_editor.doc().reload(Rope::from(&prefill), true);
+            self.input_editor
+                .cursor()
+                .update(|cursor| cursor.set_insert(Selection::region(0, len)));
         }
 
         self.global_search.modal_active.set(true);
@@ -226,6 +249,14 @@ impl SearchModalData {
     }
 
     pub fn close(&self) {
+        // Remember the current search pattern for next time
+        let pattern = self
+            .input_editor
+            .doc()
+            .buffer
+            .with_untracked(|b| b.to_string());
+        self.last_pattern.set(pattern);
+
         self.global_search.modal_active.set(false);
         self.visible.set(false);
         Focus::restore_if_matching(&self.common.focus, Focus::SearchModal);
