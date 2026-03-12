@@ -445,16 +445,48 @@ fn file_explorer_view(
     let scroll_rect = create_rw_signal(Rect::ZERO);
     let workspace_path = data.common.workspace.path.clone();
 
+    let workspace_path_for_key = workspace_path.clone();
+    let is_node_excluded = move |kind: &FileNodeViewKind,
+                                 excluded_paths: &[String],
+                                 ws: &Option<PathBuf>|
+          -> bool {
+        if excluded_paths.is_empty() {
+            return false;
+        }
+        if let (Some(ws), Some(node_path)) = (ws, kind.path()) {
+            if let Ok(rel) = node_path.strip_prefix(ws) {
+                return excluded_paths.iter().any(|dir| rel.starts_with(dir));
+            }
+        }
+        false
+    };
+
     scroll(
         virtual_stack(
             move || {
+                // Track config so the list re-diffs when excluded paths change.
+                config.get();
                 FileNodeVirtualList::new(
                     root.get(),
                     data.naming.get(),
                     starred.get(),
                 )
             },
-            move |node| (node.kind.clone(), node.is_dir, node.open, node.level),
+            move |node| {
+                let excluded_paths = &config.get_untracked().core.excluded_paths;
+                let is_excluded = is_node_excluded(
+                    &node.kind,
+                    excluded_paths,
+                    &workspace_path_for_key,
+                );
+                (
+                    node.kind.clone(),
+                    node.is_dir,
+                    node.open,
+                    node.level,
+                    is_excluded,
+                )
+            },
             move |node| {
                 let level = node.level;
                 let data = data.clone();
@@ -467,21 +499,8 @@ fn file_explorer_view(
                 let is_dir = node.is_dir;
 
                 let is_excluded = {
-                    let excluded_dirs =
-                        &config.get_untracked().core.excluded_directories;
-                    if excluded_dirs.is_empty() {
-                        false
-                    } else if let (Some(ws), Some(node_path)) =
-                        (&workspace_path, kind.path())
-                    {
-                        if let Ok(rel) = node_path.strip_prefix(ws) {
-                            excluded_dirs.iter().any(|dir| rel.starts_with(dir))
-                        } else {
-                            false
-                        }
-                    } else {
-                        false
-                    }
+                    let excluded_paths = &config.get_untracked().core.excluded_paths;
+                    is_node_excluded(&kind, excluded_paths, &workspace_path)
                 };
 
                 let view =

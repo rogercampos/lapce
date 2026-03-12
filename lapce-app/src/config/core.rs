@@ -17,7 +17,7 @@ pub struct CoreConfig {
     )]
     pub file_explorer_double_click: bool,
     #[field_names(
-        desc = "List of directory names to exclude from Go to File and global search (e.g. [\"vendor\", \"node_modules\"])"
+        desc = "List of paths to exclude from Go to File and global search, using gitignore-style patterns (e.g. [\"vendor\", \"node_modules\", \"**/generated\"])"
     )]
-    pub excluded_directories: Vec<String>,
+    pub excluded_paths: Vec<String>,
 }

@@ -243,7 +243,7 @@ pub enum ProxyNotification {
         tab_id: usize,
         ruby_lsp_exclude_gems: bool,
         ruby_lsp_excluded_patterns: Vec<String>,
-        excluded_directories: Vec<String>,
+        excluded_paths: Vec<String>,
     },
     OpenFileChanged {
         path: PathBuf,
@@ -251,8 +251,8 @@ pub enum ProxyNotification {
     OpenPaths {
         paths: Vec<PathObject>,
     },
-    UpdateExcludedDirectories {
-        excluded_directories: Vec<String>,
+    UpdateExcludedPaths {
+        excluded_paths: Vec<String>,
     },
     Shutdown {},
     Completion {
@@ -527,7 +527,7 @@ impl ProxyRpcHandler {
         tab_id: usize,
         ruby_lsp_exclude_gems: bool,
         ruby_lsp_excluded_patterns: Vec<String>,
-        excluded_directories: Vec<String>,
+        excluded_paths: Vec<String>,
     ) {
         self.notification(ProxyNotification::Initialize {
             workspace,
@@ -535,7 +535,7 @@ impl ProxyRpcHandler {
             tab_id,
             ruby_lsp_exclude_gems,
             ruby_lsp_excluded_patterns,
-            excluded_directories,
+            excluded_paths,
         });
     }
 

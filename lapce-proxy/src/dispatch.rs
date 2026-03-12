@@ -53,7 +53,7 @@ pub struct Dispatcher {
     lsp_rpc: LspRpcHandler,
     buffers: HashMap<PathBuf, Buffer>,
     file_watcher: FileWatcher,
-    excluded_directories: Vec<String>,
+    excluded_paths: Vec<String>,
     semgrep_initialized: bool,
     semgrep: Option<SemgrepRunner>,
     /// Shared cache of git file statuses.  Populated lazily: first by
@@ -75,14 +75,14 @@ impl ProxyHandler for Dispatcher {
                 tab_id: _,
                 ruby_lsp_exclude_gems,
                 ruby_lsp_excluded_patterns,
-                excluded_directories,
+                excluded_paths,
             } => {
                 tracing::info!(
                     "[dispatch] Initialize start, workspace={:?}",
                     workspace
                 );
                 self.workspace = workspace;
-                self.excluded_directories = excluded_directories;
+                self.excluded_paths = excluded_paths;
                 self.git_status_cache = Arc::new(Mutex::new(None));
                 self.file_watcher.notify(FileWatchNotifier::new(
                     self.core_rpc.clone(),
@@ -210,10 +210,8 @@ impl ProxyHandler for Dispatcher {
             } => {
                 self.lsp_rpc.signature_help(request_id, &path, position);
             }
-            UpdateExcludedDirectories {
-                excluded_directories,
-            } => {
-                self.excluded_directories = excluded_directories;
+            UpdateExcludedPaths { excluded_paths } => {
+                self.excluded_paths = excluded_paths;
             }
             Shutdown {} => {
                 self.lsp_rpc.shutdown();
@@ -292,7 +290,7 @@ impl ProxyHandler for Dispatcher {
                 let workspace = self.workspace.clone();
                 let proxy_rpc = self.proxy_rpc.clone();
                 let core_rpc = self.core_rpc.clone();
-                let excluded_directories = self.excluded_directories.clone();
+                let excluded_paths = self.excluded_paths.clone();
 
                 thread::spawn(move || {
                     let task_id = core_rpc.next_background_task_id();
@@ -304,7 +302,7 @@ impl ProxyHandler for Dispatcher {
                         our_id,
                         &WORKER_ID,
                         workspace.as_deref(),
-                        &excluded_directories,
+                        &excluded_paths,
                         &pattern,
                         case_sensitive,
                         whole_word,
@@ -328,14 +326,14 @@ impl ProxyHandler for Dispatcher {
                 let workspace = self.workspace.clone();
                 let proxy_rpc = self.proxy_rpc.clone();
                 let core_rpc = self.core_rpc.clone();
-                let excluded_directories = self.excluded_directories.clone();
+                let excluded_paths = self.excluded_paths.clone();
 
                 thread::spawn(move || {
                     let task_id = core_rpc.next_background_task_id();
                     core_rpc.background_task_started(task_id, "Replace All".into());
                     let result = global_replace(
                         workspace.as_deref(),
-                        &excluded_directories,
+                        &excluded_paths,
                         &pattern,
                         &replacement,
                         case_sensitive,
@@ -633,7 +631,7 @@ impl ProxyHandler for Dispatcher {
                 let workspace = self.workspace.clone();
                 let proxy_rpc = self.proxy_rpc.clone();
                 let core_rpc = self.core_rpc.clone();
-                let excluded_directories = self.excluded_directories.clone();
+                let excluded_paths = self.excluded_paths.clone();
                 thread::spawn(move || {
                     let task_id = core_rpc.next_background_task_id();
                     core_rpc.background_task_started(
@@ -643,7 +641,7 @@ impl ProxyHandler for Dispatcher {
                     if let Some(workspace) = workspace {
                         let overrides = Dispatcher::build_walk_overrides(
                             &workspace,
-                            &excluded_directories,
+                            &excluded_paths,
                         );
 
                         let mut walk_builder = ignore::WalkBuilder::new(&workspace);
@@ -1175,13 +1173,13 @@ impl ProxyHandler for Dispatcher {
             ListAllFolders {} => {
                 let workspace = self.workspace.clone();
                 let proxy_rpc = self.proxy_rpc.clone();
-                let excluded_directories = self.excluded_directories.clone();
+                let excluded_paths = self.excluded_paths.clone();
                 thread::spawn(move || {
                     let mut folders = Vec::new();
                     if let Some(workspace) = workspace.as_ref() {
                         let overrides = Dispatcher::build_walk_overrides(
                             workspace,
-                            &excluded_directories,
+                            &excluded_paths,
                         );
                         let mut walk_builder = ignore::WalkBuilder::new(workspace);
                         walk_builder.hidden(false).parents(false).require_git(false);
@@ -1227,7 +1225,7 @@ impl Dispatcher {
             lsp_rpc,
             buffers: HashMap::new(),
             file_watcher,
-            excluded_directories: Vec::new(),
+            excluded_paths: Vec::new(),
             semgrep_initialized: false,
             semgrep: None,
             git_status_cache: Arc::new(Mutex::new(None)),
@@ -1240,11 +1238,11 @@ impl Dispatcher {
 
     fn build_walk_overrides(
         workspace: &std::path::Path,
-        excluded_directories: &[String],
+        excluded_paths: &[String],
     ) -> Option<ignore::overrides::Override> {
         let mut builder = ignore::overrides::OverrideBuilder::new(workspace);
         builder.add("!.git/").ok()?;
-        for dir in excluded_directories {
+        for dir in excluded_paths {
             builder.add(&format!("!{dir}/")).ok()?;
         }
         builder.build().ok()
@@ -1643,7 +1641,7 @@ fn parallel_search(
     id: u64,
     current_id: &AtomicU64,
     workspace: Option<&std::path::Path>,
-    excluded_directories: &[String],
+    excluded_paths: &[String],
     pattern: &str,
     case_sensitive: bool,
     whole_word: bool,
@@ -1672,8 +1670,7 @@ fn parallel_search(
         }
     };
 
-    let overrides =
-        Dispatcher::build_walk_overrides(workspace, excluded_directories);
+    let overrides = Dispatcher::build_walk_overrides(workspace, excluded_paths);
     // When a search_path is specified, restrict the walk to that subfolder
     let walk_root = match search_path {
         Some(rel) => workspace.join(rel),
@@ -1888,7 +1885,7 @@ fn replace_in_file(
 /// reports progress, and sends a GlobalReplaceDone notification with modified file paths.
 fn global_replace(
     workspace: Option<&std::path::Path>,
-    excluded_directories: &[String],
+    excluded_paths: &[String],
     pattern: &str,
     replacement: &str,
     case_sensitive: bool,
@@ -1915,8 +1912,7 @@ fn global_replace(
     };
 
     // Phase 1: Collect all file paths
-    let overrides =
-        Dispatcher::build_walk_overrides(workspace, excluded_directories);
+    let overrides = Dispatcher::build_walk_overrides(workspace, excluded_paths);
     let mut walk_builder = ignore::WalkBuilder::new(workspace);
     walk_builder.hidden(false).parents(false).require_git(false);
     if let Some(overrides) = overrides {

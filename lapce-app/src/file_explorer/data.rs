@@ -683,6 +683,53 @@ impl FileExplorerData {
 
         menu = menu.separator();
 
+        // Exclude / include path toggle
+        if !is_workspace {
+            let config = self.common.config;
+            let excluded_paths = config.get_untracked().core.excluded_paths.clone();
+            let rel_path = path_a
+                .strip_prefix(workspace_path)
+                .ok()
+                .map(|r| r.to_string_lossy().to_string());
+
+            if let Some(rel) = rel_path {
+                let is_currently_excluded = excluded_paths.contains(&rel);
+                let label = if is_currently_excluded {
+                    if is_dir {
+                        "Remove Directory from Excluded Paths"
+                    } else {
+                        "Remove File from Excluded Paths"
+                    }
+                } else if is_dir {
+                    "Add Directory to Excluded Paths"
+                } else {
+                    "Add File to Excluded Paths"
+                };
+
+                let internal_command = common.internal_command;
+                menu = menu.entry(MenuItem::new(label).action(move || {
+                    let mut paths = excluded_paths.clone();
+                    if is_currently_excluded {
+                        paths.retain(|p| p != &rel);
+                    } else {
+                        paths.push(rel.clone());
+                    }
+                    let mut arr = toml_edit::Array::new();
+                    for p in &paths {
+                        arr.push(p.as_str());
+                    }
+                    LapceConfig::update_file(
+                        "core",
+                        "excluded-paths",
+                        toml_edit::Value::Array(arr),
+                    );
+                    internal_command.send(InternalCommand::ReloadConfig);
+                }));
+            }
+        }
+
+        menu = menu.separator();
+
         let internal_command = common.internal_command;
         menu = menu.entry(MenuItem::new("Refresh").action(move || {
             internal_command.send(InternalCommand::ReloadFileExplorer);
