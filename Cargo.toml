@@ -24,7 +24,7 @@ members = ["lapce-app", "lapce-proxy", "lapce-rpc", "lapce-core"]
 exclude = ["floem-local"]
 
 [workspace.package]
-version      = "0.4.6"
+version      = "0.7.0"
 edition      = "2024"
 rust-version = "1.87.0"
 license      = "Apache-2.0"
