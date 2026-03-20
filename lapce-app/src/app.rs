@@ -956,7 +956,6 @@ fn window(window_data: WindowData) -> impl View {
         })
         .window_menu(move || {
             let workspace = &window_data.workspace;
-            workspace.common.keypress.track();
             let workbench_command = workspace.common.workbench_command;
             let lapce_command = workspace.common.lapce_command;
             let window_command = workspace.common.window_common.window_command;
