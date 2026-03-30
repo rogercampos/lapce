@@ -2602,7 +2602,7 @@ dependencies = [
 
 [[package]]
 name = "lapce"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "lapce-app",
  "lapce-proxy",
@@ -2610,7 +2610,7 @@ dependencies = [
 
 [[package]]
 name = "lapce-app"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "Inflector",
  "anyhow",
@@ -2674,7 +2674,7 @@ dependencies = [
 
 [[package]]
 name = "lapce-core"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "ahash",
  "anyhow",
@@ -2702,7 +2702,7 @@ dependencies = [
 
 [[package]]
 name = "lapce-proxy"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -2742,7 +2742,7 @@ dependencies = [
 
 [[package]]
 name = "lapce-rpc"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "anyhow",
  "crossbeam-channel",
