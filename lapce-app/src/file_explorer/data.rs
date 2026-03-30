@@ -184,32 +184,89 @@ impl FileExplorerData {
     /// This is the core of the lazy loading strategy: directories are only read from
     /// disk the first time they are expanded. Subsequent toggles just show/hide
     /// the already-loaded children and update the open count for virtual scrolling.
+    ///
+    /// When the directory hasn't been read yet, we avoid updating the root signal
+    /// (which would trigger a pointless empty render). Instead, we fire the async
+    /// read_dir and let its callback do a single signal update with both the children
+    /// and the open/count state — one render with full data.
     pub fn toggle_expand(&self, path: &Path) {
-        let Some(Some(read)) = self.root.try_update(|root| {
-            let read = if let Some(node) = root.get_file_node_mut(path) {
-                if !node.is_dir {
-                    return None;
-                }
-                node.open = !node.open;
-                Some(node.read)
-            } else {
-                None
+        // First, check the current state without mutating the signal.
+        let state = self.root.with_untracked(|root| {
+            let Some(node) = root.get_file_node(path) else {
+                return None;
             };
-
-            // Only update counts if the directory was already read (children exist).
-            // If not yet read, counts will be updated when read_dir completes.
-            if Some(true) == read {
-                root.update_node_count_recursive(path);
+            if !node.is_dir {
+                return None;
             }
-            read
-        }) else {
+            Some((node.open, node.read))
+        });
+
+        let Some((currently_open, read)) = state else {
             return;
         };
 
-        // Read the directory's files if they haven't been read yet
-        if !read {
-            self.read_dir(path);
+        if read {
+            // Already read: toggle open/closed and update counts in one signal update.
+            self.root.update(|root| {
+                if let Some(node) = root.get_file_node_mut(path) {
+                    node.open = !node.open;
+                }
+                root.update_node_count_recursive(path);
+            });
+        } else if !currently_open {
+            // Not yet read and currently closed: fire async read_dir which will
+            // set open=true, insert children, and update counts in a single
+            // signal update — avoiding a useless empty-folder render.
+            self.read_dir_and_open(path);
         }
+    }
+
+    /// Read a directory from disk and open it in a single signal update.
+    /// Used when expanding a directory for the first time.
+    fn read_dir_and_open(&self, path: &Path) {
+        tracing::info!("[file-explorer] read_dir_and_open called for {:?}", path);
+        let root = self.root;
+        let config = self.common.config;
+        let send = {
+            let path = path.to_path_buf();
+            create_ext_action(self.common.scope, move |result| {
+                let Ok(ProxyResponse::ReadDirResponse { mut items }) = result else {
+                    return;
+                };
+
+                let exclude_matcher = Glob::new(&config.get().editor.files_exclude)
+                    .map(|g| g.compile_matcher())
+                    .map_err(|e| {
+                        tracing::error!(
+                            target: "files_exclude",
+                            "Failed to compile glob: {}",
+                            e
+                        );
+                    })
+                    .ok();
+
+                // Single signal update: set open + children + counts together.
+                root.update(|root| {
+                    if let Some(node) = root.get_file_node_mut(&path) {
+                        if let Some(ref matcher) = exclude_matcher {
+                            items.retain(|i| !matcher.is_match(&i.path));
+                        }
+
+                        node.open = true;
+                        node.read = true;
+
+                        for item in items {
+                            if !node.children.contains_key(&item.path) {
+                                node.children.insert(item.path.clone(), item);
+                            }
+                        }
+                    }
+                    root.update_node_count_recursive(&path);
+                });
+            })
+        };
+
+        self.common.proxy.read_dir(path.to_path_buf(), send);
     }
 
     pub fn read_dir(&self, path: &Path) {
