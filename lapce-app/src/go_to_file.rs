@@ -25,7 +25,6 @@ use lapce_core::{
     command::FocusCommand, directory::Directory, mode::Mode, movement::Movement,
     selection::Selection,
 };
-use lapce_xi_rope::Rope;
 use nucleo::Utf32Str;
 
 use crate::{
@@ -197,10 +196,16 @@ impl GoToFileData {
     }
 
     pub fn open(&self) {
-        self.input_editor.doc().reload(Rope::from(""), true);
+        // Keep the previous search text and select all so the user can
+        // either type over it or refine the existing query.
+        let len = self
+            .input_editor
+            .doc()
+            .buffer
+            .with_untracked(|b| b.to_string().len());
         self.input_editor
             .cursor()
-            .update(|cursor| cursor.set_insert(Selection::caret(0)));
+            .update(|cursor| cursor.set_insert(Selection::region(0, len)));
         self.index.set(0);
         self.visible.set(true);
         self.common.focus.set(Focus::GoToFile);
