@@ -119,7 +119,8 @@ enum TreeEntry {
 }
 
 impl TreeEntry {
-    /// Recursively count all matches under this entry.
+    /// Recursively count all matches under this entry without adding rows.
+    /// Used for collapsed folders where we still need the total for display.
     fn total_match_count(&self) -> usize {
         match self {
             TreeEntry::File { match_count, .. } => *match_count,
@@ -842,6 +843,8 @@ fn sorted_keys(entries: &BTreeMap<String, TreeEntry>) -> Vec<String> {
 
 /// Flatten the tree into a Vec<SearchTreeRow>, respecting expanded state.
 /// `parent_rel` accumulates the relative path for folder uniqueness.
+/// Returns the total match count under `entries`, computed during the walk
+/// so each subtree is visited once regardless of expand/collapse depth.
 fn flatten_tree_entries(
     entries: &BTreeMap<String, TreeEntry>,
     collapsed_folders: &HashSet<PathBuf>,
@@ -849,8 +852,9 @@ fn flatten_tree_entries(
     level: usize,
     rows: &mut Vec<SearchTreeRow>,
     parent_rel: &Path,
-) {
+) -> usize {
     let keys = sorted_keys(entries);
+    let mut total = 0;
 
     for key in keys {
         let entry = &entries[&key];
@@ -859,15 +863,16 @@ fn flatten_tree_entries(
                 let rel_path = parent_rel.join(name);
                 let expanded = !collapsed_folders.contains(&rel_path);
 
+                let folder_row_idx = rows.len();
                 rows.push(SearchTreeRow::Folder {
                     rel_path: rel_path.clone(),
                     name: name.clone(),
                     expanded,
-                    match_count: entry.total_match_count(),
+                    match_count: 0,
                     level,
                 });
 
-                if expanded {
+                let folder_total = if expanded {
                     flatten_tree_entries(
                         children,
                         collapsed_folders,
@@ -875,8 +880,17 @@ fn flatten_tree_entries(
                         level + 1,
                         rows,
                         &rel_path,
-                    );
+                    )
+                } else {
+                    children.values().map(|c| c.total_match_count()).sum()
+                };
+
+                if let SearchTreeRow::Folder { match_count, .. } =
+                    &mut rows[folder_row_idx]
+                {
+                    *match_count = folder_total;
                 }
+                total += folder_total;
             }
             TreeEntry::File {
                 name,
@@ -903,7 +917,9 @@ fn flatten_tree_entries(
                         });
                     }
                 }
+                total += *match_count;
             }
         }
     }
+    total
 }

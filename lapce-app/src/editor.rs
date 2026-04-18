@@ -214,6 +214,12 @@ pub struct EditorData {
     pub kind: RwSignal<EditorViewKind>,
     pub sticky_header_height: RwSignal<f64>,
     pub mouse_hover_timer: RwSignal<TimerToken>,
+    /// Cache of the last pointer-move inputs `(offset, is_inside, is_cmd)` that
+    /// drove hover work. Used to short-circuit `pointer_move` when the mouse
+    /// moves within the same character and modifier state — the diagnostic
+    /// hover scan and Cmd-link boundary lookup would all produce identical
+    /// results.
+    pub hover_state: RwSignal<Option<(usize, bool, bool)>>,
     /// Range (start_offset, end_offset) of the symbol with a confirmed definition link.
     /// Set when Cmd is held and the LSP confirms a definition exists.
     pub link_hover_range: RwSignal<Option<(usize, usize)>>,
@@ -264,6 +270,7 @@ impl EditorData {
             kind: cx.create_rw_signal(EditorViewKind::Normal),
             sticky_header_height: cx.create_rw_signal(0.0),
             mouse_hover_timer: cx.create_rw_signal(TimerToken::INVALID),
+            hover_state: cx.create_rw_signal(None),
             link_hover_range: cx.create_rw_signal(None),
             common,
             sticky_header_info: cx.create_rw_signal(StickyHeaderInfo::default()),
@@ -2568,11 +2575,21 @@ impl EditorData {
             self.editor
                 .extend_drag_selection(offset, pointer_event.modifiers.alt());
         }
-        self.update_diagnostic_hover(offset);
 
         // Cmd+hover definition link styling
         let is_cmd = (cfg!(target_os = "macos") && pointer_event.modifiers.meta())
             || (cfg!(not(target_os = "macos")) && pointer_event.modifiers.control());
+
+        // Pixel-level moves within the same character repeat the same hover
+        // work (diagnostic span scan + Cmd-link boundary lookup + LSP probe).
+        // Skip all of it when nothing that influences the outcome has changed.
+        let hover_state = (offset, is_inside, is_cmd);
+        if self.hover_state.get_untracked() == Some(hover_state) {
+            return;
+        }
+        self.hover_state.set(Some(hover_state));
+
+        self.update_diagnostic_hover(offset);
 
         if is_cmd && is_inside {
             if let Some(path) = self.doc().loaded_file_path() {
@@ -2650,6 +2667,7 @@ impl EditorData {
     #[instrument]
     pub fn pointer_leave(&self) {
         self.mouse_hover_timer.set(TimerToken::INVALID);
+        self.hover_state.set(None);
         if self.link_hover_range.get_untracked().is_some() {
             self.link_hover_range.set(None);
             self.doc().clear_text_cache();

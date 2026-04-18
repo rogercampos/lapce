@@ -821,15 +821,13 @@ impl Doc {
     }
 
     /// Inform any dependents on this document that they should clear any cached text.
+    /// Floem's `Lines::check_cache_rev` observes the bumped `cache_rev` lazily and
+    /// clears its own `text_layouts` the next time it's read, so we don't need to
+    /// reach into it from here.
     pub fn clear_text_cache(&self) {
         self.phantom_text_cache.borrow_mut().clear();
         self.cache_rev.try_update(|cache_rev| {
             *cache_rev += 1;
-
-            // TODO: ???
-            // Update the text layouts within the callback so that those alerted to cache rev
-            // will see the now empty layouts.
-            // self.text_layouts.borrow_mut().clear(*cache_rev, None);
         });
     }
 

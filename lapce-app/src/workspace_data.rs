@@ -205,7 +205,6 @@ pub struct WorkspaceData {
     pub go_to_file_data: GoToFileData,
     pub go_to_line_data: GoToLineData,
     pub go_to_symbol_data: GoToSymbolData,
-    pub recent_files: RwSignal<Vec<PathBuf>>,
     pub recent_files_data: RecentFilesData,
     pub folder_picker_data: FolderPickerData,
     pub alert_data: AlertBoxData,
@@ -566,7 +565,6 @@ impl WorkspaceData {
             go_to_file_data,
             go_to_line_data,
             go_to_symbol_data,
-            recent_files,
             recent_files_data,
             folder_picker_data,
             alert_data,
@@ -703,7 +701,7 @@ impl WorkspaceData {
     }
 
     pub fn track_recent_file(&self, path: PathBuf) {
-        self.recent_files.update(|files| {
+        self.common.recent_files.update(|files| {
             files.retain(|p| p != &path);
             files.insert(0, path);
             files.truncate(100);
@@ -2012,7 +2010,7 @@ impl WorkspaceData {
             panel: self.panel.panel_info(),
             search_tabs: self.search_tabs.tab_infos(),
             active_search_tab: self.search_tabs.active_tab.get_untracked(),
-            recent_files: self.recent_files.get_untracked(),
+            recent_files: self.common.recent_files.get_untracked(),
             starred_folders: self.file_explorer.starred_folders(),
         }
     }
