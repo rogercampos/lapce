@@ -1762,7 +1762,7 @@ impl DocStyling {
         // Link hover text color (Cmd+hover definition)
         if let Some(e_data) = self.doc.editor_data(edid) {
             if let Some((link_start, link_end)) =
-                e_data.link_hover_range.get_untracked()
+                e_data.hover.link_range.get_untracked()
             {
                 let (start_offset, end_offset) =
                     self.doc.buffer.with_untracked(|buffer| {
@@ -2003,7 +2003,7 @@ impl Styling for DocStyling {
         // Link hover styling (Cmd+hover definition underline)
         if let Some(e_data) = doc.editor_data(edid) {
             if let Some((link_start, link_end)) =
-                e_data.link_hover_range.get_untracked()
+                e_data.hover.link_range.get_untracked()
             {
                 if link_start < end_offset && link_end > start_offset {
                     let link_color = config.color(LapceColor::EDITOR_LINK);
@@ -2031,7 +2031,7 @@ impl Styling for DocStyling {
         };
 
         // If the find is active, then we don't want to paint the caret
-        !e_data.find_focus.get_untracked()
+        !e_data.find_state.find_focus.get_untracked()
     }
 }
 

@@ -669,7 +669,7 @@ fn workbench(workspace_data: Rc<WorkspaceData>) -> impl View {
         },
         panel_container_view(workspace_data.clone(), PanelContainerPosition::Bottom),
         lsp_views::window_message_view(
-            workspace_data.messages,
+            workspace_data.lsp_progress.messages,
             workspace_data.common.config,
         ),
     ))
@@ -835,7 +835,7 @@ fn empty_workspace_view(workspace_data: Rc<WorkspaceData>) -> impl View {
 /// If no folder is open, shows a simplified "Open Workspace" landing page instead.
 fn workspace_view(workspace_data: Rc<WorkspaceData>) -> impl View {
     let window_origin = workspace_data.common.window_origin;
-    let layout_rect = workspace_data.layout_rect;
+    let layout_rect = workspace_data.layout.rect;
     let config = workspace_data.common.config;
     let workspace_scope = workspace_data.scope;
     let hover_active = workspace_data.common.hover.active;
@@ -844,7 +844,7 @@ fn workspace_view(workspace_data: Rc<WorkspaceData>) -> impl View {
     let view = if workspace_data.workspace.path.is_none() {
         empty_workspace_view(workspace_data.clone()).into_any()
     } else {
-        let status_height = workspace_data.status_height;
+        let status_height = workspace_data.layout.status_height;
         stack((
             stack((
                 title(workspace_data.clone()),
@@ -873,7 +873,7 @@ fn workspace_view(workspace_data: Rc<WorkspaceData>) -> impl View {
             go_to_line::go_to_line_popup(workspace_data.clone()),
             go_to_symbol::go_to_symbol_popup(workspace_data.clone()),
             about::about_popup(workspace_data.clone()),
-            alert::alert_box(workspace_data.alert_data.clone()),
+            alert::alert_box(workspace_data.popups.alert.clone()),
         ))
         .into_any()
     };
@@ -925,9 +925,10 @@ fn window(window_data: WindowData) -> impl View {
     workspace_view(workspace_data.clone())
         .window_title(move || {
             let workspace_name = workspace_data.workspace.display();
-            let branch = workspace_data.git_branch.get();
+            let branch = workspace_data.git.branch.get();
             let repo_state_label = workspace_data
-                .git_repo_state
+                .git
+                .repo_state
                 .get()
                 .label()
                 .map(String::from);

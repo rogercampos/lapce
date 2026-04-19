@@ -41,7 +41,7 @@ pub fn global_search_panel(
     workspace_data: Rc<WorkspaceData>,
     _position: PanelPosition,
 ) -> impl View {
-    let search_tabs = workspace_data.search_tabs.clone();
+    let search_tabs = workspace_data.search.tabs.clone();
     let config = workspace_data.common.config;
 
     stack((
@@ -418,7 +418,7 @@ fn panel_folder_filter_row(
     config: ReadSignal<Arc<LapceConfig>>,
 ) -> impl View {
     let search_path = gs.search_path;
-    let folder_picker_data = workspace_data.folder_picker_data.clone();
+    let folder_picker_data = workspace_data.palettes.folder_picker.clone();
 
     container(
         label(move || match search_path.get() {

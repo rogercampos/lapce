@@ -92,8 +92,8 @@ pub fn status(
             .style(move |s| s.height_pct(100.0).padding_horiz(10.0).items_center()),
             background_tasks_indicator(
                 config,
-                workspace_data.background_tasks,
-                workspace_data.bg_tasks_popup_visible,
+                workspace_data.lsp_progress.background_tasks,
+                workspace_data.lsp_progress.bg_tasks_popup_visible,
             ),
         ))
         .style(|s| {
@@ -188,7 +188,7 @@ pub fn status(
                 .color(config.get().color(LapceColor::STATUS_FOREGROUND))
         }),
         stack({
-            let go_to_line_data = workspace_data.go_to_line_data.clone();
+            let go_to_line_data = workspace_data.palettes.go_to_line.clone();
             let cursor_info = status_text(config, editor, move || {
                 if let Some(editor) = editor.get() {
                     let mut status = String::new();
@@ -435,9 +435,9 @@ fn background_tasks_indicator(
 pub fn background_tasks_popup(workspace_data: Rc<WorkspaceData>) -> impl View {
     let cx = Scope::current();
     let config = workspace_data.common.config;
-    let background_tasks = workspace_data.background_tasks;
-    let popup_visible = workspace_data.bg_tasks_popup_visible;
-    let status_height = workspace_data.status_height;
+    let background_tasks = workspace_data.lsp_progress.background_tasks;
+    let popup_visible = workspace_data.lsp_progress.bg_tasks_popup_visible;
+    let status_height = workspace_data.layout.status_height;
 
     let has_tasks = create_memo(move |_| !background_tasks.with(|t| t.is_empty()));
     let visible = create_memo(move |_| popup_visible.get() && has_tasks.get());

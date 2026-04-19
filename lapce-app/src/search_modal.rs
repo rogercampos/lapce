@@ -471,7 +471,7 @@ impl VirtualVector<(usize, FlatSearchMatch)> for FlatSearchItems {
 }
 
 pub fn search_modal_popup(workspace_data: Rc<WorkspaceData>) -> impl View {
-    let data = workspace_data.search_modal_data.clone();
+    let data = workspace_data.search.modal.clone();
     let config = workspace_data.common.config;
     let visibility = data.visible;
     let close_data = data.clone();
@@ -486,7 +486,7 @@ pub fn search_modal_popup(workspace_data: Rc<WorkspaceData>) -> impl View {
 }
 
 fn search_modal_content(workspace_data: Rc<WorkspaceData>) -> impl View {
-    let data = workspace_data.search_modal_data.clone();
+    let data = workspace_data.search.modal.clone();
     let config = workspace_data.common.config;
     let focus = workspace_data.common.focus;
     let index = data.index;
@@ -572,8 +572,8 @@ fn search_folder_filter_row(
     workspace_data: Rc<WorkspaceData>,
     config: ReadSignal<Arc<LapceConfig>>,
 ) -> impl View {
-    let search_path = workspace_data.search_modal_data.global_search.search_path;
-    let folder_picker_data = workspace_data.folder_picker_data.clone();
+    let search_path = workspace_data.search.modal.global_search.search_path;
+    let folder_picker_data = workspace_data.palettes.folder_picker.clone();
     let search_path_for_callback = search_path;
 
     container(
@@ -844,7 +844,7 @@ fn search_modal_preview_editor(
     workspace_data: Rc<WorkspaceData>,
     config: ReadSignal<Arc<LapceConfig>>,
 ) -> impl View {
-    let data = workspace_data.search_modal_data.clone();
+    let data = workspace_data.search.modal.clone();
     let preview_focused = data.preview_focused;
     let focus = workspace_data.common.focus;
     let workspace = workspace_data.workspace.clone();

@@ -551,7 +551,7 @@ impl VirtualVector<(usize, GoToFileItem)> for GoToFileItems {
 }
 
 pub fn go_to_file_popup(workspace_data: Rc<WorkspaceData>) -> impl View {
-    let data = workspace_data.go_to_file_data.clone();
+    let data = workspace_data.palettes.go_to_file.clone();
     let config = workspace_data.common.config;
     let visibility = data.visible;
     let close_data = data.clone();
@@ -566,10 +566,10 @@ pub fn go_to_file_popup(workspace_data: Rc<WorkspaceData>) -> impl View {
 }
 
 fn go_to_file_content(workspace_data: Rc<WorkspaceData>) -> impl View {
-    let data = workspace_data.go_to_file_data.clone();
+    let data = workspace_data.palettes.go_to_file.clone();
     let config = workspace_data.common.config;
     let focus = workspace_data.common.focus;
-    let layout_rect = workspace_data.layout_rect.read_only();
+    let layout_rect = workspace_data.layout.rect.read_only();
     let index = data.index;
     let filtered_items = data.filtered_items;
     let run_id = data.run_id;

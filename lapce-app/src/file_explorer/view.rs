@@ -135,7 +135,7 @@ pub fn file_explorer_panel(
 ) -> impl View {
     let config = workspace_data.common.config;
     let data = workspace_data.file_explorer.clone();
-    let git_file_statuses = workspace_data.git_file_statuses;
+    let git_file_statuses = workspace_data.git.file_statuses;
 
     let file_explorer_header = {
         let wtd = workspace_data.clone();

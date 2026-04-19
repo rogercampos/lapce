@@ -740,7 +740,7 @@ impl VirtualVector<FolderNodeViewData> for FolderVirtualList {
 // ---------------------------------------------------------------------------
 
 pub fn folder_picker_popup(workspace_data: Rc<WorkspaceData>) -> impl View {
-    let data = workspace_data.folder_picker_data.clone();
+    let data = workspace_data.palettes.folder_picker.clone();
     let config = workspace_data.common.config;
     let visibility = data.visible;
     let close_data = data.clone();
@@ -755,7 +755,7 @@ pub fn folder_picker_popup(workspace_data: Rc<WorkspaceData>) -> impl View {
 }
 
 fn folder_picker_content(workspace_data: Rc<WorkspaceData>) -> impl View {
-    let data = workspace_data.folder_picker_data.clone();
+    let data = workspace_data.palettes.folder_picker.clone();
     let config = workspace_data.common.config;
     let focus = workspace_data.common.focus;
     let ui_line_height = workspace_data.common.ui_line_height;

@@ -363,7 +363,7 @@ pub(super) fn completion(workspace_data: Rc<WorkspaceData>) -> impl View {
 
 pub(super) fn code_action(workspace_data: Rc<WorkspaceData>) -> impl View {
     let config = workspace_data.common.config;
-    let code_action = workspace_data.code_action;
+    let code_action = workspace_data.popups.code_action;
     let (status, active) = code_action
         .with_untracked(|code_action| (code_action.status, code_action.active));
     scroll(
@@ -448,7 +448,7 @@ pub(super) fn code_action(workspace_data: Rc<WorkspaceData>) -> impl View {
 
 pub(super) fn definition_picker(workspace_data: Rc<WorkspaceData>) -> impl View {
     let config = workspace_data.common.config;
-    let definition_picker = workspace_data.definition_picker;
+    let definition_picker = workspace_data.popups.definition_picker;
     let (status, active) =
         definition_picker.with_untracked(|picker| (picker.status, picker.active));
     scroll(
@@ -541,9 +541,9 @@ pub(super) fn definition_picker(workspace_data: Rc<WorkspaceData>) -> impl View 
 }
 
 pub(super) fn rename(workspace_data: Rc<WorkspaceData>) -> impl View {
-    let editor = workspace_data.rename.editor.clone();
-    let active = workspace_data.rename.active;
-    let layout_rect = workspace_data.rename.layout_rect;
+    let editor = workspace_data.popups.rename.editor.clone();
+    let active = workspace_data.popups.rename.active;
+    let layout_rect = workspace_data.popups.rename.layout_rect;
     let config = workspace_data.common.config;
 
     container(

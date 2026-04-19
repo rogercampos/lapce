@@ -161,7 +161,7 @@ pub fn editor_view(
     });
 
     let hide_cursor = e_data.common.window_common.hide_cursor;
-    let find_result_occurrences = e_data.find_result.occurrences;
+    let find_result_occurrences = e_data.find_state.find_result.occurrences;
     create_effect(move |_| {
         hide_cursor.track();
         find_result_occurrences.track();
@@ -221,7 +221,7 @@ pub fn editor_view(
 
     let editor_window_origin = e_data.window_origin();
     let cursor = e_data.cursor();
-    let find_focus = e_data.find_focus;
+    let find_focus = e_data.find_state.find_focus;
     let ime_allowed = e_data.common.window_common.ime_allowed;
     let editor_viewport = e_data.viewport();
     let editor_cursor = e_data.cursor();
@@ -342,8 +342,14 @@ impl EditorView {
         if !self.editor.kind.get_untracked().is_normal() {
             return;
         }
-        let find_visual = self.editor.find.visual.get_untracked();
-        if !find_visual && self.editor.on_screen_find.with_untracked(|f| !f.active) {
+        let find_visual = self.editor.find_state.find.visual.get_untracked();
+        if !find_visual
+            && self
+                .editor
+                .find_state
+                .on_screen_find
+                .with_untracked(|f| !f.active)
+        {
             return;
         }
         if screen_lines.lines.is_empty() {
@@ -359,7 +365,7 @@ impl EditorView {
         let ed = &e_data.editor;
 
         let config = self.editor.common.config;
-        let occurrences = e_data.find_result.occurrences;
+        let occurrences = e_data.find_state.find_result.occurrences;
 
         let config = config.get_untracked();
         let line_height = config.editor.line_height() as f64;
@@ -395,25 +401,28 @@ impl EditorView {
             }
         }
 
-        self.editor.on_screen_find.with_untracked(|find| {
-            if find.active {
-                for region in &find.regions {
-                    let is_current = cursor_offset >= region.min()
-                        && cursor_offset <= region.max();
-                    self.paint_find_region(
-                        cx,
-                        ed,
-                        region,
-                        is_current,
-                        match_bg,
-                        current_match_bg,
-                        current_match_border,
-                        screen_lines,
-                        line_height,
-                    );
+        self.editor
+            .find_state
+            .on_screen_find
+            .with_untracked(|find| {
+                if find.active {
+                    for region in &find.regions {
+                        let is_current = cursor_offset >= region.min()
+                            && cursor_offset <= region.max();
+                        self.paint_find_region(
+                            cx,
+                            ed,
+                            region,
+                            is_current,
+                            match_bg,
+                            current_match_bg,
+                            current_match_border,
+                            screen_lines,
+                            line_height,
+                        );
+                    }
                 }
-            }
-        });
+            });
     }
 
     fn paint_find_region(
@@ -1002,7 +1011,7 @@ impl View for EditorView {
         let config = e_data.common.config.get_untracked();
         let doc = e_data.doc();
         let is_local = doc.content.with_untracked(|content| content.is_local());
-        let find_focus = self.editor.find_focus;
+        let find_focus = self.editor.find_state.find_focus;
         let is_active =
             self.is_active.get_untracked() && !find_focus.get_untracked();
         // TODO: One way to get around the above issue would be to more careful, since we
@@ -1157,7 +1166,7 @@ pub fn editor_container_view(
         editor.with_untracked(|editor| {
             (
                 editor.id(),
-                editor.find_focus,
+                editor.find_state.find_focus,
                 editor.sticky_header_height,
                 editor.kind,
                 editor.common.config,
@@ -1178,22 +1187,29 @@ pub fn editor_container_view(
 
     // Store them on the EditorData so command dispatch can reach them
     editor.with_untracked(|ed_data| {
-        ed_data.find_editor_signal.set(Some(find_ed.clone()));
-        ed_data.replace_editor_signal.set(Some(replace_ed.clone()));
+        ed_data
+            .find_state
+            .find_editor_signal
+            .set(Some(find_ed.clone()));
+        ed_data
+            .find_state
+            .replace_editor_signal
+            .set(Some(replace_ed.clone()));
     });
 
     // Sync find editor text -> editor's Find state
     {
         let find_ed_buf = find_ed.doc().buffer;
-        let find = editor.with_untracked(|ed| ed.find.clone());
+        let find = editor.with_untracked(|ed| ed.find_state.find.clone());
         create_effect(move |_| {
             let content = find_ed_buf.with(|buffer| buffer.to_string());
             find.set_find(&content);
         });
     }
 
-    let replace_active = editor.with_untracked(|ed| ed.find.replace_active);
-    let replace_focus = editor.with_untracked(|ed| ed.find.replace_focus);
+    let replace_active =
+        editor.with_untracked(|ed| ed.find_state.find.replace_active);
+    let replace_focus = editor.with_untracked(|ed| ed.find_state.find.replace_focus);
 
     let viewport = ed.viewport;
     let screen_lines = ed.screen_lines;
@@ -1240,8 +1256,8 @@ pub fn editor_container_view(
         editor.cancel_completion();
         editor.cancel_inline_completion();
         // Clear find/replace editor refs
-        editor.find_editor_signal.set(None);
-        editor.replace_editor_signal.set(None);
+        editor.find_state.find_editor_signal.set(None);
+        editor.find_state.replace_editor_signal.set(None);
         if editors.contains_untracked(editor_id) {
             // editor still exist, so it might be moved to a different editor tab
             return;
@@ -2156,12 +2172,12 @@ fn find_view(
 ) -> impl View {
     let common = find_editor.common.clone();
     let config = common.config;
-    let find_visual = editor.with_untracked(|ed| ed.find.visual);
-    let case_matching = editor.with_untracked(|ed| ed.find.case_matching);
-    let whole_word = editor.with_untracked(|ed| ed.find.whole_words);
-    let is_regex = editor.with_untracked(|ed| ed.find.is_regex);
+    let find_visual = editor.with_untracked(|ed| ed.find_state.find.visual);
+    let case_matching = editor.with_untracked(|ed| ed.find_state.find.case_matching);
+    let whole_word = editor.with_untracked(|ed| ed.find_state.find.whole_words);
+    let is_regex = editor.with_untracked(|ed| ed.find_state.find.is_regex);
     let find_result_occurrences =
-        editor.with_untracked(|ed| ed.find_result.occurrences);
+        editor.with_untracked(|ed| ed.find_state.find_result.occurrences);
     let replace_doc = replace_editor.doc_signal();
     let focus = common.focus;
 

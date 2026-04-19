@@ -638,7 +638,7 @@ impl VirtualVector<(usize, FlatSearchMatch)> for FlatSearchItems {
 }
 
 pub fn replace_modal_popup(workspace_data: Rc<WorkspaceData>) -> impl View {
-    let data = workspace_data.replace_modal_data.clone();
+    let data = workspace_data.search.replace_modal.clone();
     let config = workspace_data.common.config;
     let visibility = data.visible;
     let close_data = data.clone();
@@ -653,7 +653,7 @@ pub fn replace_modal_popup(workspace_data: Rc<WorkspaceData>) -> impl View {
 }
 
 fn replace_modal_content(workspace_data: Rc<WorkspaceData>) -> impl View {
-    let data = workspace_data.replace_modal_data.clone();
+    let data = workspace_data.search.replace_modal.clone();
     let config = workspace_data.common.config;
     let focus = workspace_data.common.focus;
     let index = data.index;
@@ -1007,7 +1007,7 @@ fn replace_modal_preview_editor(
     workspace_data: Rc<WorkspaceData>,
     config: ReadSignal<Arc<LapceConfig>>,
 ) -> impl View {
-    let data = workspace_data.replace_modal_data.clone();
+    let data = workspace_data.search.replace_modal.clone();
     let preview_focused = data.preview_focused;
     let focus = workspace_data.common.focus;
     let workspace = workspace_data.workspace.clone();

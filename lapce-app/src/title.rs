@@ -231,10 +231,10 @@ pub fn title(workspace_data: Rc<WorkspaceData>) -> impl View {
     let current_workspace = workspace_data.workspace.clone();
     let latest_release = workspace_data.common.window_common.latest_release;
     let window_maximized = workspace_data.common.window_common.window_maximized;
-    let title_height = workspace_data.title_height;
+    let title_height = workspace_data.layout.title_height;
     let update_in_progress = workspace_data.update_in_progress;
-    let git_branch = workspace_data.git_branch;
-    let git_repo_state = workspace_data.git_repo_state;
+    let git_branch = workspace_data.git.branch;
+    let git_repo_state = workspace_data.git.repo_state;
     let config = workspace_data.common.config;
     stack((
         left(

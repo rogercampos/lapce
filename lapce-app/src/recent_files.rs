@@ -328,7 +328,7 @@ fn file_display_parts(
 }
 
 pub fn recent_files_popup(workspace_data: Rc<WorkspaceData>) -> impl View {
-    let data = workspace_data.recent_files_data.clone();
+    let data = workspace_data.palettes.recent_files.clone();
     let config = workspace_data.common.config;
     let visibility = data.visible;
     let close_data = data.clone();
@@ -343,7 +343,7 @@ pub fn recent_files_popup(workspace_data: Rc<WorkspaceData>) -> impl View {
 }
 
 fn recent_files_content(workspace_data: Rc<WorkspaceData>) -> impl View {
-    let data = workspace_data.recent_files_data.clone();
+    let data = workspace_data.palettes.recent_files.clone();
     let config = workspace_data.common.config;
     let focus = workspace_data.common.focus;
     let index = data.index;

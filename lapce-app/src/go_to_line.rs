@@ -170,7 +170,7 @@ impl KeyPressFocus for GoToLineData {
 }
 
 pub fn go_to_line_popup(workspace_data: Rc<WorkspaceData>) -> impl View {
-    let data = workspace_data.go_to_line_data.clone();
+    let data = workspace_data.palettes.go_to_line.clone();
     let config = workspace_data.common.config;
     let visibility = data.visible;
     let close_data = data.clone();
@@ -185,7 +185,7 @@ pub fn go_to_line_popup(workspace_data: Rc<WorkspaceData>) -> impl View {
 }
 
 fn go_to_line_content(workspace_data: Rc<WorkspaceData>) -> impl View {
-    let data = workspace_data.go_to_line_data.clone();
+    let data = workspace_data.palettes.go_to_line.clone();
     let config = workspace_data.common.config;
     let focus = workspace_data.common.focus;
 

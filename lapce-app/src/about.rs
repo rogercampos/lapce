@@ -95,7 +95,7 @@ impl KeyPressFocus for AboutData {
 }
 
 pub fn about_popup(workspace_data: Rc<WorkspaceData>) -> impl View {
-    let about_data = workspace_data.about_data.clone();
+    let about_data = workspace_data.popups.about.clone();
     let config = workspace_data.common.config;
     let internal_command = workspace_data.common.internal_command;
     let logo_size = 100.0;
