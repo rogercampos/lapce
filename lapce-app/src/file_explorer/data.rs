@@ -14,7 +14,7 @@ use floem::{
     reactive::{ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith},
     views::editor::text::SystemClipboard,
 };
-use globset::Glob;
+use globset::{Glob, GlobMatcher};
 use lapce_core::{
     command::{EditCommand, FocusCommand},
     register::Clipboard,
@@ -68,6 +68,11 @@ pub struct FileExplorerData {
     /// Set of starred (pinned) first-level folder paths, displayed at the top of the explorer.
     /// Paths are stored as full absolute paths.
     pub starred: RwSignal<HashSet<PathBuf>>,
+    /// Compiled `files_exclude` glob, cached so every `ReadDir` response reuses
+    /// the same matcher instead of reparsing and re-compiling the pattern.
+    /// Recomputes (via a `create_effect` on the pattern string) only when the
+    /// config's `files_exclude` pattern actually changes.
+    pub files_exclude: RwSignal<Option<Rc<GlobMatcher>>>,
 }
 
 impl KeyPressFocus for FileExplorerData {
@@ -143,11 +148,41 @@ impl FileExplorerData {
             open: false,
             children: HashMap::new(),
             children_open_count: 0,
+            sorted: Vec::new(),
         });
         let naming = cx.create_rw_signal(Naming::None);
         let naming_editor_data = editors.make_local(cx, common.clone());
         let starred =
             cx.create_rw_signal(initial_starred.into_iter().collect::<HashSet<_>>());
+        let files_exclude = cx.create_rw_signal(None::<Rc<GlobMatcher>>);
+        {
+            // Track only the pattern string so unrelated config reloads don't
+            // recompile the glob. The effect fires once up-front and then each
+            // time the pattern changes.
+            let config = common.config;
+            cx.create_effect(move |prev_pattern: Option<String>| {
+                let pattern = config.with(|c| c.editor.files_exclude.clone());
+                if prev_pattern.as_deref() == Some(pattern.as_str()) {
+                    return pattern;
+                }
+                let matcher = if pattern.is_empty() {
+                    None
+                } else {
+                    match Glob::new(&pattern) {
+                        Ok(g) => Some(Rc::new(g.compile_matcher())),
+                        Err(e) => {
+                            tracing::error!(
+                                target: "files_exclude",
+                                "Failed to compile glob: {e}"
+                            );
+                            None
+                        }
+                    }
+                };
+                files_exclude.set(matcher);
+                pattern
+            });
+        }
         let data = Self {
             root,
             naming,
@@ -156,6 +191,7 @@ impl FileExplorerData {
             scroll_to_line: cx.create_rw_signal(None),
             select: cx.create_rw_signal(None),
             starred,
+            files_exclude,
         };
         if data.common.workspace.path.is_some() {
             // only fill in the child files if there is open folder
@@ -226,7 +262,7 @@ impl FileExplorerData {
     fn read_dir_and_open(&self, path: &Path) {
         tracing::info!("[file-explorer] read_dir_and_open called for {:?}", path);
         let root = self.root;
-        let config = self.common.config;
+        let files_exclude = self.files_exclude;
         let send = {
             let path = path.to_path_buf();
             create_ext_action(self.common.scope, move |result| {
@@ -234,16 +270,7 @@ impl FileExplorerData {
                     return;
                 };
 
-                let exclude_matcher = Glob::new(&config.get().editor.files_exclude)
-                    .map(|g| g.compile_matcher())
-                    .map_err(|e| {
-                        tracing::error!(
-                            target: "files_exclude",
-                            "Failed to compile glob: {}",
-                            e
-                        );
-                    })
-                    .ok();
+                let exclude_matcher = files_exclude.get_untracked();
 
                 // Single signal update: set open + children + counts together.
                 root.update(|root| {
@@ -254,12 +281,7 @@ impl FileExplorerData {
 
                         node.open = true;
                         node.read = true;
-
-                        for item in items {
-                            if !node.children.contains_key(&item.path) {
-                                node.children.insert(item.path.clone(), item);
-                            }
-                        }
+                        node.extend_children_sorted(items);
                     }
                     root.update_node_count_recursive(&path);
                 });
@@ -286,7 +308,7 @@ impl FileExplorerData {
     pub fn read_dir_cb(&self, path: &Path, done: impl FnOnce(bool) + 'static) {
         let root = self.root;
         let data = self.clone();
-        let config = self.common.config;
+        let files_exclude = self.files_exclude;
         let send = {
             let path = path.to_path_buf();
             create_ext_action(self.common.scope, move |result| {
@@ -318,17 +340,7 @@ impl FileExplorerData {
                     return;
                 };
 
-                // Compile the exclude glob once per callback, not per tree-node update.
-                let exclude_matcher = Glob::new(&config.get().editor.files_exclude)
-                    .map(|g| g.compile_matcher())
-                    .map_err(|e| {
-                        tracing::error!(
-                            target: "files_exclude",
-                            "Failed to compile glob: {}",
-                            e
-                        );
-                    })
-                    .ok();
+                let exclude_matcher = files_exclude.get_untracked();
 
                 root.update(|root| {
                     if let Some(node) = root.get_file_node_mut(&path) {
@@ -338,30 +350,26 @@ impl FileExplorerData {
 
                         node.read = true;
 
-                        // Remove paths that no longer exist on disk
-                        let new_paths: HashSet<&PathBuf> =
-                            items.iter().map(|i| &i.path).collect();
-                        let removed_paths: Vec<PathBuf> = node
-                            .children
-                            .keys()
-                            .filter(|p| !new_paths.contains(p))
-                            .map(PathBuf::from)
-                            .collect();
-                        for path in removed_paths {
-                            node.children.remove(&path);
-                        }
-
-                        // For existing children that were already read (expanded dirs),
-                        // re-read them recursively to pick up any nested changes.
-                        // For new children, insert them into the tree.
+                        // Reconcile: remove paths gone from disk, add new ones,
+                        // and for already-expanded subdirectories kick off a
+                        // recursive re-read to pick up nested changes.
+                        let new_paths: HashSet<PathBuf> =
+                            items.iter().map(|i| i.path.clone()).collect();
+                        node.retain_children_sorted(|path| new_paths.contains(path));
+                        let mut to_reread: Vec<PathBuf> = Vec::new();
+                        let mut to_insert: Vec<FileNodeItem> = Vec::new();
                         for item in items {
-                            if let Some(existing) = node.children.get(&item.path) {
-                                if existing.read {
-                                    data.read_dir(&existing.path);
+                            match node.children.get(&item.path) {
+                                Some(existing) if existing.read => {
+                                    to_reread.push(existing.path.clone());
                                 }
-                            } else {
-                                node.children.insert(item.path.clone(), item);
+                                Some(_) => {}
+                                None => to_insert.push(item),
                             }
+                        }
+                        node.extend_children_sorted(to_insert);
+                        for path in to_reread {
+                            data.read_dir(&path);
                         }
                     }
                     root.update_node_count_recursive(&path);

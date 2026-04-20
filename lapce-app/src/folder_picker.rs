@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     ops::Range,
     path::{Path, PathBuf},
     rc::Rc,
@@ -122,6 +122,7 @@ impl FolderPickerData {
             open: false,
             children: HashMap::new(),
             children_open_count: 0,
+            sorted: Vec::new(),
         });
         let on_confirm: RwSignal<Option<Rc<dyn Fn(Option<PathBuf>)>>> =
             cx.create_rw_signal(None);
@@ -456,25 +457,24 @@ impl FolderPickerData {
                         node.open = true;
 
                         // Remove paths that no longer exist
-                        let removed: Vec<PathBuf> = node
-                            .children
-                            .keys()
-                            .filter(|p| !items.iter().any(|i| &&i.path == p))
-                            .cloned()
-                            .collect();
-                        for p in removed {
-                            node.children.remove(&p);
-                        }
+                        let new_paths: HashSet<PathBuf> =
+                            items.iter().map(|i| i.path.clone()).collect();
+                        node.retain_children_sorted(|p| new_paths.contains(p));
 
-                        // Add new children, re-read existing
+                        let mut to_reread: Vec<PathBuf> = Vec::new();
+                        let mut to_insert: Vec<FileNodeItem> = Vec::new();
                         for item in items {
-                            if let Some(existing) = node.children.get(&item.path) {
-                                if existing.read {
-                                    data.read_dir(&existing.path);
+                            match node.children.get(&item.path) {
+                                Some(existing) if existing.read => {
+                                    to_reread.push(existing.path.clone());
                                 }
-                            } else {
-                                node.children.insert(item.path.clone(), item);
+                                Some(_) => {}
+                                None => to_insert.push(item),
                             }
+                        }
+                        node.extend_children_sorted(to_insert);
+                        for path in to_reread {
+                            data.read_dir(&path);
                         }
                     }
                     root.update_node_count_recursive(&path);

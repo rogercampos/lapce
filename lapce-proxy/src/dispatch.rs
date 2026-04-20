@@ -730,7 +730,7 @@ impl ProxyHandler for Dispatcher {
                 thread::spawn(move || {
                     let result = fs::read_dir(&path)
                         .map(|entries| {
-                            let mut items = entries
+                            let items = entries
                                 .into_iter()
                                 .filter_map(|entry| {
                                     entry
@@ -744,12 +744,16 @@ impl ProxyHandler for Dispatcher {
                                             read: false,
                                             children: HashMap::new(),
                                             children_open_count: 0,
+                                            sorted: Vec::new(),
                                         })
                                         .ok()
                                 })
                                 .collect::<Vec<FileNodeItem>>();
 
-                            items.sort();
+                            // No proxy-side sort: the app stores children in a
+                            // HashMap so any order we produce here is thrown
+                            // away. `FileNodeItem::insert_child_sorted` on the
+                            // app side maintains a cached sorted order.
 
                             ProxyResponse::ReadDirResponse { items }
                         })

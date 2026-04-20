@@ -1068,8 +1068,8 @@ pub fn launch() {
         }
     }
 
-    let stdin = std::io::stdin();
-    if !stdin.is_terminal() {
+    let launched_from_terminal = std::io::stdin().is_terminal();
+    if !launched_from_terminal {
         trace!(
             TraceLevel::INFO,
             "Loading custom environment from shell (background)"
@@ -1077,10 +1077,15 @@ pub fn launch() {
         std::thread::spawn(|| ipc::load_shell_env());
     }
 
-    // When launched from a terminal without --wait, re-spawn ourselves as a detached child
-    // with --wait so the parent process can exit immediately and return the shell prompt.
-    // The child inherits our args plus --wait, with stdout/stderr redirected to log files.
-    if !cli.wait {
+    // The re-spawn trick only makes sense when launched from a terminal: it
+    // detaches into a child so the parent can exit immediately and give the
+    // shell its prompt back. When launched from Finder / Dock / Spotlight /
+    // `open` there is no shell waiting, and on macOS exiting the parent
+    // process drops the LaunchServices foreground-app association — the
+    // detached child opens a window that never comes to the front. Skip the
+    // re-spawn entirely in that case so the app inherits frontmost status
+    // directly from LaunchServices.
+    if !cli.wait && launched_from_terminal {
         let mut args = std::env::args().collect::<Vec<_>>();
         args.push("--wait".to_string());
         let mut cmd = std::process::Command::new(&args[0]);

@@ -281,6 +281,14 @@ pub struct FileNodeItem {
     /// Cached count of all visible descendant nodes. Updated via
     /// `update_node_count()` whenever the tree structure changes.
     pub children_open_count: usize,
+    /// Child paths in stable display order (dirs before files, human-sort by
+    /// filename). Maintained by `insert_child_sorted` / `remove_child_sorted`
+    /// / `replace_children` so rendering can iterate in sorted order without
+    /// allocating a fresh Vec or running the `Ord` impl on every `slice()`
+    /// call. `#[serde(skip)]` because it's derivable from `children` and
+    /// would otherwise double the wire size of every `ReadDir` response.
+    #[serde(skip)]
+    pub sorted: Vec<PathBuf>,
 }
 
 impl PartialOrd for FileNodeItem {
@@ -314,41 +322,116 @@ impl Ord for FileNodeItem {
 impl FileNodeItem {
     /// Collect the children, sorted by name.
     /// Note: this will be empty if the directory has not been read.
+    /// Iterate children in display order. Uses the cached `sorted` vector
+    /// populated by `insert_child_sorted` / `remove_child_sorted` /
+    /// `replace_children`, so no per-call allocation or sort work runs on
+    /// the render path.
     pub fn sorted_children(&self) -> Vec<&FileNodeItem> {
-        let mut children = self.children.values().collect::<Vec<&FileNodeItem>>();
-        children.sort();
-        children
+        self.sorted
+            .iter()
+            .filter_map(|p| self.children.get(p))
+            .collect()
     }
 
-    /// Collect the children, sorted by name.
-    /// Note: this will be empty if the directory has not been read.
-    pub fn sorted_children_mut(&mut self) -> Vec<&mut FileNodeItem> {
-        let mut children = self
-            .children
-            .values_mut()
-            .collect::<Vec<&mut FileNodeItem>>();
-        children.sort();
-        children
-    }
-
-    /// Collect the children sorted with starred directories first, then unstarred
-    /// directories, then files. Within each group, the standard alphabetical
-    /// ordering (from the `Ord` impl) is preserved.
+    /// Like `sorted_children()` but elevates starred directories to the top
+    /// while preserving the relative order of everything else. The input is
+    /// the already-sorted vector; we only do an O(n) stable partition.
     pub fn sorted_children_starred(
         &self,
         starred: &HashSet<PathBuf>,
     ) -> Vec<&FileNodeItem> {
-        let mut children = self.children.values().collect::<Vec<&FileNodeItem>>();
-        children.sort_by(|a, b| {
-            let a_starred = a.is_dir && starred.contains(&a.path);
-            let b_starred = b.is_dir && starred.contains(&b.path);
-            match (a_starred, b_starred) {
-                (true, false) => Ordering::Less,
-                (false, true) => Ordering::Greater,
-                _ => a.cmp(b),
+        let mut starred_dirs = Vec::new();
+        let mut rest = Vec::new();
+        for path in &self.sorted {
+            let Some(child) = self.children.get(path) else {
+                continue;
+            };
+            if child.is_dir && starred.contains(&child.path) {
+                starred_dirs.push(child);
+            } else {
+                rest.push(child);
             }
-        });
-        children
+        }
+        starred_dirs.extend(rest);
+        starred_dirs
+    }
+
+    /// Insert a child and maintain the `sorted` cache. Replaces any existing
+    /// child at the same path.
+    pub fn insert_child_sorted(&mut self, child: FileNodeItem) {
+        let path = child.path.clone();
+        let existed = self.children.insert(path.clone(), child).is_some();
+        if existed {
+            return;
+        }
+        let children = &self.children;
+        let new_child = &children[&path];
+        let insert_at = self
+            .sorted
+            .binary_search_by(|existing| {
+                children
+                    .get(existing)
+                    .map_or(Ordering::Greater, |c| c.cmp(new_child))
+            })
+            .unwrap_or_else(|pos| pos);
+        self.sorted.insert(insert_at, path);
+    }
+
+    /// Remove a direct child and maintain the `sorted` cache.
+    pub fn remove_child_sorted(&mut self, path: &Path) -> Option<FileNodeItem> {
+        let removed = self.children.remove(path)?;
+        if let Some(idx) = self.sorted.iter().position(|p| p == path) {
+            self.sorted.remove(idx);
+        }
+        Some(removed)
+    }
+
+    /// Replace the full children map and rebuild the sorted cache in one
+    /// pass. Used when bulk-loading a directory.
+    pub fn replace_children(&mut self, children: HashMap<PathBuf, FileNodeItem>) {
+        self.children = children;
+        self.rebuild_sorted();
+    }
+
+    /// Recompute `sorted` from the current `children`. Called after bulk
+    /// mutations or when deserialising a `FileNodeItem` whose cache was
+    /// stripped by `#[serde(skip)]`. Sorts borrowed values directly so the
+    /// `Ord` comparison doesn't pay two HashMap lookups per pair.
+    pub fn rebuild_sorted(&mut self) {
+        let mut entries: Vec<&FileNodeItem> = self.children.values().collect();
+        entries.sort_unstable();
+        self.sorted = entries.into_iter().map(|c| c.path.clone()).collect();
+    }
+
+    /// Insert many children at once and rebuild the sorted cache just once at
+    /// the end. Skips items whose path is already present. This is O(n log n)
+    /// in the total child count, where calling `insert_child_sorted` in a loop
+    /// would be O(n²) (each insert shifts the `sorted` Vec).
+    pub fn extend_children_sorted(
+        &mut self,
+        items: impl IntoIterator<Item = FileNodeItem>,
+    ) {
+        let mut added_any = false;
+        for item in items {
+            if !self.children.contains_key(&item.path) {
+                self.children.insert(item.path.clone(), item);
+                added_any = true;
+            }
+        }
+        if added_any {
+            self.rebuild_sorted();
+        }
+    }
+
+    /// Retain only children for which `keep` returns true, rebuilding the
+    /// sorted cache just once at the end. O(n) in the total child count,
+    /// where calling `remove_child_sorted` in a loop would be O(n²).
+    pub fn retain_children_sorted(&mut self, mut keep: impl FnMut(&Path) -> bool) {
+        let before = self.children.len();
+        self.children.retain(|path, _| keep(path));
+        if self.children.len() != before {
+            self.rebuild_sorted();
+        }
     }
 
     /// Returns an iterator over the ancestors of `path`, starting with the first descendant of `prefix`.
@@ -405,29 +488,27 @@ impl FileNodeItem {
     pub fn remove_child(&mut self, path: &Path) -> Option<FileNodeItem> {
         let parent = path.parent()?;
         let node = self.get_file_node_mut(parent)?;
-        let node = node.children.remove(path)?;
+        let removed = node.remove_child_sorted(path)?;
         for p in path.ancestors() {
             self.update_node_count(p);
         }
 
-        Some(node)
+        Some(removed)
     }
 
     /// Add a new (unread & unopened) child to the node.
     pub fn add_child(&mut self, path: &Path, is_dir: bool) -> Option<()> {
         let parent = path.parent()?;
         let node = self.get_file_node_mut(parent)?;
-        node.children.insert(
-            PathBuf::from(path),
-            FileNodeItem {
-                path: PathBuf::from(path),
-                is_dir,
-                read: false,
-                open: false,
-                children: HashMap::new(),
-                children_open_count: 0,
-            },
-        );
+        node.insert_child_sorted(FileNodeItem {
+            path: PathBuf::from(path),
+            is_dir,
+            read: false,
+            open: false,
+            children: HashMap::new(),
+            children_open_count: 0,
+            sorted: Vec::new(),
+        });
         for p in path.ancestors() {
             self.update_node_count(p);
         }
@@ -445,7 +526,7 @@ impl FileNodeItem {
         if let Some(node) = self.get_file_node_mut(path) {
             node.open = true;
             node.read = true;
-            node.children = children;
+            node.replace_children(children);
         }
 
         for p in path.ancestors() {
@@ -590,6 +671,7 @@ impl FileNodeItem {
             open: false,
             children: HashMap::new(),
             children_open_count: 0,
+            sorted: Vec::new(),
         }
     }
 
@@ -603,6 +685,7 @@ impl FileNodeItem {
             open,
             children: HashMap::new(),
             children_open_count: 0,
+            sorted: Vec::new(),
         }
     }
 
@@ -767,8 +850,8 @@ mod tests {
         let mut root = FileNodeItem::new_dir("/root", true);
         let file_a = FileNodeItem::new_file("/root/a_file.txt");
         let dir_b = FileNodeItem::new_dir("/root/b_dir", false);
-        root.children.insert(file_a.path.clone(), file_a);
-        root.children.insert(dir_b.path.clone(), dir_b);
+        root.insert_child_sorted(file_a);
+        root.insert_child_sorted(dir_b);
 
         let sorted = root.sorted_children();
         assert!(sorted[0].is_dir);
@@ -827,7 +910,7 @@ mod tests {
     fn get_file_node_child() {
         let mut root = FileNodeItem::new_dir("/root", true);
         let child = FileNodeItem::new_file("/root/file.txt");
-        root.children.insert(child.path.clone(), child);
+        root.insert_child_sorted(child);
 
         let node = root.get_file_node(Path::new("/root/file.txt")).unwrap();
         assert_eq!(node.path, PathBuf::from("/root/file.txt"));
@@ -838,8 +921,8 @@ mod tests {
         let mut root = FileNodeItem::new_dir("/root", true);
         let mut sub = FileNodeItem::new_dir("/root/sub", true);
         let leaf = FileNodeItem::new_file("/root/sub/leaf.txt");
-        sub.children.insert(leaf.path.clone(), leaf);
-        root.children.insert(sub.path.clone(), sub);
+        sub.insert_child_sorted(leaf);
+        root.insert_child_sorted(sub);
 
         let node = root.get_file_node(Path::new("/root/sub/leaf.txt")).unwrap();
         assert_eq!(node.path, PathBuf::from("/root/sub/leaf.txt"));
@@ -909,7 +992,7 @@ mod tests {
     fn update_node_count_closed_dir_is_zero() {
         let mut root = FileNodeItem::new_dir("/root", false);
         let child = FileNodeItem::new_file("/root/a.txt");
-        root.children.insert(child.path.clone(), child);
+        root.insert_child_sorted(child);
         root.update_node_count(Path::new("/root"));
         assert_eq!(root.children_open_count, 0);
     }
@@ -919,8 +1002,8 @@ mod tests {
         let mut root = FileNodeItem::new_dir("/root", true);
         let a = FileNodeItem::new_file("/root/a.txt");
         let b = FileNodeItem::new_file("/root/b.txt");
-        root.children.insert(a.path.clone(), a);
-        root.children.insert(b.path.clone(), b);
+        root.insert_child_sorted(a);
+        root.insert_child_sorted(b);
         root.update_node_count(Path::new("/root"));
         assert_eq!(root.children_open_count, 2);
     }
@@ -930,8 +1013,8 @@ mod tests {
         let mut root = FileNodeItem::new_dir("/root", true);
         let mut sub = FileNodeItem::new_dir("/root/sub", true);
         let leaf = FileNodeItem::new_file("/root/sub/leaf.txt");
-        sub.children.insert(leaf.path.clone(), leaf);
-        root.children.insert(sub.path.clone(), sub);
+        sub.insert_child_sorted(leaf);
+        root.insert_child_sorted(sub);
 
         // Update from leaf upward
         root.update_node_count(Path::new("/root/sub"));
@@ -1208,7 +1291,7 @@ mod tests {
     fn set_item_children_opens_and_sets_children() {
         let mut root = FileNodeItem::new_dir("/root", true);
         let sub = FileNodeItem::new_dir("/root/sub", false);
-        root.children.insert(PathBuf::from("/root/sub"), sub);
+        root.insert_child_sorted(sub);
         root.update_node_count(Path::new("/root"));
 
         let mut new_children = HashMap::new();
@@ -1239,13 +1322,10 @@ mod tests {
         let mut root = FileNodeItem::new_dir("/root", true);
 
         let mut sub = FileNodeItem::new_dir("/root/sub", true);
-        sub.children.insert(
-            PathBuf::from("/root/sub/file.txt"),
-            FileNodeItem::new_file("/root/sub/file.txt"),
-        );
+        sub.insert_child_sorted(FileNodeItem::new_file("/root/sub/file.txt"));
         sub.children_open_count = 1;
 
-        root.children.insert(PathBuf::from("/root/sub"), sub);
+        root.insert_child_sorted(sub);
         root.children_open_count = 2; // sub + file.txt
 
         // The file is at line 2 (sub=1, file.txt=2)
@@ -1259,17 +1339,11 @@ mod tests {
         let mut root = FileNodeItem::new_dir("/root", true);
 
         let mut sub = FileNodeItem::new_dir("/root/sub", true);
-        sub.children.insert(
-            PathBuf::from("/root/sub/other.txt"),
-            FileNodeItem::new_file("/root/sub/other.txt"),
-        );
+        sub.insert_child_sorted(FileNodeItem::new_file("/root/sub/other.txt"));
         sub.children_open_count = 1;
 
-        root.children.insert(PathBuf::from("/root/sub"), sub);
-        root.children.insert(
-            PathBuf::from("/root/top.txt"),
-            FileNodeItem::new_file("/root/top.txt"),
-        );
+        root.insert_child_sorted(sub);
+        root.insert_child_sorted(FileNodeItem::new_file("/root/top.txt"));
         root.children_open_count = 3;
 
         // top.txt is at line 3 (sub=1, other.txt=2, top.txt=3)
@@ -1283,10 +1357,7 @@ mod tests {
     #[test]
     fn append_view_slice_skip_before_window() {
         let mut root = FileNodeItem::new_dir("/root", true);
-        root.children.insert(
-            PathBuf::from("/root/a.txt"),
-            FileNodeItem::new_file("/root/a.txt"),
-        );
+        root.insert_child_sorted(FileNodeItem::new_file("/root/a.txt"));
         root.update_node_count(Path::new("/root"));
 
         let mut items = Vec::new();
@@ -1311,14 +1382,8 @@ mod tests {
     #[test]
     fn append_view_slice_renders_within_window() {
         let mut root = FileNodeItem::new_dir("/root", true);
-        root.children.insert(
-            PathBuf::from("/root/a.txt"),
-            FileNodeItem::new_file("/root/a.txt"),
-        );
-        root.children.insert(
-            PathBuf::from("/root/b.txt"),
-            FileNodeItem::new_file("/root/b.txt"),
-        );
+        root.insert_child_sorted(FileNodeItem::new_file("/root/a.txt"));
+        root.insert_child_sorted(FileNodeItem::new_file("/root/b.txt"));
         root.update_node_count(Path::new("/root"));
 
         let mut items = Vec::new();
@@ -1337,10 +1402,7 @@ mod tests {
     #[test]
     fn append_view_slice_renaming_injects_kind() {
         let mut root = FileNodeItem::new_dir("/root", true);
-        root.children.insert(
-            PathBuf::from("/root/a.txt"),
-            FileNodeItem::new_file("/root/a.txt"),
-        );
+        root.insert_child_sorted(FileNodeItem::new_file("/root/a.txt"));
         root.update_node_count(Path::new("/root"));
 
         let naming = Naming::Renaming(Renaming {
@@ -1365,7 +1427,7 @@ mod tests {
     fn children_view_slice_closed_folder_no_naming() {
         let mut root = FileNodeItem::new_dir("/root", true);
         let closed_sub = FileNodeItem::new_dir("/root/sub", false);
-        root.children.insert(PathBuf::from("/root/sub"), closed_sub);
+        root.insert_child_sorted(closed_sub);
         root.update_node_count(Path::new("/root"));
 
         let mut items = Vec::new();
@@ -1381,10 +1443,7 @@ mod tests {
     #[test]
     fn children_view_slice_dir_naming_inserted_first() {
         let mut root = FileNodeItem::new_dir("/root", true);
-        root.children.insert(
-            PathBuf::from("/root/a.txt"),
-            FileNodeItem::new_file("/root/a.txt"),
-        );
+        root.insert_child_sorted(FileNodeItem::new_file("/root/a.txt"));
         root.update_node_count(Path::new("/root"));
 
         let naming = Naming::NewNode(NewNode {
@@ -1407,11 +1466,8 @@ mod tests {
     fn children_view_slice_file_naming_after_dirs() {
         let mut root = FileNodeItem::new_dir("/root", true);
         let sub = FileNodeItem::new_dir("/root/sub_dir", false);
-        root.children.insert(PathBuf::from("/root/sub_dir"), sub);
-        root.children.insert(
-            PathBuf::from("/root/z.txt"),
-            FileNodeItem::new_file("/root/z.txt"),
-        );
+        root.insert_child_sorted(sub);
+        root.insert_child_sorted(FileNodeItem::new_file("/root/z.txt"));
         root.update_node_count(Path::new("/root"));
 
         let naming = Naming::NewNode(NewNode {
@@ -1440,10 +1496,7 @@ mod tests {
     fn children_view_slice_trailing_naming_node() {
         // If all children are directories and naming is a file, it appears at the end
         let mut root = FileNodeItem::new_dir("/root", true);
-        root.children.insert(
-            PathBuf::from("/root/dir_a"),
-            FileNodeItem::new_dir("/root/dir_a", false),
-        );
+        root.insert_child_sorted(FileNodeItem::new_dir("/root/dir_a", false));
         root.update_node_count(Path::new("/root"));
 
         let naming = Naming::NewNode(NewNode {

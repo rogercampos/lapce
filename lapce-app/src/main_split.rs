@@ -4,6 +4,13 @@ use std::{
     rc::Rc,
 };
 
+/// Hard cap on the number of real file tabs that may be open at once across
+/// every editor pane. When opening a new file would exceed this, the
+/// least-recently-opened file (per `CommonData::recent_files`) is
+/// force-closed to make room. Scratch / Settings / Keymap / Projects tabs
+/// don't count towards the limit.
+pub const MAX_OPEN_FILE_TABS: usize = 50;
+
 use floem::{
     action::save_as,
     ext_event::create_ext_action,
@@ -700,6 +707,13 @@ impl MainSplitData {
         source: EditorTabChildSource,
         same_editor_tab: bool,
     ) -> EditorTabChild {
+        // If we're opening a real file, enforce the open-tab cap *before*
+        // any tab lookup or creation — eviction mutates `editor_tabs` and
+        // would otherwise invalidate handles captured below.
+        if let EditorTabChildSource::Editor { path, .. } = &source {
+            self.enforce_file_tab_limit(path);
+        }
+
         let config = self.common.config.get_untracked();
         let active_editor_tab = self.ensure_active_editor_tab();
 
@@ -730,6 +744,82 @@ impl MainSplitData {
 
         // No match found: create and insert new child
         self.insert_new_child(active_editor_tab, &source)
+    }
+
+    /// Enforce [`MAX_OPEN_FILE_TABS`] before adding a new file tab.
+    ///
+    /// Walks every editor pane, collecting the set of `DocContent::File`
+    /// paths currently open (deduped — the same file open in two split
+    /// panes still counts as one). If `incoming_path` is already in the
+    /// set, no new tab will be created (we'll reuse) and we return early.
+    /// Otherwise, if the set is at or over the cap, evicts the
+    /// least-recently-opened file(s) — ordering comes from
+    /// `common.recent_files`, iterated oldest-first. Any open files not
+    /// present in `recent_files` fall back to eviction in arbitrary order
+    /// as a last resort. Evictions are force-closed (no unsaved-changes
+    /// warning) so the user's "open this file" action isn't blocked.
+    fn enforce_file_tab_limit(&self, incoming_path: &Path) {
+        let editors = self.editors;
+        let editor_tabs = self.editor_tabs.get_untracked();
+
+        let mut open_files: HashMap<PathBuf, (EditorTabId, EditorTabChild)> =
+            HashMap::new();
+        for (tab_id, tab) in &editor_tabs {
+            let children = tab.with_untracked(|t| t.children.clone());
+            for (_, _, child) in children {
+                let EditorTabChild::Editor(editor_id) = &child else {
+                    continue;
+                };
+                let Some(editor) = editors.editor_untracked(*editor_id) else {
+                    continue;
+                };
+                let Some(doc) = editor.try_doc() else {
+                    continue;
+                };
+                if let DocContent::File { path, .. } = doc.content.get_untracked() {
+                    open_files
+                        .entry(path)
+                        .or_insert_with(|| (*tab_id, child.clone()));
+                }
+            }
+        }
+
+        // Reusing an already-open file doesn't grow the count.
+        if open_files.contains_key(incoming_path) {
+            return;
+        }
+        if open_files.len() < MAX_OPEN_FILE_TABS {
+            return;
+        }
+
+        let to_evict = open_files.len() + 1 - MAX_OPEN_FILE_TABS;
+        let mut evict_queue: Vec<(EditorTabId, EditorTabChild)> =
+            Vec::with_capacity(to_evict);
+
+        let recent = self.common.recent_files.get_untracked();
+        for path in recent.iter().rev() {
+            if let Some(entry) = open_files.remove(path) {
+                evict_queue.push(entry);
+                if evict_queue.len() >= to_evict {
+                    break;
+                }
+            }
+        }
+
+        // Fallback for any open files not represented in recent_files
+        // (rare — e.g. state restored from disk before tracking started).
+        if evict_queue.len() < to_evict {
+            for (_, entry) in open_files {
+                evict_queue.push(entry);
+                if evict_queue.len() >= to_evict {
+                    break;
+                }
+            }
+        }
+
+        for (tab_id, child) in evict_queue {
+            self.editor_tab_child_close(tab_id, child, true);
+        }
     }
 
     /// Returns the active editor tab, creating one if none exists.
